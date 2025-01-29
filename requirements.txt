@@ -1,0 +1,6 @@
+sanic
+pydantic
+ruff
+pre-commit
+invoke
+mypy

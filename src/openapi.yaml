@@ -1,0 +1,326 @@
+openapi: "3.0.1"
+info:
+  title: RequirementWrapper API
+  version: 1.0.0
+  description: A REST API for managing requirements using the RequirementWrapper.
+
+servers:
+  - url: /
+    description: API base URL
+
+security:
+  - basicAuth: [] # <-- use the same name here
+
+paths:
+  /user-defined-attributes:
+    get:
+      summary: Retrieve user-defined attributes
+      description: Returns an array of all user-defined attributes available on the requirements server.
+      responses:
+        '200':
+          description: List of user-defined attributes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserDefinedAttribute'
+
+  /projects:
+    get:
+      summary: Retrieve projects
+      description: Returns an array of the names of all projects available on the requirements server.
+      responses:
+        '200':
+          description: List of project names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /projects/{project}/baselines:
+    get:
+      summary: Retrieve baselines
+      description: Returns an array of baselines for a given project.
+      parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the project.
+      responses:
+        '200':
+          description: List of baselines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BaselineObject'
+
+  /projects/{project}/baselines/{baseline}/requirements-root:
+    get:
+      summary: Retrieve requirements root node
+      description: Returns the requirements of a given baseline as a tree structure.
+      parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the project.
+        - name: baseline
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the baseline.
+      responses:
+        '200':
+          description: Requirements tree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaselineObjectNode'
+
+  /server-name-and-version:
+    get:
+      summary: Retrieve server name and version
+      description: Returns the name and version of the requirements server, separated by a dash.
+      responses:
+        '200':
+          description: Server name and version
+          content:
+            application/json:
+              schema:
+                type: string
+
+  /projects/{project}/baselines/{baseline}/user-defined-attributes:
+    post:
+      summary: Retrieve user-defined attributes for requirements
+      description: Returns the values of user-defined fields for a list of requirements.
+      parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the project.
+        - name: baseline
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the baseline.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                keys:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/RequirementKey'
+                attributeNames:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Map of requirement keys to user-defined attributes
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/UserDefinedAttribute'
+
+  /projects/{project}/baselines/{baseline}/extended-requirement:
+    post:
+      summary: Retrieve extended requirement
+      description: Returns detailed information about a specific requirement.
+      parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the project.
+        - name: baseline
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the baseline.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key:
+                  $ref: '#/components/schemas/RequirementKey'
+      responses:
+        '200':
+          description: Extended requirement details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtendedRequirementObject'
+
+  /projects/{project}/baselines/{baseline}/requirement-versions:
+    post:
+      summary: Retrieve requirement versions
+      description: Returns the versions of a given requirement.
+      parameters:
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the project.
+        - name: baseline
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of the baseline.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key:
+                  $ref: '#/components/schemas/RequirementKey'
+      responses:
+        '200':
+          description: List of requirement versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequirementVersionObject'
+
+components:
+  securitySchemes:
+    basicAuth: # <-- arbitrary name for the security scheme
+      type: http
+      scheme: basic
+  schemas:
+    UserDefinedAttribute:
+      type: object
+      properties:
+        name:
+          type: string
+        valueType:
+          type: string
+          enum: [STRING, ARRAY, BOOLEAN]
+        stringValue:
+          type: string
+        stringValues:
+          type: array
+          items:
+            type: string
+        booleanValue:
+          type: boolean
+      required:
+        - name
+        - valueType
+
+    BaselineObject:
+      type: object
+      properties:
+        name:
+          type: string
+        date:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [CURRENT, UNLOCKED, LOCKED, DISABLED, INVALID]
+        repositoryID:
+          type: string
+
+    BaselineObjectNode:
+      allOf:
+        - $ref: '#/components/schemas/BaselineObject'
+        - type: object
+          properties:
+            children:
+              type: array
+              items:
+                $ref: '#/components/schemas/RequirementObjectNode'
+
+    RequirementKey:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+
+    RequirementObject:
+      type: object
+      properties:
+        name:
+          type: string
+        extendedID:
+          type: string
+        key:
+          $ref: '#/components/schemas/RequirementKey'
+        owner:
+          type: string
+        status:
+          type: string
+        priority:
+          type: string
+        requirement:
+          type: boolean
+
+    RequirementObjectNode:
+      allOf:
+        - $ref: '#/components/schemas/RequirementObject'
+        - type: object
+          properties:
+            children:
+              type: array
+              items:
+                $ref: '#/components/schemas/RequirementObjectNode'
+
+    ExtendedRequirementObject:
+      allOf:
+        - $ref: '#/components/schemas/RequirementObject'
+        - type: object
+          properties:
+            description:
+              type: string
+            documents:
+              type: array
+              items:
+                type: string
+            baseline:
+              type: string
+
+    RequirementVersionObject:
+      type: object
+      properties:
+        name:
+          type: string
+        date:
+          type: string
+          format: date-time
+        author:
+          type: string
+        comment:
+          type: string
