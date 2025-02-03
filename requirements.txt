@@ -1,5 +1,7 @@
 sanic
 pydantic
+
+click
 ruff
 pre-commit
 invoke

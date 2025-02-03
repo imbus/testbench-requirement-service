@@ -61,6 +61,9 @@ RequirementObjectNode.model_rebuild()
 
 # Models for JSON lines file
 class FileRequirementVersionObject(BaseModel):
+    # TODO:  Check if this could be used with datetime type for date field.
+    # therefore using the standard object?
+    # Bitte testen, ob `model_dump()` von pydantic datetime objekte zu ISO format umwandelt.
     name: str
     date: str
     author: str

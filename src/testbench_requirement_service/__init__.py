@@ -168,10 +168,10 @@ def get_baselines(project):
 @app.route("/projects/<project>/baselines/<baseline>/requirements-root", methods=["GET"])
 @protected
 async def _get_requirements_root(req: Request, project: str, baseline: str):
-    return response.json(get_requirements_root_node(project, baseline))
+    return response.json(get_requirements_root_node(project, baseline).model_dump())
 
 
-def get_requirements_root_node(project: str, baseline: str):
+def get_requirements_root_node(project: str, baseline: str) -> BaselineObjectNode:
     baseline_path = get_baseline_path(project, baseline)
     requirement_nodes: dict[str, RequirementObjectNode] = {}
     requirement_tree: dict[str, RequirementObjectNode] = {}
@@ -202,7 +202,7 @@ def get_requirements_root_node(project: str, baseline: str):
         type="CURRENT",
         repositoryID=f"{project}/{baseline}",
         children=list(requirement_tree.values()),
-    ).model_dump()
+    )
 
 
 @app.route("/user-defined-attributes", methods=["GET"])
@@ -318,4 +318,6 @@ def get_requirement_versions(project, baseline, key):
 
 
 if __name__ == "__main__":
+    # TODO: Click ggf. nutzen für CLI parsing usw
+    # Daten aus CLI argumenten als $SANIC_xxx Env Var speichern um den Prozessen Zugriff zu geben.
     app.run(host="0.0.0.0", port=8000)
