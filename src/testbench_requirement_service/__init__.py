@@ -1,20 +1,30 @@
 import base64
 import hashlib
 import json
+from collections import defaultdict
 from datetime import datetime, timezone
 from functools import wraps
 from math import ceil
 from pathlib import Path
 from time import monotonic
-from typing import Literal
 
-from pydantic import BaseModel
 from sanic import Sanic, response
 from sanic.exceptions import NotFound
 from sanic.request import Request
 from sanic.response import HTTPResponse
 
-# Initialize Sanic app
+from .model import (
+    BaselineObjectNode,
+    ExtendedRequirementObject,
+    FileRequirementObjectNode,
+    RequirementKey,
+    RequirementObjectNode,
+    UserDefinedAttributes,
+)
+
+__version__ = "1.0.0"
+
+
 app = Sanic("RequirementWrapperAPI")
 if Path("./config.py").exists():
     app.update_config("./config.py")
@@ -93,89 +103,6 @@ async def log_response(req: Request, resp: HTTPResponse):
         print(f"Response: {resp.status} - Body: {resp.body.decode('utf-8')}")
 
 
-# Models for HTTP API
-class ValueType(str):
-    STRING = "STRING"
-    ARRAY = "ARRAY"
-    BOOLEAN = "BOOLEAN"
-
-
-class UserDefinedAttribute(BaseModel):
-    name: str
-    valueType: Literal["STRING", "ARRAY", "BOOLEAN"]
-    stringValue: str | None = None
-    stringValues: list[str] | None = None
-    booleanValue: bool | None = None
-
-
-class RequirementKey(BaseModel):
-    id: str
-    version: str
-
-
-class RequirementObject(BaseModel):
-    name: str
-    extendedID: str
-    key: RequirementKey
-    owner: str
-    status: str
-    priority: str
-    requirement: bool
-
-
-class RequirementObjectNode(RequirementObject):
-    children: list["RequirementObjectNode"] | None = None
-
-
-class ExtendedRequirementObject(RequirementObject):
-    description: str
-    documents: list[str]
-    baseline: str
-
-
-class BaselineObjectNode(BaseModel):
-    name: str
-    date: str
-    type: str
-    repositoryID: str
-    children: list[RequirementObjectNode] | None = []
-
-
-class UserDefinedAttributes(BaseModel):
-    key: RequirementKey
-    userDefinedAttributes: list[UserDefinedAttribute]
-
-
-RequirementObjectNode.model_rebuild()
-
-
-# Models for JSON lines file
-class FileRequirementVersionObject(BaseModel):
-    name: str
-    date: str
-    author: str
-    comment: str
-
-
-class FileRequirementKey(BaseModel):
-    id: str
-    version: FileRequirementVersionObject
-
-
-class FileRequirementObjectNode(BaseModel):
-    name: str
-    extendedID: str
-    key: FileRequirementKey
-    owner: str
-    status: str
-    priority: str
-    requirement: bool
-    description: str
-    documents: list[str]
-    parent: str | None
-    userDefinedAttributes: list[UserDefinedAttribute]
-
-
 def get_requirementobject_from_file_object(
     file_node: FileRequirementObjectNode,
 ) -> RequirementObjectNode:
@@ -212,33 +139,40 @@ def get_extendedrequirementobject_from_file_object(
 
 @app.route("/server-name-and-version", methods=["GET"])
 @protected
-async def get_server_name_and_version(request):
-    return response.json("RequirementWrapperServer-1.0.0")
+async def _get_server_name_and_version(request):
+    return response.json(f"RequirementWrapperServer-{__version__}")
 
 
 @app.route("/projects", methods=["GET"])
 @protected
-async def get_projects(req: Request):
+async def _get_projects(req: Request):
+    return response.json(get_projects())
+
+
+def get_projects():
     if not base_dir.exists():
-        return response.json([], status=200)
-    projects = [p.name for p in base_dir.iterdir() if p.is_dir()]
-    return response.json(projects)
+        return []
+    return [p.name for p in base_dir.iterdir() if p.is_dir()]
 
 
 @app.route("/projects/<project>/baselines", methods=["GET"])
 @protected
-async def get_baselines(req: Request, project: str):
-    project_path = get_project_path(project)
-    baselines = [f.stem for f in project_path.iterdir() if f.suffix == ".jsonl"]
-    return response.json(baselines)
+async def _get_baselines(req: Request, project: str):
+    return response.json(get_baselines(project))
+
+
+def get_baselines(project):
+    return [f.stem for f in get_project_path(project).iterdir() if f.suffix == ".jsonl"]
 
 
 @app.route("/projects/<project>/baselines/<baseline>/requirements-root", methods=["GET"])
 @protected
-async def get_requirements_root(req: Request, project: str, baseline: str):
-    baseline_path = get_baseline_path(project, baseline)
+async def _get_requirements_root(req: Request, project: str, baseline: str):
+    return response.json(get_requirements_root_node(project, baseline))
 
-    # Parse the requirements file into FileRequirementObjectNode objects
+
+def get_requirements_root_node(project: str, baseline: str):
+    baseline_path = get_baseline_path(project, baseline)
     requirement_nodes: dict[str, RequirementObjectNode] = {}
     requirement_tree: dict[str, RequirementObjectNode] = {}
     with baseline_path.open("r") as f:
@@ -262,42 +196,57 @@ async def get_requirements_root(req: Request, project: str, baseline: str):
                     parent.children.append(requirement_node)
             else:
                 requirement_tree[file_node.key.id] = requirement_node
-
-    baseline_node = BaselineObjectNode(
+    return BaselineObjectNode(
         name=baseline,
         date=datetime.now(timezone.utc).isoformat(),
         type="CURRENT",
         repositoryID=f"{project}/{baseline}",
         children=list(requirement_tree.values()),
-    )
-    return response.json(baseline_node.model_dump())
+    ).model_dump()
 
 
 @app.route("/user-defined-attributes", methods=["GET"])
 @protected
-async def get_user_defined_attributes(req: Request):
+async def _get_all_user_defined_attributes(req: Request):
+    return response.json(get_all_user_defined_attributes())
+
+
+def get_all_user_defined_attributes() -> list:
     filepath = base_dir / "UserDefinedAttributes.json"
     if not filepath.exists():
-        return response.json([], status=200)
+        return []
     with filepath.open("r") as f:
-        data = json.load(f)
-    return response.json(data)
+        udf_definitions = json.load(f)
+        if not isinstance(udf_definitions, list):
+            raise ValueError("UserDefinedAttributes.json must contain a list of definitions.")
+        for udf in udf_definitions:
+            if not isinstance(udf, dict):
+                raise ValueError("UserDefinedAttributes.json must contain a list of dictonaries.")
+            if "name" not in udf or "valueType" not in udf:
+                raise ValueError(
+                    "UserDefinedAttributes.json must contain a list of definitions "
+                    "with 'name' and 'valueType' keys."
+                )
+        return udf_definitions
 
 
 @app.route("/projects/<project>/baselines/<baseline>/user-defined-attributes", methods=["POST"])
 @protected
-async def post_user_defined_attributes(req: Request, project: str, baseline: str):
-    baseline_path = get_baseline_path(project, baseline)
-
-    keys: dict[str, dict[str, None]] = {}
-    for key in req.json.get("keys"):
-        if key["id"] in keys:
-            keys[key["id"]][key["version"]] = None
-        else:
-            keys[key["id"]] = {key["version"]: None}
-
+async def _post_user_defined_attributes(req: Request, project: str, baseline: str):
+    requirement_keys: list[RequirementKey] = [RequirementKey(**key) for key in req.json.get("keys")]
     attribute_names: list[str] = req.json.get("attributeNames")
+    return response.json(
+        get_user_defined_attributes(project, baseline, requirement_keys, attribute_names)
+    )
 
+
+def get_user_defined_attributes(
+    project: str, baseline: str, requirement_keys: list[RequirementKey], attribute_names: list[str]
+):
+    baseline_path = get_baseline_path(project, baseline)
+    keys: dict[str, dict[str, None]] = defaultdict(dict)
+    for key in requirement_keys:
+        keys[key.id][key.version] = None
     file_nodes: list[dict] = []
     with baseline_path.open("r") as f:
         for line in f:
@@ -314,23 +263,25 @@ async def post_user_defined_attributes(req: Request, project: str, baseline: str
                         ),
                     ).model_dump()
                 )
-
-    return response.json(file_nodes)
+    return file_nodes
 
 
 @app.route("/projects/<project>/baselines/<baseline>/extended-requirement", methods=["POST"])
 @protected
-async def post_extended_requirement(req: Request, project: str, baseline: str):
-    baseline_path = get_baseline_path(project, baseline)
-    # Extract the key from the request body
+async def _post_extended_requirement(req: Request, project: str, baseline: str):
     key = RequirementKey(**req.json.get("key"))
+    return response.json(get_extended_requirement(project, baseline, key))
+
+
+def get_extended_requirement(project: str, baseline: str, key: RequirementKey):
+    baseline_path = get_baseline_path(project, baseline)
     with baseline_path.open("r") as f:
         for line in f:
             file_node = FileRequirementObjectNode(**json.loads(line))
             if file_node.key.id == key.id and file_node.key.version.name == key.version:
-                return response.json(
-                    get_extendedrequirementobject_from_file_object(file_node, baseline).model_dump()
-                )
+                return get_extendedrequirementobject_from_file_object(
+                    file_node, baseline
+                ).model_dump()
     raise NotFound("Requirement not found")
 
 
@@ -350,17 +301,20 @@ def get_baseline_path(project, baseline):
 
 @app.route("/projects/<project>/baselines/<baseline>/requirement-versions", methods=["POST"])
 @protected
-async def post_requirement_versions(req: Request, project: str, baseline: str):
-    baseline_path = get_baseline_path(project, baseline)
+async def _post_requirement_versions(req: Request, project: str, baseline: str):
     key = RequirementKey(**req.json.get("key"))
-    # Extract versions from the file
+    return response.json(get_requirement_versions(project, baseline, key))
+
+
+def get_requirement_versions(project, baseline, key):
+    baseline_path = get_baseline_path(project, baseline)
     versions = []
     with baseline_path.open("r") as f:
         for line in f:
             file_node = FileRequirementObjectNode(**json.loads(line))
             if file_node.key.id == key.id:
                 versions.append(file_node.key.version.model_dump())
-    return response.json(versions)
+    return versions
 
 
 if __name__ == "__main__":
