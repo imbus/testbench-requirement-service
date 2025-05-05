@@ -25,6 +25,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/UserDefinedAttribute'
+                example:
+                  - name: Comment
+                    valueType: STRING
+                    stringValue: null
+                    stringValues: null
+                    booleanValue: null
+                  - name: Units
+                    valueType: ARRAY
+                    stringValue: null
+                    stringValues: null
+                    booleanValue: null
+                  - name: Customer Request
+                    valueType: BOOLEAN
+                    stringValue: null
+                    stringValues: null
+                    booleanValue: null
 
   /projects:
     get:
@@ -39,6 +55,11 @@ paths:
                 type: array
                 items:
                   type: string
+                  example: Project1
+                example:
+                  - Project1
+                  - Project2
+                  - Project3
 
   /projects/{project}/baselines:
     get:
@@ -59,7 +80,12 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/BaselineObject'
+                  type: string
+                  example: Baseline1
+                example:
+                  - Baseline1
+                  - Baseline2
+                  - Baseline3
 
   /projects/{project}/baselines/{baseline}/requirements-root:
     get:
@@ -85,6 +111,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BaselineObjectNode'
+              example:
+                name: Baseline1
+                date: "2025-03-03T14:24:32.490Z"
+                type: CURRENT
+                repositoryID: Demo/Baseline1
+                children:
+                  - name: Requirement1
+                    extendedID: req1
+                    key:
+                      id: req1
+                      version: "1.0"
+                    owner: John Doe
+                    status: Open
+                    priority: High
+                    requirement: false
+                    children:
+                      - name: "Requirement1.1"
+                        extendedID: "req1.1"
+                        key:
+                          id: "req1.1"
+                          version: "1.0"
+                        owner: John Doe
+                        status: Closed
+                        priority: Medium
+                        requirement: true
+                        children: null
+                      - name: "Requirement1.2"
+                        extendedID: "req1.2"
+                        key:
+                          id: "req1.2"
+                          version: "1.0"
+                        owner: John Doe
+                        status: Closed
+                        priority: Low
+                        requirement: true
+                        children: null
+                  - name: Requirement2
+                    extendedID: req2
+                    key:
+                      id: req2
+                      version: "1.0"
+                    owner: John Doe
+                    status: Open
+                    priority: Medium
+                    requirement: false
+                    children:
+                      - name: "Requirement2.1"
+                        extendedID: "req2.1"
+                        key:
+                          id: "req2.1"
+                          version: "1.0"
+                        owner: John Doe
+                        status: Open
+                        priority: Medium
+                        requirement: false
+                        children: 
+                          - name: "Requirement2.1.1"
+                            extendedID: "req2.1.1"
+                            key:
+                              id: "req2.1.1"
+                              version: "1.0"
+                            owner: John Doe
+                            status: Open
+                            priority: Medium
+                            requirement: true
+                            children: null
 
   /server-name-and-version:
     get:
@@ -97,6 +189,7 @@ paths:
             application/json:
               schema:
                 type: string
+                example: "RequirementWrapperAPI-1.0.0"
 
   /projects/{project}/baselines/{baseline}/user-defined-attributes:
     post:
@@ -126,21 +219,79 @@ paths:
                   type: array
                   items:
                     $ref: '#/components/schemas/RequirementKey'
+                  example:
+                    - id: req1
+                      version: "1.0"
+                    - id: req2
+                      version: "1.0"
                 attributeNames:
                   type: array
                   items:
                     type: string
+                    example: Comment
+                  example:
+                    - Comment
+                    - Units
+                    - Customer Request
       responses:
         '200':
           description: Map of requirement keys to user-defined attributes
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/UserDefinedAttribute'
+                type: array
+                items:
+                  type: object
+                  properties:
+                    key: 
+                      $ref: '#/components/schemas/RequirementKey'
+                    userDefinedAttributes:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/UserDefinedAttribute'
+                example:
+                  - key:
+                      id: "req1"
+                      version: "1.0"
+                    userDefinedAttributes:
+                      - name: Comment
+                        valueType: STRING
+                        stringValue: This is a comment.
+                        stringValues: null
+                        booleanValue: null
+                      - name: Units
+                        valueType: ARRAY
+                        stringValue: null
+                        stringValues:
+                          - Test
+                          - Marketing
+                          - Sales
+                        booleanValue: null
+                      - name: Customer Request
+                        valueType: BOOLEAN
+                        stringValue: null
+                        stringValues: null
+                        booleanValue: true
+                  - key:
+                      id: "req2"
+                      version: "1.0"
+                    userDefinedAttributes:
+                      - name: Comment
+                        valueType: STRING
+                        stringValue: This is a comment.
+                        stringValues: null
+                        booleanValue: null
+                      - name: Units
+                        valueType: ARRAY
+                        stringValue: null
+                        stringValues:
+                          - Test
+                        booleanValue: null
+                      - name: Customer Request
+                        valueType: BOOLEAN
+                        stringValue: null
+                        stringValues: null
+                        booleanValue: false
 
   /projects/{project}/baselines/{baseline}/extended-requirement:
     post:
@@ -168,6 +319,10 @@ paths:
               properties:
                 key:
                   $ref: '#/components/schemas/RequirementKey'
+              example:
+                key:
+                  id: req1
+                  version: "1.0"
       responses:
         '200':
           description: Extended requirement details
@@ -175,6 +330,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExtendedRequirementObject'
+              example:
+                name: Requirement1
+                extendedID: req1
+                key:
+                  id: req1
+                  version: "1.0"
+                owner: John Doe
+                status: Open
+                priority: High
+                requirement: false
+                description: User login functionality
+                documents:
+                  - login_spec.pdf
+                baseline: Baseline1
 
   /projects/{project}/baselines/{baseline}/requirement-versions:
     post:
@@ -202,6 +371,10 @@ paths:
               properties:
                 key:
                   $ref: '#/components/schemas/RequirementKey'
+              example:
+                key:
+                  id: req1
+                  version: "1.0"
       responses:
         '200':
           description: List of requirement versions
@@ -211,6 +384,15 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RequirementVersionObject'
+                example:
+                  - name: "1.0"
+                    date: "2025-03-01T12:48:10.340Z"
+                    author: John Doe
+                    comment: Initial version
+                  - name: "1.1"
+                    date: "2025-03-03T14:24:32.490Z"
+                    author: John Doe
+                    comment: Improved version
 
 components:
   securitySchemes:
@@ -223,17 +405,26 @@ components:
       properties:
         name:
           type: string
+          example: Priority
         valueType:
           type: string
           enum: [STRING, ARRAY, BOOLEAN]
+          example: STRING
         stringValue:
           type: string
+          example: High
         stringValues:
           type: array
           items:
             type: string
+            example: Test
+          example:
+            - Test
+            - Marketing
+            - Sales
         booleanValue:
           type: boolean
+          example: true
       required:
         - name
         - valueType
@@ -243,14 +434,18 @@ components:
       properties:
         name:
           type: string
+          example: Baseline1
         date:
           type: string
           format: date-time
+          example: "2025-03-03T14:24:32.490Z"
         type:
           type: string
           enum: [CURRENT, UNLOCKED, LOCKED, DISABLED, INVALID]
+          example: CURRENT
         repositoryID:
           type: string
+          example: Demo/Baseline1
 
     BaselineObjectNode:
       allOf:
@@ -267,26 +462,34 @@ components:
       properties:
         id:
           type: string
+          example: req1
         version:
           type: string
+          example: "1.0"
 
     RequirementObject:
       type: object
       properties:
         name:
           type: string
+          example: Requirement1
         extendedID:
           type: string
+          example: req1
         key:
           $ref: '#/components/schemas/RequirementKey'
         owner:
           type: string
+          example: John Doe
         status:
           type: string
+          example: Open
         priority:
           type: string
+          example: High
         requirement:
           type: boolean
+          example: false
 
     RequirementObjectNode:
       allOf:
@@ -297,6 +500,27 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/RequirementObjectNode'
+              example:
+                - name: "Requirement1.1"
+                  extendedID: "req1.1"
+                  key:
+                    id: "req1.1"
+                    version: "1.0"
+                  owner: John Doe
+                  status: Closed
+                  priority: Medium
+                  requirement: true
+                  children: null
+                - name: "Requirement1.2"
+                  extendedID: "req1.2"
+                  key:
+                    id: "req1.2"
+                    version: "1.0"
+                  owner: John Doe
+                  status: Closed
+                  priority: Low
+                  requirement: true
+                  children: null
 
     ExtendedRequirementObject:
       allOf:
@@ -305,22 +529,30 @@ components:
           properties:
             description:
               type: string
+              example: User login functionality
             documents:
               type: array
               items:
                 type: string
+              example:
+                - login_spec.pdf
             baseline:
               type: string
+              example: Baseline1
 
     RequirementVersionObject:
       type: object
       properties:
         name:
           type: string
+          example: "1.0"
         date:
           type: string
           format: date-time
+          example: "2025-03-03T14:24:32.490Z"
         author:
           type: string
+          example: John Doe
         comment:
           type: string
+          example: Initial version
