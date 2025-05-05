@@ -57,7 +57,9 @@ if not venv_dir.exists():
     EnvBuilder(with_pip=True).create(venv_dir)
 
 subprocess.run([venv_python, "-m", "pip", "install", "-U", "pip"], check=False)
-subprocess.run([venv_python, "-m", "pip", "install", "-U", "-r", "requirements.txt"], check=False)
+subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[excel]"], check=False)
+subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[dev]"], check=False)
+subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[test]"], check=False)
 subprocess.run([venv_pre_commit, "install"], check=False)
 
 activate_script = (
