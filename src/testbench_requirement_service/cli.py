@@ -93,3 +93,6 @@ def set_credentials(config, username, password):
 
 cli.add_command(start)
 cli.add_command(set_credentials)
+
+if __name__ == "__main__":
+    cli()

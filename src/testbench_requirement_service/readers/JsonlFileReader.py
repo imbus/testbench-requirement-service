@@ -7,6 +7,7 @@ from sanic.exceptions import NotFound
 
 from testbench_requirement_service.models.file_requirement import FileRequirementObjectNode
 from testbench_requirement_service.models.requirement import (
+    BaselineObject,
     BaselineObjectNode,
     ExtendedRequirementObject,
     RequirementKey,
@@ -15,11 +16,11 @@ from testbench_requirement_service.models.requirement import (
     UserDefinedAttribute,
     UserDefinedAttributes,
 )
-from testbench_requirement_service.readers.FileReader import FileReader
+from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
 from testbench_requirement_service.utils.helpers import import_module_from_file_path
 
 
-class JsonlFileReader(FileReader):
+class JsonlFileReader(AbstractFileReader):
     def __init__(self, config_path: str):
         self.config = self._load_and_validate_config_from_path(Path(config_path))
 
@@ -38,8 +39,16 @@ class JsonlFileReader(FileReader):
             return []
         return [p.name for p in self.requirements_path.iterdir() if p.is_dir()]
 
-    def get_baselines(self, project: str) -> list[str]:
-        return [f.stem for f in self._get_project_path(project).iterdir() if f.suffix == ".jsonl"]
+    def get_baselines(self, project: str) -> list[BaselineObject]:
+        return [
+            BaselineObject(
+                name=f.stem,
+                date=datetime.fromtimestamp(f.stat().st_ctime).astimezone(),
+                type="UNLOCKED",
+            )
+            for f in self._get_project_path(project).iterdir()
+            if f.suffix == ".jsonl"
+        ]
 
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         baseline_path = self._get_baseline_path(project, baseline)
@@ -70,7 +79,6 @@ class JsonlFileReader(FileReader):
             name=baseline,
             date=datetime.now(timezone.utc),
             type="CURRENT",
-            repositoryID=f"{project}/{baseline}",
             children=list(requirement_tree.values()),
         )
 

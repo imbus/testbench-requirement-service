@@ -2,7 +2,7 @@ openapi: "3.0.1"
 info:
   title: RequirementWrapper API
   version: 1.0.0
-  description: A REST API for managing requirements using the RequirementWrapper.
+  description: A REST API for managing requirements using the RequirementWrapper2.
 
 servers:
   - url: /
@@ -16,6 +16,13 @@ paths:
     get:
       summary: Retrieve user-defined attributes
       description: Returns an array of all user-defined attributes available on the requirements server.
+      parameters:
+        - name: login
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The login of the user that is calling this call.
       responses:
         '200':
           description: List of user-defined attributes
@@ -46,6 +53,13 @@ paths:
     get:
       summary: Retrieve projects
       description: Returns an array of the names of all projects available on the requirements server.
+      parameters:
+        - name: login
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The login of the user that is calling this call.
       responses:
         '200':
           description: List of project names
@@ -66,6 +80,12 @@ paths:
       summary: Retrieve baselines
       description: Returns an array of baselines for a given project.
       parameters:
+        - name: login
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -80,18 +100,19 @@ paths:
               schema:
                 type: array
                 items:
-                  type: string
-                  example: Baseline1
-                example:
-                  - Baseline1
-                  - Baseline2
-                  - Baseline3
+                  $ref: '#/components/schemas/BaselineObject'
 
   /projects/{project}/baselines/{baseline}/requirements-root:
     get:
       summary: Retrieve requirements root node
       description: Returns the requirements of a given baseline as a tree structure.
       parameters:
+        - name: login
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -166,7 +187,7 @@ paths:
                         status: Open
                         priority: Medium
                         requirement: false
-                        children: 
+                        children:
                           - name: "Requirement2.1.1"
                             extendedID: "req2.1.1"
                             key:
@@ -182,6 +203,13 @@ paths:
     get:
       summary: Retrieve server name and version
       description: Returns the name and version of the requirements server, separated by a dash.
+      parameters:
+        - name: login
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The login of the user that is calling this call.
       responses:
         '200':
           description: Server name and version
@@ -189,13 +217,19 @@ paths:
             application/json:
               schema:
                 type: string
-                example: "RequirementWrapperAPI-1.0.0"
+              example: "RequirementWrapperAPI-1.0.0"
 
   /projects/{project}/baselines/{baseline}/user-defined-attributes:
     post:
       summary: Retrieve user-defined attributes for requirements
       description: Returns the values of user-defined fields for a list of requirements.
       parameters:
+        - name: login
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -239,65 +273,72 @@ paths:
           content:
             application/json:
               schema:
+              # TODO: Create rich object UserDefinedAttributeResponse
                 type: array
                 items:
                   type: object
                   properties:
-                    key: 
+                    key:
                       $ref: '#/components/schemas/RequirementKey'
                     userDefinedAttributes:
                       type: array
                       items:
                         $ref: '#/components/schemas/UserDefinedAttribute'
-                example:
-                  - key:
-                      id: "req1"
-                      version: "1.0"
-                    userDefinedAttributes:
-                      - name: Comment
-                        valueType: STRING
-                        stringValue: This is a comment.
-                        stringValues: null
-                        booleanValue: null
-                      - name: Units
-                        valueType: ARRAY
-                        stringValue: null
-                        stringValues:
-                          - Test
-                          - Marketing
-                          - Sales
-                        booleanValue: null
-                      - name: Customer Request
-                        valueType: BOOLEAN
-                        stringValue: null
-                        stringValues: null
-                        booleanValue: true
-                  - key:
-                      id: "req2"
-                      version: "1.0"
-                    userDefinedAttributes:
-                      - name: Comment
-                        valueType: STRING
-                        stringValue: This is a comment.
-                        stringValues: null
-                        booleanValue: null
-                      - name: Units
-                        valueType: ARRAY
-                        stringValue: null
-                        stringValues:
-                          - Test
-                        booleanValue: null
-                      - name: Customer Request
-                        valueType: BOOLEAN
-                        stringValue: null
-                        stringValues: null
-                        booleanValue: false
+              example:
+                - key:
+                    id: "req1"
+                    version: "1.0"
+                  userDefinedAttributes:
+                    - name: Comment
+                      valueType: STRING
+                      stringValue: This is a comment.
+                      stringValues: null
+                      booleanValue: null
+                    - name: Units
+                      valueType: ARRAY
+                      stringValue: null
+                      stringValues:
+                        - Test
+                        - Marketing
+                        - Sales
+                      booleanValue: null
+                    - name: Customer Request
+                      valueType: BOOLEAN
+                      stringValue: null
+                      stringValues: null
+                      booleanValue: true
+                - key:
+                    id: "req2"
+                    version: "1.0"
+                  userDefinedAttributes:
+                    - name: Comment
+                      valueType: STRING
+                      stringValue: This is a comment.
+                      stringValues: null
+                      booleanValue: null
+                    - name: Units
+                      valueType: ARRAY
+                      stringValue: null
+                      stringValues:
+                        - Test
+                      booleanValue: null
+                    - name: Customer Request
+                      valueType: BOOLEAN
+                      stringValue: null
+                      stringValues: null
+                      booleanValue: false
 
   /projects/{project}/baselines/{baseline}/extended-requirement:
     post:
       summary: Retrieve extended requirement
       description: Returns detailed information about a specific requirement.
       parameters:
+        - name: login
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -350,6 +391,12 @@ paths:
       summary: Retrieve requirement versions
       description: Returns the versions of a given requirement.
       parameters:
+        - name: login
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true

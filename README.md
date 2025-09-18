@@ -342,18 +342,18 @@ The service includes built-in file reader classes that handle different file for
 
 ## Custom FileReader Classes
 
-If you want to implement your own custom file reader, you need to create a subclass of the abstract [FileReader](src/testbench_requirement_service/readers/FileReader.py) class and implement all its abstract methods.
+If you want to implement your own custom file reader, you need to create a subclass of the [AbstractFileReader](src/testbench_requirement_service/readers/abstract_file_reader.py) class and implement all its abstract methods.
 
 ## Steps to create a custom FileReader class
 
 **1. Create a new class**
-- Subclass the abstract [FileReader](src/testbench_requirement_service/readers/FileReader.py) class.
+- Inherit the [AbstractFileReader](src/testbench_requirement_service/readers/abstract_file_reader.py) class.
     ```python
     # CustomFileReader.py
 
-    from testbench_requirement_service.readers.FileReader import FileReader
+    from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
 
-    class CustomFileReader(FileReader):
+    class CustomFileReader(AbstractFileReader):
         def __init__(self, config_path: str):
             ...
         

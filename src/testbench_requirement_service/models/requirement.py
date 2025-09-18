@@ -52,7 +52,6 @@ class BaselineObject(BaseModel):
     name: str
     date: datetime
     type: Literal["CURRENT", "UNLOCKED", "LOCKED", "DISABLED", "INVALID"]
-    repositoryID: str
 
     @field_serializer("date")
     def serialize_date(self, date: datetime):

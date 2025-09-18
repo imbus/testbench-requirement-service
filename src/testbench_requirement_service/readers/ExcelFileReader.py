@@ -4,10 +4,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 import javaproperties
-import pandas as pd
+import pandas as pd  # type: ignore
 from sanic.exceptions import NotFound
 
 from testbench_requirement_service.models.requirement import (
+    BaselineObject,
     BaselineObjectNode,
     ExtendedRequirementObject,
     RequirementKey,
@@ -16,11 +17,11 @@ from testbench_requirement_service.models.requirement import (
     UserDefinedAttribute,
     UserDefinedAttributes,
 )
-from testbench_requirement_service.readers.FileReader import FileReader
+from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
 from testbench_requirement_service.utils.date_format import parse_date_string
 
 
-class ExcelFileReader(FileReader):
+class ExcelFileReader(AbstractFileReader):
     def __init__(self, config_path: str):
         self.config = self._load_and_validate_config_from_path(Path(config_path))
 
@@ -39,10 +40,20 @@ class ExcelFileReader(FileReader):
             return []
         return [p.name for p in self.requirements_path.iterdir() if p.is_dir()]
 
-    def get_baselines(self, project: str) -> list[str]:
+    def get_baselines(self, project: str) -> list[BaselineObject]:
         allowed_suffixes = self._get_allowed_suffixes_for_project(project)
         files = self._get_files_in_project_path(project)
-        return list({f.stem for f in files if f.suffix in allowed_suffixes})
+        return list(
+            {
+                BaselineObject(
+                    name=f.stem,
+                    date=datetime.fromtimestamp(f.stat().st_ctime).astimezone(),
+                    type="UNLOCKED",
+                )
+                for f in files
+                if f.suffix in allowed_suffixes
+            }
+        )
 
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         baseline_path = self._get_baseline_path(project, baseline)
@@ -77,7 +88,6 @@ class ExcelFileReader(FileReader):
             name=baseline,
             date=datetime.now(timezone.utc),
             type="CURRENT",
-            repositoryID=f"{project}/{baseline}",
             children=requirement_tree,
         )
 

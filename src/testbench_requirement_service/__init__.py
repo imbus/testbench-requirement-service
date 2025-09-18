@@ -1,5 +1,7 @@
 """
-TestBench Requirement Service
+# TestBench Requirement Service
+
+Service to serve requirements for TestBench RequirementServiceWrapper interface.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.0a2"

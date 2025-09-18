@@ -5,7 +5,7 @@ Library     ../../resources/APIKeywords.py
 *** Test Cases ***
 Get Server Name And Version Should Return 200 And String With Name And Version
     ${response}=    Get Server Name And Version
-    Should Be Equal    ${response.json()}    RequirementWrapperAPI-1.0.0
+    Should Be Equal    ${response.json()}    RequirementWrapperAPI-1.0.0a2
 
 Get All Projects Should Return 200 And List Of Projects
     ${response}=    Get Projects
