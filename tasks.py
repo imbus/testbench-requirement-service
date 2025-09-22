@@ -1,6 +1,5 @@
-from invoke import Context, task  # type: ignore
-
-# from robot.run import run  # type: ignore
+import robot  # type: ignore
+from invoke import Context, task
 
 
 def run_command(c: Context, command: str) -> int:
@@ -12,10 +11,12 @@ def run_command(c: Context, command: str) -> int:
 @task
 def lint_robot(c: Context) -> None:
     """Runs robocop on the project files."""
-    # failed = run_command(c, "robotidy .")
-    # failed += run_command(c, "robocop .")
-    # if failed:
-    #     raise SystemExit(failed)
+    failed = run_command(c, "robocop check tests/robot --include *.robot --include *.resource")
+    failed += run_command(
+        c, "robocop format tests/robot tests/robot --include *.robot --include *.resource"
+    )
+    if failed:
+        raise SystemExit(failed)
 
 
 @task
@@ -33,7 +34,11 @@ def lint(c: Context) -> None:
     """Runs all linting tasks."""
 
 
-# @task
-# def test(c: Context, loglevel: str = "TRACE:INFO") -> None:
-#     """Runs the robot tests."""
-#     run("./Robots", loglevel=loglevel, variable=["HEADLESS:True"])
+@task
+def test(c: Context, loglevel: str = "TRACE:INFO") -> None:  # noqa: PT028
+    """Runs the robot tests."""
+    failed = robot.run(
+        "tests/robot", loglevel=loglevel, variable=["HEADLESS:True"], outputdir="results"
+    )
+    if failed:
+        raise SystemExit(failed)
