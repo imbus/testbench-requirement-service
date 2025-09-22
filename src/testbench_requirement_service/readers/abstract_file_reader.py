@@ -5,9 +5,9 @@ from testbench_requirement_service.models.requirement import (
     BaselineObjectNode,
     ExtendedRequirementObject,
     RequirementKey,
+    RequirementUserDefinedAttributes,
     RequirementVersionObject,
     UserDefinedAttribute,
-    UserDefinedAttributes,
 )
 
 
@@ -47,7 +47,7 @@ class AbstractFileReader(ABC):
         baseline: str,
         requirement_keys: list[RequirementKey],
         attribute_names: list[str],
-    ) -> list[UserDefinedAttributes]:
+    ) -> list[RequirementUserDefinedAttributes]:
         pass
 
     @abstractmethod

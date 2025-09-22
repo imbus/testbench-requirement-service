@@ -45,7 +45,7 @@ async def _get_baselines(req: Request, project: str):
     if not file_reader.project_exists(project):
         raise NotFound("Project not found")
 
-    return response.json(file_reader.get_baselines(project))
+    return response.json([baseline.model_dump() for baseline in file_reader.get_baselines(project)])
 
 
 @router.route(

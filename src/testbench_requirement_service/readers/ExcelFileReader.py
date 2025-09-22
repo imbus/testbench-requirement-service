@@ -13,9 +13,9 @@ from testbench_requirement_service.models.requirement import (
     ExtendedRequirementObject,
     RequirementKey,
     RequirementObjectNode,
+    RequirementUserDefinedAttributes,
     RequirementVersionObject,
     UserDefinedAttribute,
-    UserDefinedAttributes,
 )
 from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
 from testbench_requirement_service.utils.date_format import parse_date_string
@@ -43,17 +43,16 @@ class ExcelFileReader(AbstractFileReader):
     def get_baselines(self, project: str) -> list[BaselineObject]:
         allowed_suffixes = self._get_allowed_suffixes_for_project(project)
         files = self._get_files_in_project_path(project)
-        return list(
-            {
-                BaselineObject(
-                    name=f.stem,
-                    date=datetime.fromtimestamp(f.stat().st_ctime).astimezone(),
-                    type="UNLOCKED",
-                )
-                for f in files
-                if f.suffix in allowed_suffixes
-            }
-        )
+        return [
+            BaselineObject(
+                name=f.stem,
+                date=datetime.fromtimestamp(f.stat().st_birthtime).astimezone(),
+                type="UNLOCKED",
+                repositoryID=f"{project}/{f.stem}",
+            )
+            for f in files
+            if f.suffix in allowed_suffixes
+        ]
 
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         baseline_path = self._get_baseline_path(project, baseline)
@@ -88,6 +87,7 @@ class ExcelFileReader(AbstractFileReader):
             name=baseline,
             date=datetime.now(timezone.utc),
             type="CURRENT",
+            repositoryID=f"{project}/{baseline}",
             children=requirement_tree,
         )
 
@@ -105,7 +105,7 @@ class ExcelFileReader(AbstractFileReader):
         baseline: str,
         requirement_keys: list[RequirementKey],
         attribute_names: list[str],
-    ) -> list[UserDefinedAttributes]:
+    ) -> list[RequirementUserDefinedAttributes]:
         if not requirement_keys:
             return []
 
@@ -124,7 +124,7 @@ class ExcelFileReader(AbstractFileReader):
                 continue
             udf_configs[name] = udf_config
 
-        udfs_list: list[UserDefinedAttributes] = []
+        udfs_list: list[RequirementUserDefinedAttributes] = []
 
         for row in filtered_df.to_dict(orient="records"):
             key = RequirementKey(id=row["id"], version=row["version"])
@@ -147,7 +147,9 @@ class ExcelFileReader(AbstractFileReader):
                 user_defined_attributes.append(UserDefinedAttribute(**udf_config))
 
             udfs_list.append(
-                UserDefinedAttributes(key=key, userDefinedAttributes=user_defined_attributes)
+                RequirementUserDefinedAttributes(
+                    key=key, userDefinedAttributes=user_defined_attributes
+                )
             )
 
         return udfs_list
@@ -468,7 +470,7 @@ class ExcelFileReader(AbstractFileReader):
         data_row_idx = int(config.get("data.rowIdx", "2")) - 1
         skiprows = list(range(header_row_idx + 1, data_row_idx))
 
-        read_params = {"header": header_row_idx, "dtype": str, "skiprows": skiprows}
+        read_params: dict[str, Any] = {"header": header_row_idx, "dtype": str, "skiprows": skiprows}
 
         if file_path.suffix in [".xls", ".xlsx"]:
             sheet_name = config.get("worksheetName", 0)

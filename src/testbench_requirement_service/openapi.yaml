@@ -273,17 +273,9 @@ paths:
           content:
             application/json:
               schema:
-              # TODO: Create rich object UserDefinedAttributeResponse
                 type: array
                 items:
-                  type: object
-                  properties:
-                    key:
-                      $ref: '#/components/schemas/RequirementKey'
-                    userDefinedAttributes:
-                      type: array
-                      items:
-                        $ref: '#/components/schemas/UserDefinedAttribute'
+                  $ref: '#/components/schemas/RequirementUserDefinedAttributes'
               example:
                 - key:
                     id: "req1"
@@ -493,6 +485,11 @@ components:
         repositoryID:
           type: string
           example: Demo/Baseline1
+      required:
+        - name
+        - date
+        - type
+        - repositoryID
 
     BaselineObjectNode:
       allOf:
@@ -513,6 +510,9 @@ components:
         version:
           type: string
           example: "1.0"
+      required:
+        - id
+        - version
 
     RequirementObject:
       type: object
@@ -537,6 +537,14 @@ components:
         requirement:
           type: boolean
           example: false
+      required:
+        - name
+        - extendedID
+        - key
+        - owner
+        - status
+        - priority
+        - requirement
 
     RequirementObjectNode:
       allOf:
@@ -603,3 +611,19 @@ components:
         comment:
           type: string
           example: Initial version
+      required:
+        - name
+        - date
+        - author
+
+    RequirementUserDefinedAttributes:
+      type: object
+      properties:
+        key:
+          $ref: '#/components/schemas/RequirementKey'
+        userDefinedAttributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserDefinedAttribute'
+      required:
+        - key

@@ -41,7 +41,7 @@ class RequirementVersionObject(BaseModel):
     name: str
     date: datetime
     author: str
-    comment: str
+    comment: str | None = None
 
     @field_serializer("date")
     def serialize_date(self, date: datetime):
@@ -52,6 +52,7 @@ class BaselineObject(BaseModel):
     name: str
     date: datetime
     type: Literal["CURRENT", "UNLOCKED", "LOCKED", "DISABLED", "INVALID"]
+    repositoryID: str  # TODO: implement
 
     @field_serializer("date")
     def serialize_date(self, date: datetime):
@@ -62,9 +63,9 @@ class BaselineObjectNode(BaselineObject):
     children: list[RequirementObjectNode] | None = []
 
 
-class UserDefinedAttributes(BaseModel):
+class RequirementUserDefinedAttributes(BaseModel):
     key: RequirementKey
-    userDefinedAttributes: list[UserDefinedAttribute]
+    userDefinedAttributes: list[UserDefinedAttribute] | None = []
 
 
 class UserDefinedAttributesQuery(BaseModel):

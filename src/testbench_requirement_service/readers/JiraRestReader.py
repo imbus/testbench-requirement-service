@@ -24,9 +24,10 @@ from testbench_requirement_service.models.requirement import (
     RequirementObjectNode,
     RequirementVersionObject,
     UserDefinedAttribute,
-    UserDefinedAttributes,
+    RequirementUserDefinedAttributes,
 )
 from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
+from testbench_requirement_service.utils.helpers import import_module_from_file_path
 
 
 def is_dict_like(item):
@@ -88,6 +89,7 @@ class JiraRestReader(AbstractFileReader):
         self.logger = logging.getLogger(__name__)
         self.logger.level = logging.DEBUG
 
+        self.config = self._load_and_validate_config_from_path(Path(config_path))
         self.config = Path(config_path).read_text("utf-8")
         # self.jira = JIRA(
         #     server="https://testbenchcs.atlassian.net/",
@@ -187,13 +189,19 @@ class JiraRestReader(AbstractFileReader):
                 self.baselines[project] = self._get_allowed_values(field.allowedValues)
                 baselines = [
                     BaselineObject(
-                        name=b, date=datetime.now(timezone.utc), type="UNLOCKED"
-                    )  # TODO: implement proper date handling
+                        name=b,
+                        date=datetime.now(timezone.utc),
+                        type="UNLOCKED",
+                        repositoryID=f"{project}/{b}",
+                    )
                     for b in sorted(self.baselines[project])
                 ]
                 return [
                     BaselineObject(
-                        name="Current Baseline", date=datetime.now(timezone.utc), type="CURRENT"
+                        name="Current Baseline",
+                        date=datetime.now(timezone.utc),
+                        type="CURRENT",
+                        repositoryID=f"{project}/Current Baseline",
                     ),
                     *baselines,
                 ]
@@ -328,6 +336,7 @@ class JiraRestReader(AbstractFileReader):
             name=baseline,
             date=datetime.now(timezone.utc),
             type="CURRENT",
+            repositoryID=f"{project}/{baseline}",
             children=sorted(
                 requirement_tree.values(), key=lambda x: int(x.extendedID.split("-")[-1])
             ),
@@ -348,7 +357,7 @@ class JiraRestReader(AbstractFileReader):
         baseline: str,
         requirement_keys: list[RequirementKey],
         attribute_names: list[str],
-    ) -> list[UserDefinedAttributes]:
+    ) -> list[RequirementUserDefinedAttributes]:
         fields = {
             field.get("name"): {
                 "id": field["id"],
@@ -398,7 +407,7 @@ class JiraRestReader(AbstractFileReader):
                 )
             )
             user_defined_attributes.append(
-                UserDefinedAttributes(key=req_key, userDefinedAttributes=udas)
+                RequirementUserDefinedAttributes(key=req_key, userDefinedAttributes=udas)
             )
         return user_defined_attributes
         # yield UserDefinedAttributes(
@@ -477,3 +486,24 @@ class JiraRestReader(AbstractFileReader):
         self, project: str, baseline: str, key: RequirementKey
     ) -> list[RequirementVersionObject]:
         pass
+
+    def _load_config_from_path(self, config_path: Path):
+        try:
+            return import_module_from_file_path(config_path)
+        except Exception as e:
+            raise ImportError(
+                f"Importing reader config from '{config_path.resolve()}' failed."
+            ) from e
+
+    def _load_and_validate_config_from_path(self, config_path: Path) -> dict[str, str]:
+        config = self._load_config_from_path(config_path)
+
+        # if not hasattr(config, "BASE_DIR"):
+        #     raise KeyError("BASE_DIR is missing in reader config file.")
+        # if not getattr(config, "BASE_DIR", None):
+        #     raise ValueError("BASE_DIR is required in reader config file.")
+        # base_dir = Path(config.BASE_DIR)
+        # if not base_dir.exists():
+        #     raise FileNotFoundError(f"BASE_DIR not found: '{base_dir.resolve()}'.")
+
+        return config
