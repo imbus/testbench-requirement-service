@@ -45,7 +45,7 @@ class RequirementVersionObject(BaseModel):
 
     @field_serializer("date")
     def serialize_date(self, date: datetime):
-        return date.isoformat()
+        return date.isoformat(timespec="seconds")
 
 
 class BaselineObject(BaseModel):
@@ -56,7 +56,7 @@ class BaselineObject(BaseModel):
 
     @field_serializer("date")
     def serialize_date(self, date: datetime):
-        return date.isoformat()
+        return date.isoformat(timespec="seconds")
 
 
 class BaselineObjectNode(BaselineObject):
