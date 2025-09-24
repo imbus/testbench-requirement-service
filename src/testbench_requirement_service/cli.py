@@ -3,6 +3,7 @@ from functools import partial
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
@@ -52,6 +53,7 @@ def cli(ctx):
 )
 def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR0913
     """Start the TestBench Requirement Service."""
+    load_dotenv()
     app_name = "RequirementWrapperAPI"
     loglevel = "DEBUG" if dev else None
     app_config = AppConfig(config, reader_class, reader_config, loglevel)
