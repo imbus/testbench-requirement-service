@@ -179,10 +179,15 @@ tmp/
 *.tmp
 
 # Configuration files 
-config
+*config.py
+*config.toml
+*.properties
 
 # VS Code settings
 .vscode/
 
 # Robot Framework results
 results/
+
+# Requirement files
+requirements
