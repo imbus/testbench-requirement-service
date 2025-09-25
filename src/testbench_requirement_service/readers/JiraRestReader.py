@@ -190,93 +190,15 @@ class JiraRestReader(AbstractFileReader):
             ],
         ]
 
-    # TODO: Refactor
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
-        issues = []
-        next_page_token = None
-        # jql_query = f"project = {self.projects[project]} AND fixVersion = {baseline}"
-        if baseline == "Current Baseline":
-            jql_query = self.jql_query_current.format(project=self.projects[project])
-        else:
-            jql_query = self.jql_query.format(project=self.projects[project], baseline=baseline)
-        # fields = "summary,status,priority,parent,assignee"
-        # udfs = ", ".join([fields, *self._udfs.keys()])
-        udfs = "*all"
-        if self.uses_new_issuetypes_endpoint:
-            while True:
-                issues_chunk: ResultList = self.jira.search_issues(
-                    jql_str=jql_query,
-                    startAt=len(issues),
-                    maxResults=1000,
-                    fields=udfs,
-                )
-                print(len(issues_chunk))
-                issues.extend(list(issues_chunk))
-                if len(issues_chunk) == 0:
-                    break
-        else:
-            while True:
-                issues_chunk: ResultList = self.jira.enhanced_search_issues(
-                    jql_str=jql_query,
-                    nextPageToken=next_page_token,
-                    maxResults=1000,
-                    fields=udfs,
-                )
-                print(len(issues_chunk))
-                issues.extend(list(issues_chunk))
-                next_page_token = issues_chunk.nextPageToken
-                if not issues_chunk.nextPageToken:
-                    break
+        issues = self._fetch_issues(project, baseline)
         if not issues:
-            raise NotFound(f"No issues found for project {project} and baseline {baseline}")
+            raise NotFound("No issues found for project {project} and baseline {baseline}")
+
         issues.sort(key=self.sort_by_issue_key)
-        requirement_nodes: dict[str, RequirementObjectNode] = {}
-        for issue in issues:
-            req_node = RequirementObjectNode(
-                name=issue.fields.summary,
-                extendedID=issue.key,
-                key=RequirementKey(id=issue.key, version="1.0"),
-                owner=issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
-                status=issue.fields.status.name,
-                priority=getattr(issue.fields.priority, "name", ""),
-                requirement=True,
-                children=[],
-            )
-            self._issues[issue.key] = issue
-            requirement_nodes[issue.key] = req_node
-        requirement_tree: dict[str, RequirementObjectNode] = {}
-        try:
-            for issue in issues:
-                if hasattr(issue.fields, "parent") and issue.fields.parent:
-                    parent_key = issue.fields.parent.key
-                    if parent_key not in requirement_nodes:
-                        parent_issue = self.jira.issue(parent_key)
-                        print(parent_issue.key)
-                        parent = RequirementObjectNode(
-                            name=parent_issue.fields.summary,
-                            extendedID=parent_key,
-                            key=RequirementKey(id=parent_key, version="1.0"),
-                            owner=parent_issue.fields.assignee.displayName
-                            if parent_issue.fields.assignee
-                            else "Unassigned",
-                            status=parent_issue.fields.status.name,
-                            priority=parent_issue.fields.priority.name,
-                            requirement=False,
-                            children=[],
-                        )
-                        requirement_nodes[parent_key] = parent
-                    else:
-                        parent = requirement_nodes[parent_key]
-                    if parent.children is None:
-                        parent.children = [requirement_nodes[issue.key]]
-                    else:
-                        parent.children.append(requirement_nodes[issue.key])
-                    if parent_key not in requirement_tree:
-                        requirement_tree[parent_key] = parent
-                else:
-                    requirement_tree[issue.key] = requirement_nodes[issue.key]
-        except Exception as e:
-            self.logger.error(f"Error building requirement tree: {e}")
+        requirement_nodes = self._build_requirement_nodes(issues)
+        requirement_tree = self._build_requirement_tree(issues, requirement_nodes)
+
         return BaselineObjectNode(
             name=baseline,
             date=datetime.now(timezone.utc),
@@ -297,101 +219,34 @@ class JiraRestReader(AbstractFileReader):
             if field.get("id", "").startswith("customfield_")
         ]
 
-    # TODO: Refactor
     def get_all_user_defined_attributes(
         self,
-        project: str,
-        baseline: str,
         requirement_keys: list[RequirementKey],
         attribute_names: list[str],
     ) -> list[RequirementUserDefinedAttributes]:
-        fields = {
-            field.get("name"): {
-                "id": field["id"],
-                "typ": "ARRAY" if field.get("schema", {}).get("type") == "array" else "STRING",
-            }
-            for field in self.jira.fields()
-        }
+        """Collect user-defined attributes for given requirement keys."""
+        fields = self._map_jira_fields()
         user_defined_attributes = []
+
         for req_key in requirement_keys:
-            udas = []
-            for field_name in attribute_names:
-                name = field_name
-                field = fields.get(field_name)
-                if field is None:
-                    self.logger.warning(f"Field {field_name} not found in Jira fields")
-                    continue
-                value_type = field.get("typ", "STRING")
-                if value_type == "STRING":
-                    value = getattr(self._issues[req_key.id].fields, fields[field_name]["id"], None)
-                    if value is not None:
-                        udas.append(
-                            UserDefinedAttribute(
-                                name=name,
-                                valueType=value_type,
-                                stringValue=str(value),
-                            )
-                        )
-                elif value_type == "ARRAY":
-                    values = getattr(
-                        self._issues[req_key.id].fields, fields[field_name]["id"], None
-                    )
-                    if values is not None:
-                        udas.append(
-                            UserDefinedAttribute(
-                                name=name,
-                                valueType=value_type,
-                                stringValues=[str(value) for value in values]
-                                if isinstance(values, list)
-                                else [str(values)],
-                            )
-                        )
-            udas.append(
-                UserDefinedAttribute(
-                    name="# finds",
-                    valueType="STRING",
-                    stringValue="<html><body>Voll <b>Fett</b></body></html>",
-                )
-            )
+            udas = self._collect_attributes_for_requirement(req_key, attribute_names, fields)
+            # Add placeholder/sample attribute
+            udas.append(self._build_placeholder_attribute())
             user_defined_attributes.append(
                 RequirementUserDefinedAttributes(key=req_key, userDefinedAttributes=udas)
             )
-        return user_defined_attributes
-        # yield UserDefinedAttributes(
-        #     key=req_key,
-        #     userDefinedAttributes=[
-        #         UserDefinedAttribute(
-        #             name=field_name,
-        #             valueType=fields[field_name]["typ"],
-        #             stringValue=str(getattr(
-        #                 self._issues[req_key.id].fields, fields[field_name]["id"], None
-        #             ))
-        #             if fields[field_name]["typ"] == "STRING"
-        #             else None,
-        #             stringValues=getattr(
-        #                 self._issues[req_key.id].fields, fields[field_name]["id"], None
-        #             )
-        #             if fields[field_name]["typ"] == "ARRAY"
-        #             else None,
-        #         )
-        #         for field_name in attribute_names
-        #     ],
-        # )
 
-    # TODO: Refactor
+        return user_defined_attributes
+
     def get_extended_requirement(
-        self, project: str, baseline: str, key: RequirementKey
+        self, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
-        issue = self.jira.issue(
-            key.id,
-            fields="summary,assignee,status,priority,parent,description",
-            expand="renderedFields",
-        )
+        """Fetch an extended requirement with rich description and metadata."""
+        issue = self._fetch_issue(key.id)
         if not issue:
             raise NotFound(f"Issue {key.id} not found")
-        description = issue.renderedFields.description or ""
-        rich_description = f"<html><body>{self.embed_jira_images(description)}</body></html>"
-        Path("desc.html").write_text(rich_description, encoding="utf-8")
+
+        rich_description = self._build_rich_description(issue)
 
         return ExtendedRequirementObject(
             name=issue.fields.summary,
@@ -551,3 +406,168 @@ class JiraRestReader(AbstractFileReader):
                 print(f"Warning: Could not embed attachment {attachment_id} - {e}")
                 continue
         return str(soup)
+
+    def _fetch_issue(self, issue_id: str):
+        """Fetch a Jira issue with required fields."""
+        return self.jira.issue(
+            issue_id,
+            fields="summary,assignee,status,priority,parent,description",
+            expand="renderedFields",
+        )
+
+    def _fetch_issues(self, project: str, baseline: str) -> list:
+        """Fetch issues from Jira depending on API mode."""
+        jql_query = (
+            self.jql_query_current.format(project=self.projects[project])
+            if baseline == "Current Baseline"
+            else self.jql_query.format(project=self.projects[project], baseline=baseline)
+        )
+
+        fields = "*all"
+        issues = []
+        next_page_token = None
+
+        if self.uses_new_issuetypes_endpoint:
+            while True:
+                chunk: ResultList = self.jira.search_issues(
+                    jql_str=jql_query,
+                    startAt=len(issues),
+                    maxResults=1000,
+                    fields=fields,
+                )
+                issues.extend(chunk)
+                if not chunk:
+                    break
+        else:
+            while True:
+                chunk: ResultList = self.jira.enhanced_search_issues(
+                    jql_str=jql_query,
+                    nextPageToken=next_page_token,
+                    maxResults=1000,
+                    fields=fields,
+                )
+                issues.extend(chunk)
+                next_page_token = chunk.nextPageToken
+                if not next_page_token:
+                    break
+        return list(issues)
+
+    def _map_jira_fields(self) -> dict[str, dict[str, str]]:
+        """Builds a lookup table of Jira fields keyed by name."""
+        return {
+            field.get("name"): {
+                "id": field["id"],
+                "typ": "ARRAY" if field.get("schema", {}).get("type") == "array" else "STRING",
+            }
+            for field in self.jira.fields()
+        }
+
+    def _collect_attributes_for_requierment(
+        self, req_key: RequirementKey, attribute_names: list[str], fields: dict[str, dict[str, str]]
+    ) -> list[UserDefinedAttribute]:
+        """Extract attributes for a single requirement."""
+        udas = []
+        issue = self._issues[req_key.id]
+
+        for field_name in attribute_names:
+            field_info = fields.get(field_name)
+            if not field_info:
+                self.logger.warning(f"Field {field_name} not found in Jira fields")
+                continue
+
+            value_type = field_info["typ"]
+            field_id = field_info["id"]
+
+            value = getattr(issue.fields, field_id, None)
+            if value is None:
+                continue
+
+            if value_type == "STRING":
+                udas.append(self._build_string_attribute(field_name, value))
+            elif value_type == "ARRAY":
+                udas.append(self._build_array_attribute(field_name, value))
+
+        return udas
+
+    def _build_string_attribute(self, name: str, value: any) -> UserDefinedAttribute:
+        return UserDefinedAttribute(
+            name=name,
+            valueType="STRING",
+            stringValue=str(value),
+        )
+
+    def _build_array_attribute(self, name: str, values: any) -> UserDefinedAttribute:
+        str_values = [str(v) for v in values] if isinstance(values, list) else [str(values)]
+        return UserDefinedAttribute(name=name, valueType="ARRAY", stringValues=str_values)
+
+    def _build_placeholder_attribute(self) -> UserDefinedAttribute:
+        """Temporary/demo attribute — consider removing later."""
+        return UserDefinedAttribute(
+            name="# finds",
+            valueType="STRING",
+            stringValue="<html><body>Voll <b>Fett</b></body></html>",
+        )
+
+    def _build_requirement_nodes(self, issues: list) -> dict[str, RequirementObjectNode]:
+        """Convert issues into requirement nodes."""
+        requirement_nodes = {}
+        for issue in issues:
+            req_node = RequirementObjectNode(
+                name=issue.fields.summary,
+                extendedID=issue.key,
+                key=RequirementKey(id=issue.key, version="1.0"),
+                owner=issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
+                status=issue.fields.status.name,
+                priority=getattr(issue.fields.priority, "name", ""),
+                requirement=True,
+                children=[],
+            )
+            self._issues[issue.key] = issue
+            requirement_nodes[issue.key] = req_node
+        return requirement_nodes
+
+    def _build_requirement_tree(
+        self, issues: list, requirement_nodes: dict[str, RequirementObjectNode]
+    ) -> dict[str, RequirementObjectNode]:
+        """Link requirement nodes into a tree structure."""
+        requirement_tree = {}
+        try:
+            for issue in issues:
+                parent_key = getattr(issue.fields, "parent", None)
+                if not parent_key:
+                    requirement_tree[issue.key] = requirement_nodes[issue.key]
+                    continue
+
+                parent_key = parent_key.key
+                if parent_key not in requirement_nodes:
+                    parent_issue = self.jira.issue(parent_key)
+                    parent = RequirementObjectNode(
+                        name=parent_issue.fields.summary,
+                        extendedID=parent_key,
+                        key=RequirementKey(id=parent_key, version="1.0"),
+                        owner=parent_issue.fields.assignee.displayName
+                        if parent_issue.fields.assignee
+                        else "Unassigned",
+                        status=parent_issue.fields.status.name,
+                        priority=parent_issue.fields.priority.name,
+                        requirement=False,
+                        children=[],
+                    )
+                    requirement_nodes[parent_key] = parent
+
+                parent = requirement_nodes[parent_key]
+                parent.children.append(requirement_nodes[issue.key])
+
+                if parent_key not in requirement_tree:
+                    requirement_tree[parent_key] = parent
+        except Exception as e:
+            self.logger.error(f"Error building requirement tree: {e}")
+
+        return requirement_tree
+
+    def _build_rich_description(self, issue) -> str:
+        """Render Jira description into an HTML body."""
+        description = getattr(issue.renderedFields, "description", "") or ""
+        html = f"<html><body>{self._embed_jira_images(description)}</body></html>"
+
+        return html
