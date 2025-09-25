@@ -13,9 +13,9 @@ from testbench_requirement_service.models.requirement import (
     ExtendedRequirementObject,
     RequirementKey,
     RequirementObjectNode,
-    RequirementUserDefinedAttributes,
     RequirementVersionObject,
     UserDefinedAttribute,
+    UserDefinedAttributeResponse,
 )
 from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
 from testbench_requirement_service.utils.date_format import parse_date_string
@@ -48,7 +48,6 @@ class ExcelFileReader(AbstractFileReader):
                 name=f.stem,
                 date=datetime.fromtimestamp(f.stat().st_birthtime).astimezone(),
                 type="UNLOCKED",
-                repositoryID=f"{project}/{f.stem}",
             )
             for f in files
             if f.suffix in allowed_suffixes
@@ -87,7 +86,6 @@ class ExcelFileReader(AbstractFileReader):
             name=baseline,
             date=datetime.now(timezone.utc),
             type="CURRENT",
-            repositoryID=f"{project}/{baseline}",
             children=requirement_tree,
         )
 
@@ -105,7 +103,7 @@ class ExcelFileReader(AbstractFileReader):
         baseline: str,
         requirement_keys: list[RequirementKey],
         attribute_names: list[str],
-    ) -> list[RequirementUserDefinedAttributes]:
+    ) -> list[UserDefinedAttributeResponse]:
         if not requirement_keys:
             return []
 
@@ -124,7 +122,7 @@ class ExcelFileReader(AbstractFileReader):
                 continue
             udf_configs[name] = udf_config
 
-        udfs_list: list[RequirementUserDefinedAttributes] = []
+        udfs_list: list[UserDefinedAttributeResponse] = []
 
         for row in filtered_df.to_dict(orient="records"):
             key = RequirementKey(id=row["id"], version=row["version"])
@@ -147,9 +145,7 @@ class ExcelFileReader(AbstractFileReader):
                 user_defined_attributes.append(UserDefinedAttribute(**udf_config))
 
             udfs_list.append(
-                RequirementUserDefinedAttributes(
-                    key=key, userDefinedAttributes=user_defined_attributes
-                )
+                UserDefinedAttributeResponse(key=key, userDefinedAttributes=user_defined_attributes)
             )
 
         return udfs_list

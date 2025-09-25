@@ -8,7 +8,7 @@ from sanic.request import Request
 from testbench_requirement_service import __version__
 from testbench_requirement_service.models.requirement import (
     RequirementKey,
-    UserDefinedAttributesQuery,
+    UserDefinedAttributeRequest,
 )
 from testbench_requirement_service.readers.utils import get_file_reader
 from testbench_requirement_service.utils.auth import protected
@@ -86,7 +86,7 @@ async def _post_all_user_defined_attributes(req: Request, project: str, baseline
     if req.json is None:
         raise BadRequest("Missing request body")
     try:
-        req_body = UserDefinedAttributesQuery.model_validate(req.json)
+        req_body = UserDefinedAttributeRequest.model_validate(req.json)
     except ValidationError as e:
         raise BadRequest("Invalid request body") from e
 

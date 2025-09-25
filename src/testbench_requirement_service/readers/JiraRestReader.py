@@ -177,14 +177,12 @@ class JiraRestReader(AbstractFileReader):
                 name="Current Baseline",
                 date=datetime.now(timezone.utc),
                 type="CURRENT",
-                repositoryID=f"{project}/Current Baseline",
             ),
             *[
                 BaselineObject(
                     name=baseline,
                     date=datetime.now(timezone.utc),
                     type="UNLOCKED",
-                    repositoryID=f"{project}/{baseline}",
                 )
                 for baseline in baselines
             ],
@@ -281,7 +279,6 @@ class JiraRestReader(AbstractFileReader):
             name=baseline,
             date=datetime.now(timezone.utc),
             type="CURRENT",
-            repositoryID=f"{project}/{baseline}",
             children=sorted(
                 requirement_tree.values(), key=lambda x: int(x.extendedID.split("-")[-1])
             ),
@@ -304,7 +301,7 @@ class JiraRestReader(AbstractFileReader):
         baseline: str,
         requirement_keys: list[RequirementKey],
         attribute_names: list[str],
-    ) -> list[RequirementUserDefinedAttributes]:
+    ) -> list[UserDefinedAttributeResponse]:
         fields = {
             field.get("name"): {
                 "id": field["id"],
@@ -354,7 +351,7 @@ class JiraRestReader(AbstractFileReader):
                 )
             )
             user_defined_attributes.append(
-                RequirementUserDefinedAttributes(key=req_key, userDefinedAttributes=udas)
+                UserDefinedAttributeResponse(key=req_key, userDefinedAttributes=udas)
             )
         return user_defined_attributes
         # yield UserDefinedAttributes(

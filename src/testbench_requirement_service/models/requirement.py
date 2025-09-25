@@ -4,14 +4,6 @@ from typing import Literal
 from pydantic import BaseModel, field_serializer
 
 
-class UserDefinedAttribute(BaseModel):
-    name: str
-    valueType: Literal["STRING", "ARRAY", "BOOLEAN"]
-    stringValue: str | None = None
-    stringValues: list[str] | None = None
-    booleanValue: bool | None = None
-
-
 class RequirementKey(BaseModel):
     id: str
     version: str
@@ -52,7 +44,6 @@ class BaselineObject(BaseModel):
     name: str
     date: datetime
     type: Literal["CURRENT", "UNLOCKED", "LOCKED", "DISABLED", "INVALID"]
-    repositoryID: str  # TODO: implement
 
     @field_serializer("date")
     def serialize_date(self, date: datetime):
@@ -63,14 +54,22 @@ class BaselineObjectNode(BaselineObject):
     children: list[RequirementObjectNode] | None = []
 
 
-class RequirementUserDefinedAttributes(BaseModel):
-    key: RequirementKey
-    userDefinedAttributes: list[UserDefinedAttribute] | None = []
+class UserDefinedAttribute(BaseModel):
+    name: str
+    valueType: Literal["STRING", "ARRAY", "BOOLEAN"]
+    stringValue: str | None = None
+    stringValues: list[str] | None = None
+    booleanValue: bool | None = None
 
 
-class UserDefinedAttributesQuery(BaseModel):
+class UserDefinedAttributeRequest(BaseModel):
     keys: list[RequirementKey]
     attributeNames: list[str]
+
+
+class UserDefinedAttributeResponse(BaseModel):
+    key: RequirementKey
+    userDefinedAttributes: list[UserDefinedAttribute] | None = []
 
 
 RequirementObjectNode.model_rebuild()

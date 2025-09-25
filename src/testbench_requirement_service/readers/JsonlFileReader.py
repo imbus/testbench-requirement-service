@@ -12,9 +12,9 @@ from testbench_requirement_service.models.requirement import (
     ExtendedRequirementObject,
     RequirementKey,
     RequirementObjectNode,
-    RequirementUserDefinedAttributes,
     RequirementVersionObject,
     UserDefinedAttribute,
+    UserDefinedAttributeResponse,
 )
 from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
 from testbench_requirement_service.utils.helpers import import_module_from_file_path
@@ -45,7 +45,6 @@ class JsonlFileReader(AbstractFileReader):
                 name=f.stem,
                 date=datetime.fromtimestamp(f.stat().st_ctime).astimezone(),
                 type="UNLOCKED",
-                repositoryID=f"{project}/{f.stem}",
             )
             for f in self._get_project_path(project).iterdir()
             if f.suffix == ".jsonl"
@@ -80,7 +79,6 @@ class JsonlFileReader(AbstractFileReader):
             name=baseline,
             date=datetime.now(timezone.utc),
             type="CURRENT",
-            repositoryID=f"{project}/{baseline}",
             children=list(requirement_tree.values()),
         )
 
@@ -113,7 +111,7 @@ class JsonlFileReader(AbstractFileReader):
         baseline: str,
         requirement_keys: list[RequirementKey],
         attribute_names: list[str],
-    ) -> list[RequirementUserDefinedAttributes]:
+    ) -> list[UserDefinedAttributeResponse]:
         if not requirement_keys:
             return []
 
@@ -121,7 +119,7 @@ class JsonlFileReader(AbstractFileReader):
         keys: dict[str, dict[str, None]] = defaultdict(dict)
         for key in requirement_keys:
             keys[key.id][key.version] = None
-        file_nodes: list[RequirementUserDefinedAttributes] = []
+        file_nodes: list[UserDefinedAttributeResponse] = []
         with baseline_path.open("r") as f:
             for line in f:
                 file_node = FileRequirementObjectNode(**json.loads(line))
@@ -130,7 +128,7 @@ class JsonlFileReader(AbstractFileReader):
                     and file_node.key.version.name in keys[file_node.key.id]
                 ):
                     file_nodes.append(
-                        RequirementUserDefinedAttributes(
+                        UserDefinedAttributeResponse(
                             key=RequirementKey(
                                 id=file_node.key.id, version=file_node.key.version.name
                             ),

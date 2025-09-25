@@ -1,6 +1,6 @@
-openapi: "3.0.1"
+openapi: 3.0.1
 info:
-  title: RequirementWrapper API
+  title: RequirementWrapper2 API
   version: 1.0.0
   description: A REST API for managing requirements using the RequirementWrapper2.
 
@@ -9,7 +9,7 @@ servers:
     description: API base URL
 
 security:
-  - basicAuth: [] # <-- use the same name here
+  - basicAuth: []
 
 paths:
   /user-defined-attributes:
@@ -32,22 +32,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/UserDefinedAttribute'
-                example:
-                  - name: Comment
-                    valueType: STRING
-                    stringValue: null
-                    stringValues: null
-                    booleanValue: null
-                  - name: Units
-                    valueType: ARRAY
-                    stringValue: null
-                    stringValues: null
-                    booleanValue: null
-                  - name: Customer Request
-                    valueType: BOOLEAN
-                    stringValue: null
-                    stringValues: null
-                    booleanValue: null
+              example:
+                - name: Comment
+                  valueType: STRING
+                  stringValue: null
+                  stringValues: null
+                  booleanValue: null
+                - name: Units
+                  valueType: ARRAY
+                  stringValue: null
+                  stringValues: null
+                  booleanValue: null
+                - name: Customer Request
+                  valueType: BOOLEAN
+                  stringValue: null
+                  stringValues: null
+                  booleanValue: null
 
   /projects:
     get:
@@ -69,11 +69,10 @@ paths:
                 type: array
                 items:
                   type: string
-                  example: Project1
-                example:
-                  - Project1
-                  - Project2
-                  - Project3
+              example:
+                - Project1
+                - Project2
+                - Project3
 
   /projects/{project}/baselines:
     get:
@@ -101,6 +100,13 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/BaselineObject'
+              example:
+                - name: Current Baseline
+                  date: "2025-01-09:30:00.000Z"
+                  type: CURRENT
+                - name: Baseline1
+                  date: "2025-03-03T14:24:32.000Z"
+                  type: UNLOCKED
 
   /projects/{project}/baselines/{baseline}/requirements-root:
     get:
@@ -135,8 +141,7 @@ paths:
               example:
                 name: Baseline1
                 date: "2025-03-03T14:24:32.490Z"
-                type: CURRENT
-                repositoryID: Demo/Baseline1
+                type: UNLOCKED
                 children:
                   - name: Requirement1
                     extendedID: req1
@@ -247,26 +252,17 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                keys:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/RequirementKey'
-                  example:
-                    - id: req1
-                      version: "1.0"
-                    - id: req2
-                      version: "1.0"
-                attributeNames:
-                  type: array
-                  items:
-                    type: string
-                    example: Comment
-                  example:
-                    - Comment
-                    - Units
-                    - Customer Request
+              $ref: '#/components/schemas/UserDefinedAttributeRequest'
+            example:
+              keys:
+                - id: req1
+                  version: "1.0"
+                - id: req2
+                  version: "1.0"
+              attributeNames:
+                - Comment
+                - Units
+                - Customer Request
       responses:
         '200':
           description: Map of requirement keys to user-defined attributes
@@ -275,7 +271,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/RequirementUserDefinedAttributes'
+                  $ref: '#/components/schemas/UserDefinedAttributeResponse'
               example:
                 - key:
                     id: "req1"
@@ -423,19 +419,19 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RequirementVersionObject'
-                example:
-                  - name: "1.0"
-                    date: "2025-03-01T12:48:10.340Z"
-                    author: John Doe
-                    comment: Initial version
-                  - name: "1.1"
-                    date: "2025-03-03T14:24:32.490Z"
-                    author: John Doe
-                    comment: Improved version
+              example:
+                - name: "1.0"
+                  date: "2025-03-01T12:48:10.340Z"
+                  author: John Doe
+                  comment: Initial version
+                - name: "1.1"
+                  date: "2025-03-03T14:24:32.490Z"
+                  author: John Doe
+                  comment: Improved version
 
 components:
   securitySchemes:
-    basicAuth: # <-- arbitrary name for the security scheme
+    basicAuth:
       type: http
       scheme: basic
   schemas:
@@ -468,6 +464,28 @@ components:
         - name
         - valueType
 
+    UserDefinedAttributeRequest:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequirementKey'
+        attributeNames:
+          type: array
+          items:
+            type: string
+
+    UserDefinedAttributeResponse:
+      type: object
+      properties:
+        key:
+          $ref: '#/components/schemas/RequirementKey'
+        userDefinedAttributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserDefinedAttribute'
+
     BaselineObject:
       type: object
       properties:
@@ -482,14 +500,6 @@ components:
           type: string
           enum: [CURRENT, UNLOCKED, LOCKED, DISABLED, INVALID]
           example: CURRENT
-        repositoryID:
-          type: string
-          example: Demo/Baseline1
-      required:
-        - name
-        - date
-        - type
-        - repositoryID
 
     BaselineObjectNode:
       allOf:
@@ -510,9 +520,6 @@ components:
         version:
           type: string
           example: "1.0"
-      required:
-        - id
-        - version
 
     RequirementObject:
       type: object
@@ -537,14 +544,6 @@ components:
         requirement:
           type: boolean
           example: false
-      required:
-        - name
-        - extendedID
-        - key
-        - owner
-        - status
-        - priority
-        - requirement
 
     RequirementObjectNode:
       allOf:
@@ -611,19 +610,3 @@ components:
         comment:
           type: string
           example: Initial version
-      required:
-        - name
-        - date
-        - author
-
-    RequirementUserDefinedAttributes:
-      type: object
-      properties:
-        key:
-          $ref: '#/components/schemas/RequirementKey'
-        userDefinedAttributes:
-          type: array
-          items:
-            $ref: '#/components/schemas/UserDefinedAttribute'
-      required:
-        - key
