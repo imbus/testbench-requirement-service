@@ -1,9 +1,11 @@
 from pathlib import Path
 
+from jira import JIRAError
 from sanic import Sanic
 from sanic.config import Config
 
-from testbench_requirement_service.middleware import check_request_auth, log_request, log_response
+from testbench_requirement_service.exceptions import handle_jira_error
+from testbench_requirement_service.middlewares import check_request_auth, log_request, log_response
 from testbench_requirement_service.routes import router
 from testbench_requirement_service.utils.dependencies import check_excel_dependencies
 
@@ -60,6 +62,9 @@ def create_app(name: str, config: AppConfig | None = None) -> Sanic:
     app.register_middleware(check_request_auth, "request")
     app.register_middleware(log_request, "request")
     app.register_middleware(log_response, "response")  # type: ignore
+
+    # Register exception handlers
+    app.exception(JIRAError)(handle_jira_error)
 
     # Register blueprints
     app.blueprint(router)
