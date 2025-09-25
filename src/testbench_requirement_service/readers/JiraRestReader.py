@@ -20,7 +20,7 @@ else:
 from bs4 import BeautifulSoup
 from jira import JIRA, Project
 from jira.client import ResultList
-from jira.resources import Resource, Field
+from jira.resources import Field
 from pydantic import BaseModel, ValidationError, model_validator
 from sanic.exceptions import NotFound
 
@@ -32,7 +32,7 @@ from testbench_requirement_service.models.requirement import (
     RequirementObjectNode,
     RequirementVersionObject,
     UserDefinedAttribute,
-    RequirementUserDefinedAttributes,
+    UserDefinedAttributeResponse,
 )
 from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
 
@@ -166,6 +166,7 @@ class JiraRestReader(AbstractFileReader):
         return baseline in self._baselines[project]
 
     def get_projects(self) -> list[str]:
+        self.jira.issue("TBE-TESTING")
         return list(self.projects.keys())
 
     def get_baselines(self, project: str) -> list[BaselineObject]:
@@ -404,11 +405,60 @@ class JiraRestReader(AbstractFileReader):
             documents=[issue.permalink()],
         )
 
-    # TODO: Implement
     def get_requirement_versions(
         self, project: str, baseline: str, key: RequirementKey
     ) -> list[RequirementVersionObject]:
-        pass
+        issue = self.jira.issue(key.id, fields="summary, created, creator", expand="changelog")
+
+        versions = []
+
+        # Add creation as the initial version
+        versions.append(
+            RequirementVersionObject(
+                name=issue.fields.summary,
+                date=issue.fields.created,
+                author=issue.fields.creator.displayName,
+                comment="Initial version",  # TODO: maybe use a more meaningful comment
+            )
+        )
+
+        current_summary = issue.fields.summary
+        relevant_fields = {"summary", "description", "fixVersions", "affectsVersions", "status"}
+
+        # Add newer versions from issue changelog if there are relevant changes
+        histories = sorted(issue.changelog.histories, key=lambda h: h.created)
+        for history in histories:
+            summary = current_summary
+            changed_fields = []
+            for item in history.items:
+                if item.field == "summary":
+                    summary = item.toString or current_summary
+                changed_fields.append(item.field)
+
+            relevant_change = any(field in relevant_fields for field in changed_fields)
+            if relevant_change:
+                versions.append(
+                    RequirementVersionObject(
+                        name=summary,
+                        date=history.created,
+                        author=history.author.displayName,
+                        comment=self._get_change_comment(history),
+                    )
+                )
+
+        return versions
+
+    # TODO: Maybe extract a comment that is more meaningful; Different Languages ?
+    def _get_change_comment(self, history) -> str:
+        changed_fields = [item.field for item in history.items]
+        if "summary" in changed_fields and "description" in changed_fields:
+            return "Summary and Description updated"
+        elif "summary" in changed_fields:
+            return "Summary updated"
+        elif "description" in changed_fields:
+            return "Description updated"
+        else:
+            return f"Fields updated: {', '.join(changed_fields)}"
 
     @staticmethod
     def sort_by_issue_key(issue):
