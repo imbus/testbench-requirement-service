@@ -166,7 +166,6 @@ class JiraRestReader(AbstractFileReader):
         return baseline in self._baselines[project]
 
     def get_projects(self) -> list[str]:
-        self.jira.issue("TBE-TESTING")
         return list(self.projects.keys())
 
     def get_baselines(self, project: str) -> list[BaselineObject]:
