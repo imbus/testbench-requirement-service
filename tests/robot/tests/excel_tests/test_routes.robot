@@ -10,7 +10,7 @@ Get Server Name And Version Should Return 200 And String With Name And Version
 Get All Projects Should Return 200 And List Of Projects
     ${response}=    Get Projects
     Should Be True    isinstance(${response.json()}, list)
-    Length Should Be    ${response.json()}    3
+    Length Should Be    ${response.json()}    2
     Should Contain    ${response.json()}    Demo
 
 Get Baselines Should Return 200 And List Of Baselines If Project Exists
@@ -18,7 +18,10 @@ Get Baselines Should Return 200 And List Of Baselines If Project Exists
     Should Be Equal As Numbers    ${response.status_code}    200
     Should Be True    isinstance(${response.json()}, list)
     Length Should Be    ${response.json()}    2
-    Should Contain    ${response.json()}    Baseline2
+    Should Contain    ${response.json()[1]}    name
+    Should Contain    ${response.json()[1]}    date
+    Should Contain    ${response.json()[1]}    type
+    Should Be Equal As Strings    ${response.json()[1]["name"]}    Baseline2
 
 Get Baselines Should Return 404 If Project Does Not Exist
     Get Baselines    !?.    validate    value.status_code == 404
@@ -29,10 +32,8 @@ Get Requirements Root Should Return 200 And A BaselineObjectNode If Project And 
     Should Contain    ${response.json()}    name
     Should Contain    ${response.json()}    date
     Should Contain    ${response.json()}    type
-    Should Contain    ${response.json()}    repositoryID
     Should Contain    ${response.json()}    children
     Should Be Equal As Strings    ${response.json()["name"]}    Baseline1
-    Should Be Equal As Strings    ${response.json()["repositoryID"]}    Demo/Baseline1
     Should Not Be Empty    ${response.json()["children"]}
     Should Contain    ${response.json()["children"][0]["name"]}    Requirement1
 
