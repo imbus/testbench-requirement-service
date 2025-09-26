@@ -97,6 +97,10 @@ class JiraRestReaderConfig(BaseModel):
     username: str | None = None
     api_token: str | None = None  # for basic auth, paired with username
     token: str | None = None  # for bearer/token-based auth, Jira Self Hosted
+    access_token: str | None = None
+    access_token_secret: str | None = None
+    consumer_key: str | None = None
+    key_cert: str | None = None
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -119,7 +123,27 @@ class JiraRestReaderConfig(BaseModel):
                     "Jira Personal Access Token must be provided for token auth (via config or JIRA_BEARER_TOKEN env)"
                 )
         elif self.auth_type == "oauth":
-            pass  # TODO: implement oauth
+            self.access_token = self.acces_token or os.getenv("JIRA_ACCESS_TOKEN")
+            self.access_token_secret = self.access_token_secret or os.getenv("JIRA_ACCESS_TOKEN_SECRET")
+            self.consumer_key = self.consumer_key or os.getenv("JIRA_CONSUMER_KEY")
+            self.key_cert = self.key_cert or os.getenv("JIRA_KEY_CERT")
+            if not self.access_token:
+                 raise ValueError(
+                    "Jira Personal Access Token must be provided for token auth (via config or JIRA_ACCESS_TOKEN env)"
+                )
+            if not self.access_token_secret:
+                 raise ValueError(
+                    "Jira Access Token Secret must be provided for token auth (via config or JIRA_ACCESS_TOKEN_SECRET env)"
+                )
+            if not self.consumer_key:
+                 raise ValueError(
+                    "Jira consumer key must be provided for token auth (via config or JIRA_CONSUMER_KEY env)"
+                )
+            if not self.key_cert:
+                 raise ValueError(
+                    "Jira Private Key must be provided for token auth (via config or JIRA_KEY_CERT env)"
+                )
+
         return self
 
 
@@ -355,7 +379,12 @@ class JiraRestReader(AbstractFileReader):
         elif self.config.auth_type == "token":
             return JIRA(server=self.config.server_url, token_auth=self.config.token)
         elif self.config.auth_type == "oauth":
-            raise NotImplementedError("TO BE IMPLEMENTED")  # TODO: implement oauth
+            return JIRA(oauth={
+                'access_token': self.config.access_token,
+                'access_token_secret': self.config.access_token_secret,
+                'consumer_key': self.config.consumer_key,
+                'key_cert': self.config.key_cert
+            })
         else:
             raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
 
