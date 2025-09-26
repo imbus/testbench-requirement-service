@@ -18,7 +18,7 @@ else:
     import tomli as tomllib
 
 from bs4 import BeautifulSoup
-from jira import JIRA, Project
+from jira import JIRA, Issue, Project
 from jira.client import ResultList
 from jira.resources import Field
 from pydantic import BaseModel, ValidationError, model_validator
@@ -37,60 +37,6 @@ from testbench_requirement_service.models.requirement import (
 from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
 
 
-def is_dict_like(item):
-    return isinstance(item, Mapping)
-
-
-class DotDict(OrderedDict):
-    def __init__(self, *args, **kwds):
-        args = [self._convert_nested_initial_dicts(a) for a in args]
-        kwds = self._convert_nested_initial_dicts(kwds)
-        OrderedDict.__init__(self, *args, **kwds)
-
-    def _convert_nested_initial_dicts(self, value):
-        items = value.items() if is_dict_like(value) else value
-        return OrderedDict((key, self._convert_nested_dicts(value)) for key, value in items)
-
-    def _convert_nested_dicts(self, value):
-        if isinstance(value, DotDict):
-            return value
-        if is_dict_like(value):
-            return DotDict(value)
-        if isinstance(value, list):
-            value[:] = [self._convert_nested_dicts(item) for item in value]
-        return value
-
-    def __getattr__(self, key):
-        try:
-            return self[key]
-        except KeyError as e:
-            raise AttributeError(key) from e
-
-    def __setattr__(self, key, value):
-        if not key.startswith("_OrderedDict__"):
-            self[key] = value
-        else:
-            OrderedDict.__setattr__(self, key, value)
-
-    def __delattr__(self, key):
-        try:
-            self.pop(key)
-        except KeyError:
-            OrderedDict.__delattr__(self, key)
-
-    def __eq__(self, other):
-        return dict.__eq__(self, other)
-
-    def __ne__(self, other):
-        return not self == other
-
-    def __str__(self):
-        return "{{{}}}".format(", ".join(f"{key!r}: {self[key]!r}" for key in self))
-
-    # Must use original dict.__repr__ to allow customising PrettyPrinter.
-    __repr__ = dict.__repr__
-
-
 class JiraRestReaderConfig(BaseModel):
     server_url: str
     auth_type: Literal["basic", "token", "oauth"] = "basic"
@@ -101,6 +47,8 @@ class JiraRestReaderConfig(BaseModel):
     access_token_secret: str | None = None
     consumer_key: str | None = None
     key_cert: str | None = None
+
+    baseline_field: str = "fixVersions"
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -124,23 +72,25 @@ class JiraRestReaderConfig(BaseModel):
                 )
         elif self.auth_type == "oauth":
             self.access_token = self.acces_token or os.getenv("JIRA_ACCESS_TOKEN")
-            self.access_token_secret = self.access_token_secret or os.getenv("JIRA_ACCESS_TOKEN_SECRET")
+            self.access_token_secret = self.access_token_secret or os.getenv(
+                "JIRA_ACCESS_TOKEN_SECRET"
+            )
             self.consumer_key = self.consumer_key or os.getenv("JIRA_CONSUMER_KEY")
             self.key_cert = self.key_cert or os.getenv("JIRA_KEY_CERT")
             if not self.access_token:
-                 raise ValueError(
+                raise ValueError(
                     "Jira Personal Access Token must be provided for token auth (via config or JIRA_ACCESS_TOKEN env)"
                 )
             if not self.access_token_secret:
-                 raise ValueError(
+                raise ValueError(
                     "Jira Access Token Secret must be provided for token auth (via config or JIRA_ACCESS_TOKEN_SECRET env)"
                 )
             if not self.consumer_key:
-                 raise ValueError(
+                raise ValueError(
                     "Jira consumer key must be provided for token auth (via config or JIRA_CONSUMER_KEY env)"
                 )
             if not self.key_cert:
-                 raise ValueError(
+                raise ValueError(
                     "Jira Private Key must be provided for token auth (via config or JIRA_KEY_CERT env)"
                 )
 
@@ -153,49 +103,41 @@ class JiraRestReader(AbstractFileReader):
         self.logger.level = logging.DEBUG
 
         self.config = self._load_and_validate_config_from_path(Path(config_path))
+
         self.jira = self._connect()
+        self.uses_new_issuetypes_endpoint = (not self.jira._is_cloud) and (
+            self.jira._version >= (8, 4, 0)
+        )
+        self.uses_manual_pagination = not self.jira._is_cloud and self.jira._version < (8, 4, 0)
 
         # key: project name (format: "{project.name} ({project.key})"), value: Project Resource
         self._projects: dict[str, Project] = {}
         # key: project name (format: "{project.name} ({project.key})"), value: list of project baselines as str
         self._baselines: dict[str, list[str]] = {}
-
-        self._issues: dict[str, Any] = {}
+        self._issues: dict[str, Issue] = {}
         self._udfs: dict[str, UserDefinedAttribute] = {}
-
-        self.baseline_field = "fixVersions"
-        self.jql_query = "project = {project} AND fixVersion = {baseline}"
-        self.jql_query_current = "project = {project}"
-        self.uses_new_issuetypes_endpoint = (not self.jira._is_cloud) and (
-            self.jira._version >= (8, 4, 0)
-        )
 
     @property
     def projects(self) -> dict[str, Project]:
         if not self._projects:
-            self._load_projects()
+            self._fetch_projects()
         return self._projects
 
     def project_exists(self, project: str) -> bool:
         if project in self.projects:
             return True
-        # Cache miss: load projects and check again
-        self._load_projects()
+        # Cache miss: fetch projects and check again
+        self._fetch_projects()
         return project in self.projects
 
     def baseline_exists(self, project: str, baseline: str) -> bool:
-        if project not in self._baselines:
-            # Cache miss: load baselines
-            self._load_baselines_for_project(project)
-        return baseline in self._baselines[project]
+        return baseline in self._get_baselines_for_project(project)
 
     def get_projects(self) -> list[str]:
         return list(self.projects.keys())
 
     def get_baselines(self, project: str) -> list[BaselineObject]:
-        if project not in self._baselines:
-            self._load_baselines_for_project(project)
-        baselines = sorted(self._baselines.get(project, []))
+        baselines = sorted(self._get_baselines_for_project(project))
         return [
             BaselineObject(
                 name="Current Baseline",
@@ -215,7 +157,7 @@ class JiraRestReader(AbstractFileReader):
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         issues = self._fetch_issues(project, baseline)
         if not issues:
-            raise NotFound("No issues found for project {project} and baseline {baseline}")
+            self.logger.debug(f"No issues found for project '{project}' and baseline '{baseline}'")
 
         issues.sort(key=self.sort_by_issue_key)
         requirement_nodes = self._build_requirement_nodes(issues)
@@ -339,7 +281,7 @@ class JiraRestReader(AbstractFileReader):
             return f"Fields updated: {', '.join(changed_fields)}"
 
     @staticmethod
-    def sort_by_issue_key(issue):
+    def sort_by_issue_key(issue: Issue):
         try:
             return int(issue.key.split("-")[-1])
         except (AttributeError, ValueError, IndexError):
@@ -379,21 +321,23 @@ class JiraRestReader(AbstractFileReader):
         elif self.config.auth_type == "token":
             return JIRA(server=self.config.server_url, token_auth=self.config.token)
         elif self.config.auth_type == "oauth":
-            return JIRA(oauth={
-                'access_token': self.config.access_token,
-                'access_token_secret': self.config.access_token_secret,
-                'consumer_key': self.config.consumer_key,
-                'key_cert': self.config.key_cert
-            })
+            return JIRA(
+                oauth={
+                    "access_token": self.config.access_token,
+                    "access_token_secret": self.config.access_token_secret,
+                    "consumer_key": self.config.consumer_key,
+                    "key_cert": self.config.key_cert,
+                }
+            )
         else:
             raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
 
-    def _load_projects(self):
+    def _fetch_projects(self):
         self._projects = {
             f"{project.name} ({project.key})": project for project in self.jira.projects()
         }
 
-    def _load_baselines_for_project(self, project: str) -> list[str]:
+    def _fetch_baselines_for_project(self, project: str) -> list[str]:
         project_key = self.projects[project].key
         issue_fields = self._get_issue_fields(project_key)
         for field in issue_fields:
@@ -408,11 +352,17 @@ class JiraRestReader(AbstractFileReader):
                     f"  dir: {dir(field)}\n"
                     f"  type: {type(field)}"
                 )
-            if self.baseline_field in (field.name, field_id):
+            if self.config.baseline_field in (field.name, field_id):
                 self._baselines[project] = self._extract_baselines_from_issue_field(field)
                 return self._baselines[project]
-        self.logger.warning(f"Field {self.baseline_field} not found in project {project}")
+        self.logger.warning(f"Field {self.config.baseline_field} not found in project {project}")
         return []
+
+    def _get_baselines_for_project(self, project: str) -> list[str]:
+        if not self._baselines or project not in self._baselines:
+            # Cache miss: fetch baselines
+            self._fetch_baselines_for_project(project)
+        return self._baselines.get(project, [])
 
     def _extract_baselines_from_issue_field(self, field: Field) -> list[str]:
         baselines = []
@@ -490,42 +440,54 @@ class JiraRestReader(AbstractFileReader):
             expand="renderedFields",
         )
 
-    def _fetch_issues(self, project: str, baseline: str) -> list:
+    def _normalize_field_for_jql(field_name: str) -> str:
+        """
+        Normalize Jira field names to their canonical JQL equivalents.
+
+        Currently handles known special cases like converting 'fixVersions' to 'fixVersion'.
+
+        Args:
+            field_name (str): The field name to normalize.
+
+        Returns:
+            str: The normalized field name for JQL queries.
+        """
+        if field_name.lower() == "fixversions":
+            return "fixVersion"
+        return field_name
+
+    def _fetch_issues(self, project: str, baseline: str) -> list[Issue]:
         """Fetch issues from Jira depending on API mode."""
-        jql_query = (
-            self.jql_query_current.format(project=self.projects[project])
-            if baseline == "Current Baseline"
-            else self.jql_query.format(project=self.projects[project], baseline=baseline)
-        )
+
+        baseline_field = self._normalize_field_for_jql(self.config.baseline_field)
+
+        if baseline == "Current Baseline":
+            jql_query = f'project = "{project}"'
+        else:
+            jql_query = f'project = "{project}" AND {baseline_field} = "{baseline}"'
 
         fields = "*all"
-        issues = []
-        next_page_token = None
 
-        if self.uses_new_issuetypes_endpoint:
-            while True:
-                chunk: ResultList = self.jira.search_issues(
-                    jql_str=jql_query,
-                    startAt=len(issues),
-                    maxResults=1000,
-                    fields=fields,
-                )
-                issues.extend(chunk)
-                if not chunk:
-                    break
-        else:
-            while True:
-                chunk: ResultList = self.jira.enhanced_search_issues(
-                    jql_str=jql_query,
-                    nextPageToken=next_page_token,
-                    maxResults=1000,
-                    fields=fields,
-                )
-                issues.extend(chunk)
-                next_page_token = chunk.nextPageToken
-                if not next_page_token:
-                    break
-        return list(issues)
+        if not self.uses_manual_pagination:
+            return list(self.jira.search_issues(jql_query, maxResults=False, fields=fields))
+
+        # Manual pagination for older Jira Server versions
+        issues: list[Issue] = []
+        start_at = 0
+        maxResults = 1000
+        while True:
+            chunk: ResultList[Issue] = self.jira.search_issues(
+                jql_query,
+                startAt=start_at,
+                maxResults=maxResults,
+                fields=fields,
+            )
+            issues.extend(chunk)
+            if len(chunk) < maxResults:
+                # No more pages
+                break
+            start_at += maxResults
+        return issues
 
     def _map_jira_fields(self) -> dict[str, dict[str, str]]:
         """Builds a lookup table of Jira fields keyed by name."""
@@ -583,26 +545,31 @@ class JiraRestReader(AbstractFileReader):
             stringValue="<html><body>Voll <b>Fett</b></body></html>",
         )
 
-    def _build_requirement_nodes(self, issues: list) -> dict[str, RequirementObjectNode]:
+    def _build_requirementobject_from_issue(
+        issue: Issue, requirement: bool = True
+    ) -> RequirementObjectNode:
+        return RequirementObjectNode(
+            name=issue.fields.summary,
+            extendedID=issue.key,
+            key=RequirementKey(id=issue.key, version="1.0"),
+            owner=issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
+            status=issue.fields.status.name,
+            priority=getattr(issue.fields.priority, "name", ""),
+            requirement=requirement,
+            children=[],
+        )
+
+    def _build_requirement_nodes(self, issues: list[Issue]) -> dict[str, RequirementObjectNode]:
         """Convert issues into requirement nodes."""
         requirement_nodes = {}
         for issue in issues:
-            req_node = RequirementObjectNode(
-                name=issue.fields.summary,
-                extendedID=issue.key,
-                key=RequirementKey(id=issue.key, version="1.0"),
-                owner=issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
-                status=issue.fields.status.name,
-                priority=getattr(issue.fields.priority, "name", ""),
-                requirement=True,
-                children=[],
-            )
+            req_node = self._build_requirementobject_from_issue(issue)
             self._issues[issue.key] = issue
             requirement_nodes[issue.key] = req_node
         return requirement_nodes
 
     def _build_requirement_tree(
-        self, issues: list, requirement_nodes: dict[str, RequirementObjectNode]
+        self, issues: list[Issue], requirement_nodes: dict[str, RequirementObjectNode]
     ) -> dict[str, RequirementObjectNode]:
         """Link requirement nodes into a tree structure."""
         requirement_tree = {}
@@ -616,17 +583,8 @@ class JiraRestReader(AbstractFileReader):
                 parent_key = parent_key.key
                 if parent_key not in requirement_nodes:
                     parent_issue = self.jira.issue(parent_key)
-                    parent = RequirementObjectNode(
-                        name=parent_issue.fields.summary,
-                        extendedID=parent_key,
-                        key=RequirementKey(id=parent_key, version="1.0"),
-                        owner=parent_issue.fields.assignee.displayName
-                        if parent_issue.fields.assignee
-                        else "Unassigned",
-                        status=parent_issue.fields.status.name,
-                        priority=parent_issue.fields.priority.name,
-                        requirement=False,
-                        children=[],
+                    parent = self._build_requirementobject_from_issue(
+                        parent_issue, requirement=False
                     )
                     requirement_nodes[parent_key] = parent
 
