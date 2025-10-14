@@ -18,7 +18,7 @@ else:
     import tomli as tomllib
 
 from bs4 import BeautifulSoup
-from jira import JIRA, Issue, Project
+from jira import JIRA, Issue, JIRAError, Project
 from jira.client import ResultList
 from jira.resources import Field
 from pydantic import BaseModel, ValidationError, model_validator
@@ -114,8 +114,6 @@ class JiraRestReader(AbstractFileReader):
         self._projects: dict[str, Project] = {}
         # key: project name (format: "{project.name} ({project.key})"), value: list of project baselines as str
         self._baselines: dict[str, list[str]] = {}
-        self._issues: dict[str, Issue] = {}
-        self._udfs: dict[str, UserDefinedAttribute] = {}
 
     @property
     def projects(self) -> dict[str, Project]:
@@ -131,7 +129,9 @@ class JiraRestReader(AbstractFileReader):
         return project in self.projects
 
     def baseline_exists(self, project: str, baseline: str) -> bool:
-        return baseline in self._get_baselines_for_project(project)
+        return baseline == "Current Baseline" or baseline in self._get_baselines_for_project(
+            project
+        )
 
     def get_projects(self) -> list[str]:
         return list(self.projects.keys())
@@ -173,28 +173,43 @@ class JiraRestReader(AbstractFileReader):
         )
 
     def get_user_defined_attributes(self) -> list[UserDefinedAttribute]:
+        all_fields = self.jira.fields()
+        custom_fields = [
+            field for field in all_fields if field.get("id", "").startswith("customfield_")
+        ]
         return [
             UserDefinedAttribute(
                 name=field["name"],
-                valueType="ARRAY" if field.get("schema", {}).get("type") == "array" else "STRING",
+                valueType=self._extract_valuetype_from_issue_field(field),
             )
-            for field in self.jira.fields()
-            if field.get("id", "").startswith("customfield_")
+            for field in custom_fields
         ]
 
     def get_all_user_defined_attributes(
         self,
+        project: str,
+        baseline: str,
         requirement_keys: list[RequirementKey],
         attribute_names: list[str],
     ) -> list[UserDefinedAttributeResponse]:
-        """Collect user-defined attributes for given requirement keys."""
-        fields = self._map_jira_fields()
-        user_defined_attributes = []
+        if not requirement_keys:
+            return []
+
+        fields = [field for field in self.jira.fields() if field["name"] in attribute_names]
+        field_ids = [field["id"] for field in fields]
+        user_defined_attributes: list[UserDefinedAttributeResponse] = []
 
         for req_key in requirement_keys:
-            udas = self._collect_attributes_for_requirement(req_key, attribute_names, fields)
-            # Add placeholder/sample attribute
-            udas.append(self._build_placeholder_attribute())
+            try:
+                issue = self.jira.issue(req_key.id, fields=",".join(field_ids))
+            except JIRAError:
+                continue
+            udas = []
+            for field in fields:
+                if not hasattr(issue.fields, field["id"]):
+                    continue
+                field_value = getattr(issue.fields, field["id"])
+                udas.append(self._build_userdefinedattribute_object(field, field_value))
             user_defined_attributes.append(
                 UserDefinedAttributeResponse(key=req_key, userDefinedAttributes=udas)
             )
@@ -202,33 +217,31 @@ class JiraRestReader(AbstractFileReader):
         return user_defined_attributes
 
     def get_extended_requirement(
-        self, baseline: str, key: RequirementKey
+        self, project: str, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
-        """Fetch an extended requirement with rich description and metadata."""
-        issue = self._fetch_issue(key.id)
-        if not issue:
-            raise NotFound(f"Issue {key.id} not found")
-
-        rich_description = self._build_rich_description(issue)
+        issue = self._fetch_issue(
+            key.id,
+            fields="summary,assignee,status,priority,parent,description",
+            expand="renderedFields",
+        )
 
         return ExtendedRequirementObject(
             name=issue.fields.summary,
             extendedID=issue.key,
             key=key,
             owner=issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
-            status=issue.fields.status.name or "",
-            priority=getattr(issue.fields.priority, "name", ""),
+            status=issue.fields.status.name if issue.fields.status else "",
+            priority=issue.fields.priority.name if issue.fields.priority else "",
             requirement=True,
-            children=[],
-            description=rich_description,
-            baseline=baseline,
+            description=self._build_rich_description(issue),
             documents=[issue.permalink()],
+            baseline=baseline,
         )
 
     def get_requirement_versions(
         self, project: str, baseline: str, key: RequirementKey
     ) -> list[RequirementVersionObject]:
-        issue = self.jira.issue(key.id, fields="summary, created, creator", expand="changelog")
+        issue = self.jira.issue(key.id, fields="summary,created,creator", expand="changelog")
 
         versions = []
 
@@ -339,7 +352,7 @@ class JiraRestReader(AbstractFileReader):
 
     def _fetch_baselines_for_project(self, project: str) -> list[str]:
         project_key = self.projects[project].key
-        issue_fields = self._get_issue_fields(project_key)
+        issue_fields = self._fetch_project_issue_fields(project_key)
         for field in issue_fields:
             if hasattr(field, "key"):
                 field_id = field.key
@@ -375,12 +388,12 @@ class JiraRestReader(AbstractFileReader):
                 self.logger.debug(f"Unknown allowed value format: {value} {type(value)}")
         return baselines
 
-    def _get_issue_fields(self, project_key: str) -> list[Field]:
+    def _fetch_project_issue_fields(self, project_key: str) -> list[Field]:
         issue_fields: dict[str, Field] = {}
 
         try:
             if self.uses_new_issuetypes_endpoint:
-                self.logger.debug("_get_issue_fields: Use new issuetypes endpoint")
+                self.logger.debug("_fetch_project_issue_fields: Use new issuetypes endpoint")
                 issue_types = self.jira.project_issue_types(project_key, maxResults=100)
                 for issue_type in issue_types:
                     try:
@@ -395,7 +408,7 @@ class JiraRestReader(AbstractFileReader):
                         )
                         self.logger.debug(e)
             else:
-                self.logger.debug("_get_issue_fields: Use old createmeta endpoint")
+                self.logger.debug("_fetch_project_issue_fields: Use old createmeta endpoint")
                 createmeta = self.jira.createmeta(project_key, expand="projects.issuetypes.fields")
                 issue_types = createmeta["projects"][0]["issuetypes"]
                 for issue_type in issue_types:
@@ -432,15 +445,17 @@ class JiraRestReader(AbstractFileReader):
                 continue
         return str(soup)
 
-    def _fetch_issue(self, issue_id: str):
-        """Fetch a Jira issue with required fields."""
-        return self.jira.issue(
-            issue_id,
-            fields="summary,assignee,status,priority,parent,description",
-            expand="renderedFields",
-        )
+    def _fetch_issue(
+        self,
+        issue_id: str,
+        fields: str | None = None,
+        expand: str | None = None,
+        properties: str | None = None,
+    ):
+        """Fetch an issue from Jira."""
+        return self.jira.issue(issue_id, fields=fields, expand=expand, properties=properties)
 
-    def _normalize_field_for_jql(field_name: str) -> str:
+    def _normalize_field_for_jql(self, field_name: str) -> str:
         """
         Normalize Jira field names to their canonical JQL equivalents.
 
@@ -459,12 +474,13 @@ class JiraRestReader(AbstractFileReader):
     def _fetch_issues(self, project: str, baseline: str) -> list[Issue]:
         """Fetch issues from Jira depending on API mode."""
 
+        project_key = self.projects[project].key
         baseline_field = self._normalize_field_for_jql(self.config.baseline_field)
 
         if baseline == "Current Baseline":
-            jql_query = f'project = "{project}"'
+            jql_query = f'project = "{project_key}"'
         else:
-            jql_query = f'project = "{project}" AND {baseline_field} = "{baseline}"'
+            jql_query = f'project = "{project_key}" AND {baseline_field} = "{baseline}"'
 
         fields = "*all"
 
@@ -489,64 +505,61 @@ class JiraRestReader(AbstractFileReader):
             start_at += maxResults
         return issues
 
-    def _map_jira_fields(self) -> dict[str, dict[str, str]]:
-        """Builds a lookup table of Jira fields keyed by name."""
-        return {
-            field.get("name"): {
-                "id": field["id"],
-                "typ": "ARRAY" if field.get("schema", {}).get("type") == "array" else "STRING",
-            }
-            for field in self.jira.fields()
-        }
+    def _extract_valuetype_from_issue_field(
+        self,
+        field: dict[str, Any],
+    ) -> Literal["STRING", "ARRAY", "BOOLEAN"]:
+        schema = field.get("schema", {})
+        field_type = schema.get("type")
+        if field_type == "array":
+            return "ARRAY"
+        elif field_type == "boolean":
+            return "BOOLEAN"
+        else:
+            return "STRING"
 
-    def _collect_attributes_for_requierment(
-        self, req_key: RequirementKey, attribute_names: list[str], fields: dict[str, dict[str, str]]
-    ) -> list[UserDefinedAttribute]:
-        """Extract attributes for a single requirement."""
-        udas = []
-        issue = self._issues[req_key.id]
-
-        for field_name in attribute_names:
-            field_info = fields.get(field_name)
-            if not field_info:
-                self.logger.warning(f"Field {field_name} not found in Jira fields")
-                continue
-
-            value_type = field_info["typ"]
-            field_id = field_info["id"]
-
-            value = getattr(issue.fields, field_id, None)
-            if value is None:
-                continue
-
-            if value_type == "STRING":
-                udas.append(self._build_string_attribute(field_name, value))
-            elif value_type == "ARRAY":
-                udas.append(self._build_array_attribute(field_name, value))
-
-        return udas
-
-    def _build_string_attribute(self, name: str, value: any) -> UserDefinedAttribute:
-        return UserDefinedAttribute(
-            name=name,
-            valueType="STRING",
-            stringValue=str(value),
-        )
-
-    def _build_array_attribute(self, name: str, values: any) -> UserDefinedAttribute:
-        str_values = [str(v) for v in values] if isinstance(values, list) else [str(values)]
-        return UserDefinedAttribute(name=name, valueType="ARRAY", stringValues=str_values)
-
-    def _build_placeholder_attribute(self) -> UserDefinedAttribute:
-        """Temporary/demo attribute — consider removing later."""
-        return UserDefinedAttribute(
-            name="# finds",
-            valueType="STRING",
-            stringValue="<html><body>Voll <b>Fett</b></body></html>",
-        )
+    def _build_userdefinedattribute_object(
+        self, field: dict[str, Any], field_value: Any
+    ) -> UserDefinedAttribute:
+        value_type = self._extract_valuetype_from_issue_field(field)
+        if value_type == "STRING":
+            if hasattr(field_value, "value"):
+                string_value = field_value.value
+            elif hasattr(field_value, "name"):
+                string_value = field_value.name
+            else:
+                string_value = str(field_value)
+            return UserDefinedAttribute(
+                name=field["name"],
+                valueType="STRING",
+                stringValue=string_value,
+            )
+        elif value_type == "ARRAY":
+            if isinstance(field_value, list):
+                string_values = []
+                for item in field_value:
+                    if hasattr(item, "value"):
+                        string_values.append(item.value)
+                    elif hasattr(item, "name"):
+                        string_values.append(item.name)
+                    else:
+                        string_values.append(str(item))
+            else:
+                string_values = None
+            return UserDefinedAttribute(
+                name=field["name"],
+                valueType="ARRAY",
+                stringValues=string_values,
+            )
+        elif value_type == "BOOLEAN":
+            return UserDefinedAttribute(
+                name=field["name"],
+                valueType="BOOLEAN",
+                booleanValue=bool(field_value),
+            )
 
     def _build_requirementobject_from_issue(
-        issue: Issue, requirement: bool = True
+        self, issue: Issue, requirement: bool = True
     ) -> RequirementObjectNode:
         return RequirementObjectNode(
             name=issue.fields.summary,
@@ -564,7 +577,6 @@ class JiraRestReader(AbstractFileReader):
         requirement_nodes = {}
         for issue in issues:
             req_node = self._build_requirementobject_from_issue(issue)
-            self._issues[issue.key] = issue
             requirement_nodes[issue.key] = req_node
         return requirement_nodes
 
