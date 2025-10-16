@@ -119,7 +119,7 @@ async def _post_extended_requirement(req: Request, project: str, baseline: str):
     if req.json is None:
         raise BadRequest("Missing request body")
     try:
-        key = RequirementKey(**req.json.get("key", {}))
+        key = RequirementKey(**req.json)
     except ValidationError as e:
         raise BadRequest("Invalid request body") from e
 
@@ -145,7 +145,7 @@ async def _post_requirement_versions(req: Request, project: str, baseline: str):
     if req.json is None:
         raise BadRequest("Missing request body")
     try:
-        key = RequirementKey(**req.json.get("key", {}))
+        key = RequirementKey(**req.json)
     except ValidationError as e:
         raise BadRequest("Invalid request body") from e
 

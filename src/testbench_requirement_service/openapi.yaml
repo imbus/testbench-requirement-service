@@ -344,14 +344,10 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                key:
-                  $ref: '#/components/schemas/RequirementKey'
-              example:
-                key:
-                  id: req1
-                  version: "1.0"
+              $ref: '#/components/schemas/RequirementKey'
+            example:
+              id: req1
+              version: "1.0"
       responses:
         '200':
           description: Extended requirement details
@@ -402,14 +398,10 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                key:
-                  $ref: '#/components/schemas/RequirementKey'
-              example:
-                key:
-                  id: req1
-                  version: "1.0"
+              $ref: '#/components/schemas/RequirementKey'
+            example:
+              id: req1
+              version: "1.0"
       responses:
         '200':
           description: List of requirement versions
