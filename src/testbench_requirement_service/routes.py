@@ -18,27 +18,27 @@ router = Blueprint("requirement")
 
 @router.route("/server-name-and-version", methods=["GET"])
 @protected
-async def _get_server_name_and_version(req: Request):
+async def get_server_name_and_version(req: Request):
     return response.json(f"{req.app.name}-{__version__}")
 
 
 @router.route("/user-defined-attributes", methods=["GET"])
 @protected
-async def _get_user_defined_attributes(req: Request):
+async def get_user_defined_attributes(req: Request):
     file_reader = get_file_reader(req.app)
     return response.json([uda.model_dump() for uda in file_reader.get_user_defined_attributes()])
 
 
 @router.route("/projects", methods=["GET"])
 @protected
-async def _get_projects(req: Request):
+async def get_projects(req: Request):
     file_reader = get_file_reader(req.app)
     return response.json(file_reader.get_projects())
 
 
 @router.route("/projects/<project:str>/baselines", methods=["GET"], unquote=True)
 @protected
-async def _get_baselines(req: Request, project: str):
+async def get_baselines(req: Request, project: str):
     project = unquote(project)
     file_reader = get_file_reader(req.app)
 
@@ -54,7 +54,7 @@ async def _get_baselines(req: Request, project: str):
     unquote=True,
 )
 @protected
-async def _get_requirements_root(req: Request, project: str, baseline: str):
+async def get_requirements_root(req: Request, project: str, baseline: str):
     project = unquote(project)
     baseline = unquote(baseline)
     file_reader = get_file_reader(req.app)
@@ -73,7 +73,7 @@ async def _get_requirements_root(req: Request, project: str, baseline: str):
     unquote=True,
 )
 @protected
-async def _post_all_user_defined_attributes(req: Request, project: str, baseline: str):
+async def post_all_user_defined_attributes(req: Request, project: str, baseline: str):
     project = unquote(project)
     baseline = unquote(baseline)
     file_reader = get_file_reader(req.app)
@@ -106,7 +106,7 @@ async def _post_all_user_defined_attributes(req: Request, project: str, baseline
     unquote=True,
 )
 @protected
-async def _post_extended_requirement(req: Request, project: str, baseline: str):
+async def post_extended_requirement(req: Request, project: str, baseline: str):
     project = unquote(project)
     baseline = unquote(baseline)
     file_reader = get_file_reader(req.app)
@@ -132,7 +132,7 @@ async def _post_extended_requirement(req: Request, project: str, baseline: str):
     unquote=True,
 )
 @protected
-async def _post_requirement_versions(req: Request, project: str, baseline: str):
+async def post_requirement_versions(req: Request, project: str, baseline: str):
     project = unquote(project)
     baseline = unquote(baseline)
     file_reader = get_file_reader(req.app)

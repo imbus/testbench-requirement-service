@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
+from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 from testbench_requirement_service.utils.helpers import (
     get_project_root,
     import_class_from_file_path,
@@ -8,23 +8,34 @@ from testbench_requirement_service.utils.helpers import (
 )
 
 
-def get_reader_class_from_file_path(file_path: Path) -> AbstractFileReader:
+def get_reader_class_from_file_path(file_path: Path) -> AbstractRequirementReader:
     try:
-        return import_class_from_file_path(file_path, subclass_from=AbstractFileReader)  # type: ignore
+        return import_class_from_file_path(file_path, subclass_from=AbstractRequirementReader)  # type: ignore
     except Exception as e:
-        message = f"Failed to import custom FileReader class from '{file_path}'."
+        message = f"Failed to import custom RequirementReader class from '{file_path}'."
         raise ImportError(message) from e
 
 
-def get_reader_class_from_module_str(reader_name: str) -> AbstractFileReader:
+def get_reader_class_from_module_str(
+    reader_name: str, default_package: str = "testbench_requirement_service.readers"
+) -> AbstractRequirementReader:
     try:
-        return import_class_from_module_str(reader_name, subclass_from=AbstractFileReader)  # type: ignore
+        if "." in reader_name:
+            return import_class_from_module_str(  # type: ignore
+                reader_name, subclass_from=AbstractRequirementReader
+            )
+
+        return import_class_from_module_str(  # type: ignore
+            default_package,
+            class_name=reader_name,
+            subclass_from=AbstractRequirementReader,
+        )
     except Exception as e:
-        message = f"Failed to import custom FileReader class from '{reader_name}'."
+        message = f"Failed to import custom RequirementReader class from '{reader_name}'."
         raise ImportError(message) from e
 
 
-def get_file_reader_from_reader_class_str(reader_class: str) -> AbstractFileReader:
+def get_file_reader_from_reader_class_str(reader_class: str) -> AbstractRequirementReader:
     reader_path = Path(reader_class)
     if reader_path.is_file():
         return get_reader_class_from_file_path(reader_path)
@@ -39,13 +50,13 @@ def get_file_reader_from_reader_class_str(reader_class: str) -> AbstractFileRead
     return get_reader_class_from_module_str(reader_class)
 
 
-def get_file_reader(app) -> AbstractFileReader:
+def get_file_reader(app) -> AbstractRequirementReader:
     if not getattr(app.ctx, "file_reader", None):
         file_reader_config = app.config.READER_CONFIG_PATH
         file_reader_class_str = app.config.READER_CLASS
         file_reader_class = get_file_reader_from_reader_class_str(file_reader_class_str)
         file_reader = file_reader_class(file_reader_config)  # type: ignore
-        if not isinstance(file_reader, AbstractFileReader):
-            raise ImportError(f"{file_reader_class} is no instance of FileReader!")
+        if not isinstance(file_reader, AbstractRequirementReader):
+            raise ImportError(f"{file_reader_class} is no instance of AbstractRequirementReader!")
         app.ctx.file_reader = file_reader
     return app.ctx.file_reader  # type: ignore

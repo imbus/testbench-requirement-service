@@ -23,7 +23,7 @@ class AppConfig(Config):
         super().__init__(*args, **kwargs)
 
         self.CONFIG_PATH = "config.py"
-        self.READER_CLASS = "testbench_requirement_service.readers.JsonlFileReader"
+        self.READER_CLASS = "testbench_requirement_service.readers.JsonlRequirementReader"
         self.READER_CONFIG_PATH = "reader_config.py"
         self.LOGLEVEL = "INFO"
         self.OAS_UI_DEFAULT = "swagger"
@@ -55,7 +55,7 @@ def create_app(name: str, config: AppConfig | None = None) -> Sanic:
         config = AppConfig()
     app.update_config(config)
 
-    if "ExcelFileReader" in app.config.READER_CLASS:
+    if "ExcelRequirementReader" in app.config.READER_CLASS:
         check_excel_dependencies()
 
     # Register middlewares

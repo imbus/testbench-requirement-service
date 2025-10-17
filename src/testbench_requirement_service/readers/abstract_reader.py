@@ -11,7 +11,7 @@ from testbench_requirement_service.models.requirement import (
 )
 
 
-class AbstractFileReader(ABC):
+class AbstractRequirementReader(ABC):
     @abstractmethod
     def __init__(self, config_path: str):
         pass

@@ -30,7 +30,7 @@ def cli(ctx):
     type=str,
     metavar="PATH",
     help="""Path or module string to the reader class  \b
-    [default: testbench_requirement_service.readers.JsonlFileReader]""",
+    [default: testbench_requirement_service.readers.JsonlRequirementReader]""",
 )
 @click.option(
     "--reader-config",

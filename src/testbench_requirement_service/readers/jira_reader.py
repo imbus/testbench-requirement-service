@@ -22,7 +22,6 @@ from jira import JIRA, Issue, JIRAError, Project
 from jira.client import ResultList
 from jira.resources import Field
 from pydantic import BaseModel, ValidationError, model_validator
-from sanic.exceptions import NotFound
 
 from testbench_requirement_service.models.requirement import (
     BaselineObject,
@@ -34,10 +33,10 @@ from testbench_requirement_service.models.requirement import (
     UserDefinedAttribute,
     UserDefinedAttributeResponse,
 )
-from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
+from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 
 
-class JiraRestReaderConfig(BaseModel):
+class JiraRequirementReaderConfig(BaseModel):
     server_url: str
     auth_type: Literal["basic", "token", "oauth"] = "basic"
     username: str | None = None
@@ -97,7 +96,7 @@ class JiraRestReaderConfig(BaseModel):
         return self
 
 
-class JiraRestReader(AbstractFileReader):
+class JiraRequirementReader(AbstractRequirementReader):
     def __init__(self, config_path: str):
         self.logger = logging.getLogger(__name__)
         self.logger.level = logging.DEBUG
@@ -312,7 +311,7 @@ class JiraRestReader(AbstractFileReader):
 
         return config_dict
 
-    def _load_and_validate_config_from_path(self, config_path: Path) -> JiraRestReaderConfig:
+    def _load_and_validate_config_from_path(self, config_path: Path) -> JiraRequirementReaderConfig:
         config_dict = self._load_config_dict_from_path(config_path)
 
         config_prefix = "jira"
@@ -320,7 +319,7 @@ class JiraRestReader(AbstractFileReader):
             raise ValueError(f"TOML section [{config_prefix}] not found in reader config file.")
 
         try:
-            return JiraRestReaderConfig(**config_dict[config_prefix])
+            return JiraRequirementReaderConfig(**config_dict[config_prefix])
         except ValidationError as e:
             error_message = "; ".join([err["msg"] for err in e.errors()])
             raise ValueError(f"Invalid reader config: {error_message}") from e

@@ -16,11 +16,11 @@ from testbench_requirement_service.models.requirement import (
     UserDefinedAttribute,
     UserDefinedAttributeResponse,
 )
-from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
+from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 from testbench_requirement_service.utils.helpers import import_module_from_file_path
 
 
-class JsonlFileReader(AbstractFileReader):
+class JsonlRequirementReader(AbstractRequirementReader):
     def __init__(self, config_path: str):
         self.config = self._load_and_validate_config_from_path(Path(config_path))
 
