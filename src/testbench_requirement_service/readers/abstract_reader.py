@@ -14,15 +14,23 @@ from testbench_requirement_service.models.requirement import (
 class AbstractRequirementReader(ABC):
     @abstractmethod
     def __init__(self, config_path: str):
-        pass
+        """
+        Initialize the requirement reader with the given configuration file path.
+
+        The config_path is set either via CLI option (--reader-config)
+        or in the app configuration file.
+
+        Args:
+            config_path (str): Path to the reader configuration file.
+        """
 
     @abstractmethod
     def project_exists(self, project: str) -> bool:
         """
-        Check if a project with the given name exists.
+        Check if the specified project exists in the data source.
 
         Args:
-            project (str): The name or identifier of the project to check.
+            project (str): Name of the project to check.
 
         Returns:
             bool: True if the project exists, False otherwise.
@@ -31,23 +39,23 @@ class AbstractRequirementReader(ABC):
     @abstractmethod
     def baseline_exists(self, project: str, baseline: str) -> bool:
         """
-        Checks if a specified baseline exists for a given project.
+        Check if the specified baseline exists for the given project.
 
         Args:
-            project (str): The name or identifier of the project.
-            baseline (str): The name or identifier of the baseline to check.
+            project (str): Name of the project.
+            baseline (str): Name of the baseline to check.
 
         Returns:
-            bool: True if the baseline exists for the project, False otherwise.
+            bool: True if the baseline exists, False otherwise.
         """
 
     @abstractmethod
     def get_projects(self) -> list[str]:
         """
-        Retrieve a list of project names.
+        Retrieve a list of all available projects in the data source.
 
         Returns:
-            list[str]: A list containing the names of all available projects.
+            list[str]: List of project names.
         """
 
     @abstractmethod
