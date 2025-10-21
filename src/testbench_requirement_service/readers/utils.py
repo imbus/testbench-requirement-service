@@ -35,7 +35,7 @@ def get_reader_class_from_module_str(
         raise ImportError(message) from e
 
 
-def get_file_reader_from_reader_class_str(reader_class: str) -> AbstractRequirementReader:
+def get_requirement_reader_from_reader_class_str(reader_class: str) -> AbstractRequirementReader:
     reader_path = Path(reader_class)
     if reader_path.is_file():
         return get_reader_class_from_file_path(reader_path)
@@ -50,13 +50,17 @@ def get_file_reader_from_reader_class_str(reader_class: str) -> AbstractRequirem
     return get_reader_class_from_module_str(reader_class)
 
 
-def get_file_reader(app) -> AbstractRequirementReader:
-    if not getattr(app.ctx, "file_reader", None):
-        file_reader_config = app.config.READER_CONFIG_PATH
-        file_reader_class_str = app.config.READER_CLASS
-        file_reader_class = get_file_reader_from_reader_class_str(file_reader_class_str)
-        file_reader = file_reader_class(file_reader_config)  # type: ignore
-        if not isinstance(file_reader, AbstractRequirementReader):
-            raise ImportError(f"{file_reader_class} is no instance of AbstractRequirementReader!")
-        app.ctx.file_reader = file_reader
-    return app.ctx.file_reader  # type: ignore
+def get_requirement_reader(app) -> AbstractRequirementReader:
+    if not getattr(app.ctx, "requirement_reader", None):
+        requirement_reader_config = app.config.READER_CONFIG_PATH
+        requirement_reader_class_str = app.config.READER_CLASS
+        requirement_reader_class = get_requirement_reader_from_reader_class_str(
+            requirement_reader_class_str
+        )
+        requirement_reader = requirement_reader_class(requirement_reader_config)  # type: ignore
+        if not isinstance(requirement_reader, AbstractRequirementReader):
+            raise ImportError(
+                f"{requirement_reader_class} is no instance of AbstractRequirementReader!"
+            )
+        app.ctx.requirement_reader = requirement_reader
+    return app.ctx.requirement_reader  # type: ignore
