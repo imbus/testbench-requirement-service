@@ -36,6 +36,11 @@ from testbench_requirement_service.models.requirement import (
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 
 
+class ProjectConfig(BaseModel):
+    requirement_types: list[str] = None
+    requirement_node_types: list[str] = None
+
+
 class JiraRequirementReaderConfig(BaseModel):
     server_url: str
     auth_type: Literal["basic", "token", "oauth"] = "basic"
@@ -102,6 +107,8 @@ class JiraRequirementReader(AbstractRequirementReader):
         self.logger.level = logging.DEBUG
 
         self.config = self._load_and_validate_config_from_path(Path(config_path))
+        self._projects_config = None
+        self._config_path = config_path
 
         self.jira = self._connect()
         self.uses_new_issuetypes_endpoint = (not self.jira._is_cloud) and (
@@ -153,13 +160,23 @@ class JiraRequirementReader(AbstractRequirementReader):
             ],
         ]
 
+    def _load_project_config(self, project: str) -> ProjectConfig:
+        config_dict = self._load_config_dict_from_path(Path(self._config_path))
+        prefix = "projects"
+        if prefix in config_dict:
+            if project in config_dict[prefix]:
+                return ProjectConfig(**config_dict[prefix][project])
+
+        return ProjectConfig()
+
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
-        issues = self._fetch_issues(project, baseline)
+        project_config = self._load_project_config(project)
+        issues = self._fetch_issues(project, baseline, project_config)
         if not issues:
             self.logger.debug(f"No issues found for project '{project}' and baseline '{baseline}'")
 
         issues.sort(key=self.sort_by_issue_key)
-        requirement_nodes = self._build_requirement_nodes(issues)
+        requirement_nodes = self._build_requirement_nodes(issues, project_config)
         requirement_tree = self._build_requirement_tree(issues, requirement_nodes)
 
         return BaselineObjectNode(
@@ -470,7 +487,9 @@ class JiraRequirementReader(AbstractRequirementReader):
             return "fixVersion"
         return field_name
 
-    def _fetch_issues(self, project: str, baseline: str) -> list[Issue]:
+    def _fetch_issues(
+        self, project: str, baseline: str, project_config: ProjectConfig
+    ) -> list[Issue]:
         """Fetch issues from Jira depending on API mode."""
 
         project_key = self.projects[project].key
@@ -480,6 +499,20 @@ class JiraRequirementReader(AbstractRequirementReader):
             jql_query = f'project = "{project_key}"'
         else:
             jql_query = f'project = "{project_key}" AND {baseline_field} = "{baseline}"'
+
+        # Add requirement_types and requirement_node_types to JQL if specified
+        type_clauses = []
+
+        if project_config.requirement_types:
+            type_clauses.extend(
+                [f'issuetype = "{elem}"' for elem in project_config.requirement_types]
+            )
+        if project_config.requirement_node_types:
+            type_clauses.extend(
+                [f'issuetype = "{elem}"' for elem in project_config.requirement_node_types]
+            )
+        if type_clauses:
+            jql_query += " AND (" + " OR ".join(type_clauses) + ")"
 
         fields = "*all"
 
@@ -571,11 +604,19 @@ class JiraRequirementReader(AbstractRequirementReader):
             children=[],
         )
 
-    def _build_requirement_nodes(self, issues: list[Issue]) -> dict[str, RequirementObjectNode]:
+    def _build_requirement_nodes(
+        self, issues: list[Issue], project_config: ProjectConfig
+    ) -> dict[str, RequirementObjectNode]:
         """Convert issues into requirement nodes."""
         requirement_nodes = {}
         for issue in issues:
-            req_node = self._build_requirementobject_from_issue(issue)
+            if project_config.requirement_node_types is not None:
+                is_requirement = issue.fields.issuetype.name not in project_config.requirement_node_types
+            else:
+                is_requirement = True
+            req_node = self._build_requirementobject_from_issue(
+                issue, is_requirement
+            )
             requirement_nodes[issue.key] = req_node
         return requirement_nodes
 
