@@ -12,6 +12,8 @@ from pathlib import Path
 import sys
 from typing import Any, Literal
 
+from sanic import NotFound
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
@@ -55,6 +57,7 @@ class JiraRequirementReaderConfig(BaseModel):
     requirement_node_types: list[str] = None
 
     baseline_field: str = "fixVersions"
+    requirement_types: list[str] = ["Epic", "Story"]  # TODO: Add configurable requirement types
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -377,7 +380,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         else:
             raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
 
-    def _fetch_projects(self):
+    def _fetch_projects(self) -> list:
         self._projects = {
             f"{project.name} ({project.key})": project for project in self.jira.projects()
         }
@@ -485,12 +488,60 @@ class JiraRequirementReader(AbstractRequirementReader):
     def _fetch_issue(
         self,
         issue_id: str,
+        project: str | None = None,
+        baseline: str | None = None,
         fields: str | None = None,
         expand: str | None = None,
         properties: str | None = None,
-    ):
-        """Fetch an issue from Jira."""
-        return self.jira.issue(issue_id, fields=fields, expand=expand, properties=properties)
+    ) -> Issue:
+        """
+        Fetch an issue from Jira.
+
+        Args:
+            issue_id (str): The Jira issue key or ID to fetch.
+            project (str | None, optional): The project name as used in self.projects; if provided, verifies the issue belongs to this project.
+            baseline (str | None, optional): The baseline name; if provided, verifies the issue is part of this baseline.
+            fields (str | None, optional): Comma-separated list of fields to fetch for the issue.
+            expand (str | None, optional): Comma-separated list of fields to expand in the response.
+            properties (str | None, optional): Comma-separated list of properties to fetch for the issue.
+
+        Returns:
+            Issue: The Jira issue object.
+
+        Raises:
+            NotFound: If the issue does not exist, or does not belong to the specified project/baseline, or is not a requirement type.
+        """
+        try:
+            if fields and fields != "*all":
+                if project:
+                    fields += ",project"
+                if baseline:
+                    fields += f",{self.config.baseline_field}"
+                fields += ",issuetype"
+                fields = ",".join(list(set(field.strip() for field in fields.split(","))))
+            issue = self.jira.issue(issue_id, fields=fields, expand=expand, properties=properties)
+        except JIRAError as e:
+            self.logger.debug(f"Error fetching issue {issue_id}: {e}")
+            raise NotFound("Requirement not found") from e
+
+        # If project is specified, check if the issue belongs to the specified project
+        if project:
+            project_key = self.projects[project].key
+            if issue.fields.project.key != project_key:
+                raise NotFound("Requirement not found")
+
+        # If baseline is specified, check if the issue belongs to the specified baseline
+        if baseline:
+            issue_baselines = self._extract_baselines_from_issue(issue)
+            if baseline != "Current Baseline" and baseline not in issue_baselines:
+                raise NotFound("Requirement not found")
+
+        # Check if the issue is of a requirement type
+        valid_types = [t.lower() for t in self.config.requirement_types]
+        if issue.fields.issuetype.name.lower() not in valid_types:
+            raise NotFound("Requirement not found")
+
+        return issue
 
     def _normalize_field_for_jql(self, field_name: str) -> str:
         """
@@ -693,9 +744,22 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         return requirement_tree
 
-    def _build_rich_description(self, issue) -> str:
-        """Render Jira description into an HTML body."""
-        description = getattr(issue.renderedFields, "description", "") or ""
-        html = f"<html><body>{self._embed_jira_images(description)}</body></html>"
-
-        return html
+    def _extract_baselines_from_issue(self, issue) -> list[str]:
+        value = getattr(issue.fields, self.config.baseline_field, None)
+        if value is None:
+            return []
+        if isinstance(value, list):
+            result = []
+            for v in value:
+                if hasattr(v, "name"):
+                    result.append(str(v.name))
+                elif hasattr(v, "value"):
+                    result.append(str(v.value))
+                else:
+                    result.append(str(v))
+            return result
+        if hasattr(value, "name"):
+            return [str(value.name)]
+        if hasattr(value, "value"):
+            return [str(value.value)]
+        return [str(value)]
