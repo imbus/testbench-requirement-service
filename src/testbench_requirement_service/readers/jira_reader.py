@@ -453,27 +453,102 @@ class JiraRequirementReader(AbstractRequirementReader):
             field for field in self.jira.fields() if field.get("id", "").startswith("customfield_")
         ]
 
-    def _embed_jira_images(self, html: str) -> str:
-        soup = BeautifulSoup(html, "html.parser")
+    def _embed_jira_images(self, issue: Issue) -> str:
+        """
+        Embed Jira images referenced in an issue's rendered description by converting relative URLs
+        and Jira attachment URLs into absolute URLs or inline base64-encoded data URIs.
+
+        Processes <img> tags with 'src' attributes pointing to:
+        - Jira's relative image paths (starting with '/images/'), prepending the Jira server URL.
+        - Jira's REST API attachment URLs, embedding images as base64 after verifying MIME types and size limits.
+
+        Ensures safety by validating URLs, whitelisting trusted MIME types (PNG, JPEG, GIF), limiting image size,
+        and removing unsupported or unsafe image sources. Logs warnings on issues encountered.
+
+        Args:
+            issue (Issue): Jira issue object containing renderedFields.description and fields.attachment.
+
+        Returns:
+            str: HTML string with images embedded as absolute URLs or data URIs.
+        """
+        allowed_image_mime_types = {"image/png", "image/jpeg", "image/gif"}
+        max_embedded_image_size = 5 * 1024 * 1024  # 5 MB limit for embedded images
+        jira_attachment_url_pattern = re.compile(r"^/rest/api/\d+/attachment/content/(\d+)$")
+
+        description = getattr(issue.renderedFields, "description", "")
+        if not description:
+            self.logger.warning(f"Issue {issue.key} missing renderedFields.description")
+            return ""
+
+        # Build attachment dictionary mapping attachment ID to tuple (mime type, encoded data)
+        attachment_dict: dict[str, tuple[str, str]] = {}
+        attachments = getattr(issue.fields, "attachment", [])
+        for attachment in attachments:
+            try:
+                mime_type = getattr(attachment, "mimeType", None)
+                if not mime_type:
+                    self.logger.warning(f"Attachment {attachment.id} missing mimeType metadata")
+                    continue
+                if mime_type not in allowed_image_mime_types:
+                    self.logger.warning(
+                        f"Attachment {attachment.id} has disallowed mimeType: {mime_type}"
+                    )
+                    continue
+
+                size = getattr(attachment, "size", None)
+                if size and size > max_embedded_image_size:
+                    self.logger.warning(
+                        f"Attachment {attachment.id} size ({size} bytes) exceeds "
+                        f"maximum allowed size ({max_embedded_image_size} bytes)"
+                    )
+                    continue
+
+                image_bytes = attachment.get()
+
+                actual_size = len(image_bytes)
+                if actual_size > max_embedded_image_size:
+                    self.logger.warning(
+                        f"Attachment {attachment.id} size ({size} bytes) exceeds "
+                        f"maximum allowed size ({max_embedded_image_size} bytes)"
+                    )
+                    continue
+
+                encoded = base64.b64encode(image_bytes).decode("utf-8")
+                attachment_dict[attachment.id] = (mime_type, encoded)
+                self.logger.debug(
+                    f"Successfully processed attachment {attachment_id} ({len(image_bytes)} bytes)"
+                )
+            except Exception as e:
+                self.logger.debug(f"Could not process attachment {attachment.id}: {e}")
+                continue
+
+        # Embed images in the issue description
+        soup = BeautifulSoup(description, "html.parser")
         img_tags = soup.find_all("img")
         for img in img_tags:
             src = img.get("src", "")
             if src.startswith("/images/"):
                 img["src"] = f"{self.jira.server_url}{src}"
                 continue
-            match = re.search(r"/rest/api/\d+/attachment/content/(\d+)", src)
+
+            match = jira_attachment_url_pattern.fullmatch(src)
             if not match:
+                img.attrs.pop("src", None)
+                self.logger.warning(f"Removed image with unsupported src: {src}")
                 continue
+
             attachment_id = match.group(1)
-            try:
-                attachment = self.jira.attachment(attachment_id)
-                mime_type = attachment.mimeType
-                image_bytes = attachment.get()
-                encoded = base64.b64encode(image_bytes).decode("utf-8")
-                img["src"] = f"data:{mime_type};base64,{encoded}"
-            except Exception as e:
-                print(f"Warning: Could not embed attachment {attachment_id} - {e}")
+            if attachment_id not in attachment_dict:
+                img.attrs.pop("src", None)
+                self.logger.warning(
+                    f"Attachment {attachment_id} not found in validated attachments"
+                )
                 continue
+
+            mime_type, encoded = attachment_dict[attachment_id]
+            img["src"] = f"data:{mime_type};base64,{encoded}"
+
+        # TODO: Sanitize HTML to prevent XSS if necessary
         return str(soup)
 
     def _fetch_issue(
@@ -750,6 +825,13 @@ class JiraRequirementReader(AbstractRequirementReader):
             return {}
 
         return requirement_tree
+
+    def _build_rich_description(self, issue: Issue) -> str:
+        """
+        Render Jira issue description with embedded images inside a full HTML body.
+        """
+        description_html = self._embed_jira_images(issue)
+        return f"<html><body>{description_html}</body></html>"
 
     def _build_extendedrequirementobject_from_issue(
         self, issue: Issue, key: RequirementKey, baseline: str
