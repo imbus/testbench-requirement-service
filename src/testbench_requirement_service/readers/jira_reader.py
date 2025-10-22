@@ -254,24 +254,15 @@ class JiraRequirementReader(AbstractRequirementReader):
     def get_extended_requirement(
         self, project: str, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
+        fields = "summary,creator,assignee,status,priority,description,issuetype,attachment"
         issue = self._fetch_issue(
             key.id,
-            fields="summary,assignee,status,priority,parent,description",
+            project=project,
+            baseline=baseline,
+            fields=fields,
             expand="renderedFields",
         )
-
-        return ExtendedRequirementObject(
-            name=issue.fields.summary,
-            extendedID=issue.key,
-            key=key,
-            owner=issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
-            status=issue.fields.status.name if issue.fields.status else "",
-            priority=issue.fields.priority.name if issue.fields.priority else "",
-            requirement=True,
-            description=self._build_rich_description(issue),
-            documents=[issue.permalink()],
-            baseline=baseline,
-        )
+        return self._build_extendedrequirementobject_from_issue(issue, key, baseline)
 
     def get_requirement_versions(
         self, project: str, baseline: str, key: RequirementKey
@@ -684,17 +675,32 @@ class JiraRequirementReader(AbstractRequirementReader):
                 booleanValue=bool(field_value),
             )
 
-    def _build_requirementobject_from_issue(
-        self, issue: Issue, requirement: bool = True
+    def _build_requirementobjectnode_from_issue(
+        self, issue: Issue, key: RequirementKey | None = None, is_requirement: bool = True
     ) -> RequirementObjectNode:
+        assignee = getattr(issue.fields, "assignee", None)
+        creator = getattr(issue.fields, "creator", None)
+        if assignee:
+            owner = assignee.displayName
+        elif creator:
+            owner = creator.displayName if creator else ""
+        else:
+            owner = ""
+
+        status_field = getattr(issue.fields, "status", None)
+        status = status_field.name if status_field else ""
+
+        priority_field = getattr(issue.fields, "priority", None)
+        priority = priority_field.name if priority_field else ""
+
         return RequirementObjectNode(
-            name=issue.fields.summary,
+            name=getattr(issue.fields, "summary", ""),
             extendedID=issue.key,
-            key=RequirementKey(id=issue.key, version="1.0"),
-            owner=issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
-            status=issue.fields.status.name,
-            priority=getattr(issue.fields.priority, "name", ""),
-            requirement=requirement,
+            key=key or RequirementKey(id=issue.key, version="1.0"),
+            owner=owner,
+            status=status,
+            priority=priority,
+            requirement=is_requirement,
             children=[],
         )
 
@@ -708,8 +714,8 @@ class JiraRequirementReader(AbstractRequirementReader):
                 is_requirement = issue.fields.issuetype.name not in project_config.requirement_node_types
             else:
                 is_requirement = True
-            req_node = self._build_requirementobject_from_issue(
-                issue, is_requirement
+            req_node = self._build_requirementobjectnode_from_issue(
+                issue, is_requirement=is_requirement
             )
             requirement_nodes[issue.key] = req_node
         return requirement_nodes
@@ -719,30 +725,51 @@ class JiraRequirementReader(AbstractRequirementReader):
     ) -> dict[str, RequirementObjectNode]:
         """Link requirement nodes into a tree structure."""
         requirement_tree = {}
+
         try:
             for issue in issues:
-                parent_key = getattr(issue.fields, "parent", None)
-                if not parent_key:
+                parent_obj = getattr(issue.fields, "parent", None)
+                if not parent_obj:
                     requirement_tree[issue.key] = requirement_nodes[issue.key]
                     continue
 
-                parent_key = parent_key.key
+                parent_key = parent_obj.key
                 if parent_key not in requirement_nodes:
-                    parent_issue = self.jira.issue(parent_key)
-                    parent = self._build_requirementobject_from_issue(
-                        parent_issue, requirement=False
-                    )
+                    parent_issue = self._fetch_issue(parent_key)
+                    parent = self._build_requirementobjectnode_from_issue(parent_issue)
                     requirement_nodes[parent_key] = parent
 
                 parent = requirement_nodes[parent_key]
+                parent.children = parent.children or []
                 parent.children.append(requirement_nodes[issue.key])
 
                 if parent_key not in requirement_tree:
                     requirement_tree[parent_key] = parent
         except Exception as e:
             self.logger.error(f"Error building requirement tree: {e}")
+            return {}
 
         return requirement_tree
+
+    def _build_extendedrequirementobject_from_issue(
+        self, issue: Issue, key: RequirementKey, baseline: str
+    ) -> ExtendedRequirementObject:
+        requirement_object = self._build_requirementobjectnode_from_issue(issue, key)
+
+        attachments_field = getattr(issue.fields, "attachment", None)
+        if attachments_field:
+            attachments = [
+                attachment.content for attachment in attachments_field if attachment.content
+            ]
+        else:
+            attachments = []
+
+        return ExtendedRequirementObject(
+            **requirement_object.model_dump(),
+            description=self._build_rich_description(issue),
+            documents=[issue.permalink(), *attachments],
+            baseline=baseline,
+        )
 
     def _extract_baselines_from_issue(self, issue) -> list[str]:
         value = getattr(issue.fields, self.config.baseline_field, None)
