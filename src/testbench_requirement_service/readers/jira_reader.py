@@ -267,26 +267,37 @@ class JiraRequirementReader(AbstractRequirementReader):
     def get_requirement_versions(
         self, project: str, baseline: str, key: RequirementKey
     ) -> list[RequirementVersionObject]:
-        issue = self.jira.issue(key.id, fields="summary,created,creator", expand="changelog")
+        issue = self._fetch_issue(
+            key.id,
+            project=project,
+            baseline=baseline,
+            fields="summary,created,creator",
+            expand="changelog",
+        )
 
         versions = []
 
         # Add creation as the initial version
         versions.append(
             RequirementVersionObject(
-                name=issue.fields.summary,
+                name="1.0",
                 date=issue.fields.created,
-                author=issue.fields.creator.displayName,
+                author=getattr(issue.fields.creator, "displayName", ""),
                 comment="Initial version",  # TODO: maybe use a more meaningful comment
             )
         )
 
         current_summary = issue.fields.summary
-        relevant_fields = {"summary", "description", "fixVersions", "affectsVersions", "status"}
+        relevant_fields = {
+            "summary",
+            "description",
+            "status",
+            self.config.baseline_field,
+        }
 
         # Add newer versions from issue changelog if there are relevant changes
         histories = sorted(issue.changelog.histories, key=lambda h: h.created)
-        for history in histories:
+        for idx, history in enumerate(histories, start=1):
             summary = current_summary
             changed_fields = []
             for item in history.items:
@@ -298,7 +309,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             if relevant_change:
                 versions.append(
                     RequirementVersionObject(
-                        name=summary,
+                        name=f"1.{idx}",
                         date=history.created,
                         author=history.author.displayName,
                         comment=self._get_change_comment(history),
@@ -307,7 +318,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         return versions
 
-    # TODO: Maybe extract a comment that is more meaningful; Different Languages ?
+    # TODO: Maybe extract a more meaningful comment. Different languages?
     def _get_change_comment(self, history) -> str:
         changed_fields = [item.field for item in history.items]
         if "summary" in changed_fields and "description" in changed_fields:
@@ -720,7 +731,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             elif hasattr(field_value, "name"):
                 string_value = field_value.name
             else:
-                string_value = str(field_value)
+                string_value = str(field_value) if field_value else None
             return UserDefinedAttribute(
                 name=field["name"],
                 valueType="STRING",
