@@ -197,16 +197,12 @@ class JiraRequirementReader(AbstractRequirementReader):
         )
 
     def get_user_defined_attributes(self) -> list[UserDefinedAttribute]:
-        all_fields = self.jira.fields()
-        custom_fields = [
-            field for field in all_fields if field.get("id", "").startswith("customfield_")
-        ]
         return [
             UserDefinedAttribute(
                 name=field["name"],
                 valueType=self._extract_valuetype_from_issue_field(field),
             )
-            for field in custom_fields
+            for field in self._fetch_all_custom_fields()
         ]
 
     def get_all_user_defined_attributes(
