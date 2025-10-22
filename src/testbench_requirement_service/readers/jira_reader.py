@@ -214,21 +214,34 @@ class JiraRequirementReader(AbstractRequirementReader):
         if not requirement_keys:
             return []
 
-        fields = [field for field in self.jira.fields() if field["name"] in attribute_names]
+        custom_fields = self._fetch_all_custom_fields()
+        fields = [field for field in custom_fields if field["name"] in attribute_names]
         field_ids = [field["id"] for field in fields]
-        user_defined_attributes: list[UserDefinedAttributeResponse] = []
 
+        issue_keys = [req_key.id for req_key in requirement_keys]
+        extra_jql = f"issuekey in ({','.join(issue_keys)})"
+
+        issues = self._fetch_issues(
+            project,
+            baseline,
+            fields=["key"] + field_ids,
+            extra_jql=extra_jql,
+        )
+        issue_map = {issue.key: issue for issue in issues}
+
+        user_defined_attributes: list[UserDefinedAttributeResponse] = []
         for req_key in requirement_keys:
-            try:
-                issue = self.jira.issue(req_key.id, fields=",".join(field_ids))
-            except JIRAError:
+            issue = issue_map.get(req_key.id)
+            if not issue:
                 continue
+
             udas = []
             for field in fields:
                 if not hasattr(issue.fields, field["id"]):
                     continue
                 field_value = getattr(issue.fields, field["id"])
                 udas.append(self._build_userdefinedattribute_object(field, field_value))
+
             user_defined_attributes.append(
                 UserDefinedAttributeResponse(key=req_key, userDefinedAttributes=udas)
             )
