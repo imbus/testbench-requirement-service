@@ -116,12 +116,11 @@ class JiraRequirementReader(AbstractRequirementReader):
         self._config_path = config_path
 
         self.jira = self._connect()
-        self.uses_new_issuetypes_endpoint = (
-            not self.jira._is_cloud and self.jira._version >= (8, 4, 0)
+        # The following flags determine which Jira API endpoints to use
+        self.use_new_issuetypes_endpoint = (not self.jira._is_cloud) and (
+            self.jira._version >= (8, 4, 0)
         )
-        self.uses_manual_pagination = (
-            not self.jira._is_cloud and self.jira._version < (8, 4, 0)
-        )
+        self.use_manual_pagination = not self.jira._is_cloud and self.jira._version < (8, 4, 0)
 
         # key: project name (format: "{project.name} ({project.key})"), value: Project Resource
         self._projects: dict[str, Project] = {}
@@ -412,7 +411,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         issue_fields: dict[str, Field] = {}
 
         try:
-            if self.uses_new_issuetypes_endpoint:
+            if self.use_new_issuetypes_endpoint:
                 self.logger.debug("_fetch_project_issue_fields: Use new issuetypes endpoint")
                 issue_types = self.jira.project_issue_types(project_key, maxResults=100)
                 for issue_type in issue_types:
@@ -497,7 +496,15 @@ class JiraRequirementReader(AbstractRequirementReader):
         return field_name
 
     def _fetch_issues(
-        self, project: str, baseline: str, project_config: ProjectConfig
+        
+        self,
+        project: str,
+        baseline: str,
+        project_config: ProjectConfig,
+        extra_jql: str | None = None,
+        fields: str | None = "*all",
+        expand: str | None = None,
+        properties: str | None = None,
     ) -> list[Issue]:
         """Fetch issues from Jira depending on API mode."""
 
@@ -523,28 +530,42 @@ class JiraRequirementReader(AbstractRequirementReader):
         if type_clauses:
             jql_query += " AND (" + " OR ".join(type_clauses) + ")"
 
-        fields = "*all"
+        if extra_jql:
+            jql_query += f" AND {extra_jql}"
 
-        if not self.uses_manual_pagination:
-            return list(self.jira.search_issues(jql_query, maxResults=False, fields=fields))
-
-        # Manual pagination for older Jira Server versions
-        issues: list[Issue] = []
-        start_at = 0
-        maxResults = 1000
-        while True:
-            chunk: ResultList[Issue] = self.jira.search_issues(
-                jql_query,
-                startAt=start_at,
-                maxResults=maxResults,
-                fields=fields,
-            )
-            issues.extend(chunk)
-            if len(chunk) < maxResults:
-                # No more pages
-                break
-            start_at += maxResults
-        return issues
+        try:
+            if not self.use_manual_pagination:
+                return list(
+                    self.jira.search_issues(
+                        jql_query,
+                        maxResults=1000,
+                        fields=fields,
+                        expand=expand,
+                        properties=properties,
+                    )
+                )
+            # Manual pagination for older Jira Server versions
+            start_at = 0
+            maxResults = 1000
+            issues: list[Issue] = []
+            while True:
+                chunk = self.jira.search_issues(
+                    jql_query,
+                    startAt=start_at,
+                    maxResults=maxResults,
+                    fields=fields,
+                    expand=expand,
+                    properties=properties,
+                )
+                issues.extend(chunk)
+                if len(chunk) < maxResults:
+                    # No more pages
+                    break
+                start_at += maxResults
+            return issues
+        except JIRAError as e:
+            self.logger.error(f"Error fetching issues: {e}")
+            return []
 
     def _extract_valuetype_from_issue_field(
         self,
