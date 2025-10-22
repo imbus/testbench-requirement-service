@@ -151,16 +151,17 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def get_baselines(self, project: str) -> list[BaselineObject]:
         baselines = sorted(self._get_baselines_for_project(project))
+        now = datetime.now(timezone.utc)
         return [
             BaselineObject(
                 name="Current Baseline",
-                date=datetime.now(timezone.utc),
+                date=now,
                 type="CURRENT",
             ),
             *[
                 BaselineObject(
                     name=baseline,
-                    date=datetime.now(timezone.utc),
+                    date=now,
                     type="UNLOCKED",
                 )
                 for baseline in baselines
