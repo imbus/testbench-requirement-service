@@ -446,6 +446,11 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         return list(issue_fields.values())
 
+    def _fetch_all_custom_fields(self) -> list[dict[str, Any]]:
+        return [
+            field for field in self.jira.fields() if field.get("id", "").startswith("customfield_")
+        ]
+
     def _embed_jira_images(self, html: str) -> str:
         soup = BeautifulSoup(html, "html.parser")
         img_tags = soup.find_all("img")
