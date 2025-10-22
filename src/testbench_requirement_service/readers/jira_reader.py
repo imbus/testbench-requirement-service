@@ -5,8 +5,6 @@ import base64
 import logging
 import os
 import re
-from collections import OrderedDict
-from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
@@ -21,9 +19,9 @@ else:
 
 from bs4 import BeautifulSoup
 from jira import JIRA, Issue, JIRAError, Project
-from jira.client import ResultList
 from jira.resources import Field
 from pydantic import BaseModel, ValidationError, model_validator
+from pydantic.fields import Field as ModelField
 
 from testbench_requirement_service.models.requirement import (
     BaselineObject,
@@ -38,26 +36,30 @@ from testbench_requirement_service.models.requirement import (
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 
 
-class ProjectConfig(BaseModel):
-    requirement_types: list[str] = None
-    requirement_node_types: list[str] = None
+class JiraProjectConfig(BaseModel):
+    requirement_types: list[str] | None = None
+    requirement_node_types: list[str] | None = None
 
 
 class JiraRequirementReaderConfig(BaseModel):
     server_url: str
     auth_type: Literal["basic", "token", "oauth"] = "basic"
+
     username: str | None = None
     api_token: str | None = None  # for basic auth, paired with username
+
     token: str | None = None  # for bearer/token-based auth, Jira Self Hosted
+
     access_token: str | None = None
     access_token_secret: str | None = None
     consumer_key: str | None = None
     key_cert: str | None = None
-    requirement_types: list[str] = None
-    requirement_node_types: list[str] = None
 
     baseline_field: str = "fixVersions"
-    requirement_types: list[str] = ["Epic", "Story"]  # TODO: Add configurable requirement types
+    requirement_types: list[str] = ["Story"]
+    requirement_node_types: list[str] = ["Epic"]
+
+    projects: dict[str, JiraProjectConfig] = ModelField(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -112,11 +114,6 @@ class JiraRequirementReader(AbstractRequirementReader):
         self.logger.level = logging.DEBUG
 
         self.config = self._load_and_validate_config_from_path(Path(config_path))
-        self._projects_config = ProjectConfig(
-            requirement_types=self.config.requirement_types or [],
-            requirement_node_types=self.config.requirement_node_types or [],
-        )
-        self._config_path = config_path
 
         self.jira = self._connect()
         # The following flags determine which Jira API endpoints to use
@@ -170,23 +167,13 @@ class JiraRequirementReader(AbstractRequirementReader):
             ],
         ]
 
-    def _load_project_config(self, project: str) -> ProjectConfig:
-        config_dict = self._load_config_dict_from_path(Path(self._config_path))
-        prefix = "projects"
-        if prefix in config_dict:
-            if project in config_dict[prefix]:
-                return ProjectConfig(**config_dict[prefix][project])
-
-        return self._projects_config
-
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
-        project_config = self._load_project_config(project)
-        issues = self._fetch_issues(project, baseline, project_config)
+        issues = self._fetch_issues(project, baseline)
         if not issues:
             self.logger.debug(f"No issues found for project '{project}' and baseline '{baseline}'")
 
         issues.sort(key=self.sort_by_issue_key)
-        requirement_nodes = self._build_requirement_nodes(issues, project_config)
+        requirement_nodes = self._build_requirement_nodes(issues, project)
         requirement_tree = self._build_requirement_tree(issues, requirement_nodes)
 
         return BaselineObjectNode(
@@ -222,7 +209,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         field_ids = [field["id"] for field in fields]
 
         issue_keys = [req_key.id for req_key in requirement_keys]
-        extra_jql = f"issuekey in ({','.join(issue_keys)})"
+        extra_jql = f"issuekey IN ({','.join(issue_keys)})"
 
         issues = self._fetch_issues(
             project,
@@ -356,8 +343,12 @@ class JiraRequirementReader(AbstractRequirementReader):
         if config_prefix not in config_dict:
             raise ValueError(f"TOML section [{config_prefix}] not found in reader config file.")
 
+        project_configs = config_dict["projects"] if "projects" in config_dict else {}
+
         try:
-            return JiraRequirementReaderConfig(**config_dict[config_prefix])
+            return JiraRequirementReaderConfig(
+                **config_dict[config_prefix], projects=project_configs
+            )
         except ValidationError as e:
             error_message = "; ".join([err["msg"] for err in e.errors()])
             raise ValueError(f"Invalid reader config: {error_message}") from e
@@ -614,8 +605,10 @@ class JiraRequirementReader(AbstractRequirementReader):
                 raise NotFound("Requirement not found")
 
         # Check if the issue is of a requirement type
-        valid_types = [t.lower() for t in self.config.requirement_types]
-        if issue.fields.issuetype.name.lower() not in valid_types:
+        requirement_types = self._get_requirement_types_for_project(project)
+        requirement_node_types = self._get_requirement_node_types_for_project(project)
+        valid_types = requirement_types + requirement_node_types
+        if issue.fields.issuetype.name not in valid_types:
             raise NotFound("Requirement not found")
 
         return issue
@@ -637,11 +630,9 @@ class JiraRequirementReader(AbstractRequirementReader):
         return field_name
 
     def _fetch_issues(
-        
         self,
         project: str,
         baseline: str,
-        project_config: ProjectConfig,
         extra_jql: str | None = None,
         fields: str | None = "*all",
         expand: str | None = None,
@@ -657,19 +648,11 @@ class JiraRequirementReader(AbstractRequirementReader):
         else:
             jql_query = f'project = "{project_key}" AND {baseline_field} = "{baseline}"'
 
-        # Add requirement_types and requirement_node_types to JQL if specified
-        type_clauses = []
-
-        if project_config.requirement_types:
-            type_clauses.extend(
-                [f'issuetype = "{elem}"' for elem in project_config.requirement_types]
-            )
-        if project_config.requirement_node_types:
-            type_clauses.extend(
-                [f'issuetype = "{elem}"' for elem in project_config.requirement_node_types]
-            )
-        if type_clauses:
-            jql_query += " AND (" + " OR ".join(type_clauses) + ")"
+        requirement_types = self._get_requirement_types_for_project(project)
+        requirement_node_types = self._get_requirement_node_types_for_project(project)
+        issuetypes = requirement_types + requirement_node_types
+        issuetype_str = ",".join(f'"{issuetype}"' for issuetype in issuetypes)
+        jql_query += f" AND issuetype IN ({issuetype_str})"
 
         if extra_jql:
             jql_query += f" AND {extra_jql}"
@@ -791,15 +774,13 @@ class JiraRequirementReader(AbstractRequirementReader):
         )
 
     def _build_requirement_nodes(
-        self, issues: list[Issue], project_config: ProjectConfig
+        self, issues: list[Issue], project: str
     ) -> dict[str, RequirementObjectNode]:
         """Convert issues into requirement nodes."""
         requirement_nodes = {}
+        requirement_types = self._get_requirement_types_for_project(project)
         for issue in issues:
-            if project_config.requirement_node_types is not None:
-                is_requirement = issue.fields.issuetype.name not in project_config.requirement_node_types
-            else:
-                is_requirement = True
+            is_requirement = issue.fields.issuetype.name in requirement_types
             req_node = self._build_requirementobjectnode_from_issue(
                 issue, is_requirement=is_requirement
             )
@@ -822,7 +803,9 @@ class JiraRequirementReader(AbstractRequirementReader):
                 parent_key = parent_obj.key
                 if parent_key not in requirement_nodes:
                     parent_issue = self._fetch_issue(parent_key)
-                    parent = self._build_requirementobjectnode_from_issue(parent_issue)
+                    parent = self._build_requirementobjectnode_from_issue(
+                        parent_issue
+                    )  # TODO: set is_requirement properly
                     requirement_nodes[parent_key] = parent
 
                 parent = requirement_nodes[parent_key]
@@ -847,7 +830,9 @@ class JiraRequirementReader(AbstractRequirementReader):
     def _build_extendedrequirementobject_from_issue(
         self, issue: Issue, key: RequirementKey, baseline: str
     ) -> ExtendedRequirementObject:
-        requirement_object = self._build_requirementobjectnode_from_issue(issue, key)
+        requirement_object = self._build_requirementobjectnode_from_issue(
+            issue, key
+        )  # TODO: set is_requirement properly
 
         attachments_field = getattr(issue.fields, "attachment", None)
         if attachments_field:
@@ -883,3 +868,19 @@ class JiraRequirementReader(AbstractRequirementReader):
         if hasattr(value, "value"):
             return [str(value.value)]
         return [str(value)]
+
+    def _get_requirement_types_for_project(self, project: str) -> list[str]:
+        requirement_types = self.config.requirement_types
+        if "project" in self.config.projects:
+            project_config = self.config.projects[project]
+            if project_config.requirement_types is not None:
+                requirement_types = project_config.requirement_types
+        return requirement_types
+
+    def _get_requirement_node_types_for_project(self, project: str) -> list[str]:
+        requirement_node_types = self.config.requirement_node_types
+        if "project" in self.config.projects:
+            project_config = self.config.projects[project]
+            if project_config.requirement_node_types is not None:
+                requirement_node_types = project_config.requirement_node_types
+        return requirement_node_types
