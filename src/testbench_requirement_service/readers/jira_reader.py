@@ -51,6 +51,8 @@ class JiraRequirementReaderConfig(BaseModel):
     access_token_secret: str | None = None
     consumer_key: str | None = None
     key_cert: str | None = None
+    requirement_types: list[str] = None
+    requirement_node_types: list[str] = None
 
     baseline_field: str = "fixVersions"
 
@@ -107,14 +109,19 @@ class JiraRequirementReader(AbstractRequirementReader):
         self.logger.level = logging.DEBUG
 
         self.config = self._load_and_validate_config_from_path(Path(config_path))
-        self._projects_config = None
+        self._projects_config = ProjectConfig(
+            requirement_types=self.config.requirement_types or [],
+            requirement_node_types=self.config.requirement_node_types or [],
+        )
         self._config_path = config_path
 
         self.jira = self._connect()
-        self.uses_new_issuetypes_endpoint = (not self.jira._is_cloud) and (
-            self.jira._version >= (8, 4, 0)
+        self.uses_new_issuetypes_endpoint = (
+            not self.jira._is_cloud and self.jira._version >= (8, 4, 0)
         )
-        self.uses_manual_pagination = not self.jira._is_cloud and self.jira._version < (8, 4, 0)
+        self.uses_manual_pagination = (
+            not self.jira._is_cloud and self.jira._version < (8, 4, 0)
+        )
 
         # key: project name (format: "{project.name} ({project.key})"), value: Project Resource
         self._projects: dict[str, Project] = {}
@@ -167,7 +174,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             if project in config_dict[prefix]:
                 return ProjectConfig(**config_dict[prefix][project])
 
-        return ProjectConfig()
+        return self._projects_config
 
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         project_config = self._load_project_config(project)
