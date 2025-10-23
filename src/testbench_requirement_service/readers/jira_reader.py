@@ -38,7 +38,7 @@ from testbench_requirement_service.readers.abstract_reader import AbstractRequir
 
 class JiraProjectConfig(BaseModel):
     requirement_types: list[str] | None = None
-    requirement_node_types: list[str] | None = None
+    requirement_group_types: list[str] | None = None
 
 
 class JiraRequirementReaderConfig(BaseModel):
@@ -56,8 +56,8 @@ class JiraRequirementReaderConfig(BaseModel):
     key_cert: str | None = None
 
     baseline_field: str = "fixVersions"
-    requirement_types: list[str] = ["Story"]
-    requirement_node_types: list[str] = ["Epic"]
+    requirement_types: list[str] = ["Story", "Task"]
+    requirement_group_types: list[str] = ["Epic"]
 
     projects: dict[str, JiraProjectConfig] = ModelField(default_factory=dict)
 
@@ -604,11 +604,10 @@ class JiraRequirementReader(AbstractRequirementReader):
             if baseline != "Current Baseline" and baseline not in issue_baselines:
                 raise NotFound("Requirement not found")
 
-        # Check if the issue is of a requirement type
-        requirement_types = self._get_requirement_types_for_project(project)
-        requirement_node_types = self._get_requirement_node_types_for_project(project)
-        valid_types = requirement_types + requirement_node_types
-        if issue.fields.issuetype.name not in valid_types:
+        # Check if the issue is a requirement type or requirement group type
+        is_requirement = self._is_requirement_issue(issue, project)
+        is_requirement_group = self._is_requirement_group_issue(issue, project)
+        if not is_requirement and not is_requirement_group:
             raise NotFound("Requirement not found")
 
         return issue
@@ -648,9 +647,9 @@ class JiraRequirementReader(AbstractRequirementReader):
         else:
             jql_query = f'project = "{project_key}" AND {baseline_field} = "{baseline}"'
 
-        requirement_types = self._get_requirement_types_for_project(project)
-        requirement_node_types = self._get_requirement_node_types_for_project(project)
-        issuetypes = requirement_types + requirement_node_types
+        requirement_types = self._get_requirement_types(project)
+        requirement_group_types = self._get_requirement_group_types(project)
+        issuetypes = requirement_types + requirement_group_types
         issuetype_str = ",".join(f'"{issuetype}"' for issuetype in issuetypes)
         jql_query += f" AND issuetype IN ({issuetype_str})"
 
@@ -778,9 +777,8 @@ class JiraRequirementReader(AbstractRequirementReader):
     ) -> dict[str, RequirementObjectNode]:
         """Convert issues into requirement nodes."""
         requirement_nodes = {}
-        requirement_types = self._get_requirement_types_for_project(project)
         for issue in issues:
-            is_requirement = issue.fields.issuetype.name in requirement_types
+            is_requirement = self._is_requirement_issue(issue, project)
             req_node = self._build_requirementobjectnode_from_issue(
                 issue, is_requirement=is_requirement
             )
@@ -802,18 +800,14 @@ class JiraRequirementReader(AbstractRequirementReader):
 
                 parent_key = parent_obj.key
                 if parent_key not in requirement_nodes:
-                    parent_issue = self._fetch_issue(parent_key)
-                    parent = self._build_requirementobjectnode_from_issue(
-                        parent_issue
-                    )  # TODO: set is_requirement properly
-                    requirement_nodes[parent_key] = parent
+                    self.logger.warning(
+                        f"Parent issue {parent_key} of issue {issue.key} not found among fetched issues"
+                    )
+                    continue
 
                 parent = requirement_nodes[parent_key]
                 parent.children = parent.children or []
                 parent.children.append(requirement_nodes[issue.key])
-
-                if parent_key not in requirement_tree:
-                    requirement_tree[parent_key] = parent
         except Exception as e:
             self.logger.error(f"Error building requirement tree: {e}")
             return {}
@@ -869,18 +863,22 @@ class JiraRequirementReader(AbstractRequirementReader):
             return [str(value.value)]
         return [str(value)]
 
-    def _get_requirement_types_for_project(self, project: str) -> list[str]:
-        requirement_types = self.config.requirement_types
-        if "project" in self.config.projects:
+    def _get_requirement_types(self, project: str | None = None) -> list[str]:
+        if project and project in self.config.projects:
             project_config = self.config.projects[project]
             if project_config.requirement_types is not None:
-                requirement_types = project_config.requirement_types
-        return requirement_types
+                return project_config.requirement_types
+        return self.config.requirement_types
 
-    def _get_requirement_node_types_for_project(self, project: str) -> list[str]:
-        requirement_node_types = self.config.requirement_node_types
-        if "project" in self.config.projects:
+    def _get_requirement_group_types(self, project: str | None = None) -> list[str]:
+        if project and project in self.config.projects:
             project_config = self.config.projects[project]
-            if project_config.requirement_node_types is not None:
-                requirement_node_types = project_config.requirement_node_types
-        return requirement_node_types
+            if project_config.requirement_group_types is not None:
+                return project_config.requirement_group_types
+        return self.config.requirement_group_types
+
+    def _is_requirement_issue(self, issue: Issue, project: str | None = None) -> bool:
+        return issue.fields.issuetype.name in self._get_requirement_types(project)
+
+    def _is_requirement_group_issue(self, issue: Issue, project: str | None = None) -> bool:
+        return issue.fields.issuetype.name in self._get_requirement_group_types(project)
