@@ -378,46 +378,8 @@ class JiraRequirementReader(AbstractRequirementReader):
             f"{project.name} ({project.key})": project for project in self.jira.projects()
         }
 
-    def _fetch_baselines_for_project(self, project: str) -> list[str]:
-        project_key = self.projects[project].key
-        issue_fields = self._fetch_project_issue_fields(project_key)
-        for field in issue_fields:
-            if hasattr(field, "key"):
-                field_id = field.key
-            elif hasattr(field, "fieldId"):
-                field_id = field.fieldId
-            else:
-                field_id = field.name
-                logging.warning(
-                    f"Field {field.name} has no key or fieldId.\n"
-                    f"  dir: {dir(field)}\n"
-                    f"  type: {type(field)}"
-                )
-            if self.config.baseline_field in (field.name, field_id):
-                self._baselines[project] = self._extract_baselines_from_issue_field(field)
-                return self._baselines[project]
-        self.logger.warning(f"Field {self.config.baseline_field} not found in project {project}")
-        return []
-
-    def _get_baselines_for_project(self, project: str) -> list[str]:
-        if not self._baselines or project not in self._baselines:
-            # Cache miss: fetch baselines
-            self._fetch_baselines_for_project(project)
-        return self._baselines.get(project, [])
-
-    def _extract_baselines_from_issue_field(self, field: Field) -> list[str]:
-        baselines = []
-        for value in field.allowedValues:
-            if hasattr(value, "name"):
-                baselines.append(value.name)
-            elif hasattr(value, "value"):
-                baselines.append(value.value)
-            else:
-                self.logger.debug(f"Unknown allowed value format: {value} {type(value)}")
-        return baselines
-
     def _fetch_project_issue_fields(self, project_key: str) -> list[Field]:
-        issue_fields: dict[str, Field] = {}
+        fields_dict: dict[str, Field] = {}
 
         try:
             if self.use_new_issuetypes_endpoint:
@@ -425,30 +387,74 @@ class JiraRequirementReader(AbstractRequirementReader):
                 issue_types = self.jira.project_issue_types(project_key, maxResults=100)
                 for issue_type in issue_types:
                     try:
-                        issue_fields = self.jira.project_issue_fields(
+                        fields_list = self.jira.project_issue_fields(
                             project_key, issue_type=issue_type.id, maxResults=100
                         )
-                        for field in issue_fields:
-                            issue_fields[field.id] = field
+                        for field in fields_list:
+                            fields_dict[field.id] = field
                     except Exception as e:
                         self.logger.warning(
-                            f"Error fetching issue fields for issue type {issue_type.id}"
+                            f"Error fetching issue fields for issue type {issue_type.id}: {e}"
                         )
-                        self.logger.debug(e)
             else:
                 self.logger.debug("_fetch_project_issue_fields: Use old createmeta endpoint")
                 createmeta = self.jira.createmeta(project_key, expand="projects.issuetypes.fields")
                 issue_types = createmeta["projects"][0]["issuetypes"]
                 for issue_type in issue_types:
                     for field_id, field_data in issue_type["fields"].items():
-                        issue_fields[field_id] = Field(
-                            {}, session=self.jira._session, raw=field_data
+                        fields_dict[field_id] = Field(
+                            options=self.jira._options, session=self.jira._session, raw=field_data
                         )
         except Exception as e:
-            self.logger.error(f"Error fetching issue fields for project {project_key}")
-            raise e
+            self.logger.error(f"Error fetching issue fields for project {project_key}: {e}")
+            raise
 
-        return list(issue_fields.values())
+        return list(fields_dict.values())
+
+    def _get_field_id(self, field):
+        for attr in ("id", "key", "fieldId"):
+            if hasattr(field, attr):
+                return getattr(field, attr)
+        self.logger.warning(f"Field {field.name} has no id, key, or fieldId.")
+        return field.name
+
+    def _is_version_type_field(self, field: Field) -> bool:
+        schema_type = getattr(field.schema, "type", None)
+        items_type = getattr(field.schema, "items", None)
+        return schema_type == "version" or (schema_type == "array" and items_type == "version")
+
+    def _fetch_baseline_field(self, project_key: str) -> Field | None:
+        issue_fields = self._fetch_project_issue_fields(project_key)
+        for field in issue_fields:
+            field_id = self._get_field_id(field)
+            if self.config.baseline_field in (field_id, field.name):
+                return field
+        self.logger.warning(
+            f"Configured baseline_field '{self.config.baseline_field}' not found in project {project_key}"
+        )
+        return None
+
+    def _fetch_project_versions(self, project_key: str) -> list[str]:
+        try:
+            versions = self.jira.project_versions(project_key)
+            if not versions:
+                return []
+            return [version.name for version in versions if version.name]
+        except Exception as e:
+            self.logger.error(f"Error fetching project versions for {project_key}: {e}")
+            return []
+
+    def _fetch_baselines_for_project(self, project: str) -> list[str]:
+        project_key = self.projects[project].key
+        baselines = self._fetch_project_versions(project_key)
+        self._baselines[project] = baselines
+        return baselines
+
+    def _get_baselines_for_project(self, project: str) -> list[str]:
+        if not self._baselines or project not in self._baselines:
+            # Cache miss: fetch baselines
+            self._fetch_baselines_for_project(project)
+        return self._baselines.get(project, [])
 
     def _fetch_all_custom_fields(self) -> list[dict[str, Any]]:
         return [
