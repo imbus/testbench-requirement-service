@@ -2,6 +2,7 @@
 # ruff: noqa
 
 import base64
+import copy
 import logging
 import os
 import re
@@ -34,7 +35,9 @@ from testbench_requirement_service.models.requirement import (
     UserDefinedAttributeResponse,
 )
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
-import copy
+
+MINOR_CHANGE_FIELDS = {"summary", "affectsVersions", "status"}
+MAJOR_CHANGE_FIELDS = {"fixVersions", "description"}
 
 
 class JiraProjectConfig(BaseModel):
@@ -276,16 +279,12 @@ class JiraRequirementReader(AbstractRequirementReader):
             )
         )
 
-        # Define which fields trigger version bumps
-        minor_change_fields = {"summary", "affectsVersions", "status"}
-        major_change_fields = {"fixVersions", "description"}
-
         histories = sorted(issue.changelog.histories, key=lambda h: h.created)
         for history in histories:
             changed_fields = {item.field for item in history.items}
 
-            is_major = bool(major_change_fields & changed_fields)
-            is_minor = bool(minor_change_fields & changed_fields)
+            is_major = bool(MAJOR_CHANGE_FIELDS & changed_fields)
+            is_minor = bool(MINOR_CHANGE_FIELDS & changed_fields)
 
             if is_major:
                 major += 1
@@ -313,15 +312,13 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     # TODO: Maybe extract a more meaningful comment. Different languages?
     def _get_change_comment(self, history) -> str:
-        changed_fields = [item.field for item in history.items]
-        if "summary" in changed_fields and "description" in changed_fields:
-            return "Summary and Description updated"
-        elif "summary" in changed_fields:
-            return "Summary updated"
-        elif "description" in changed_fields:
-            return "Description updated"
-        else:
-            return f"Fields updated: {', '.join(changed_fields)}"
+        changes = []
+        for item in history.items:
+            from_val = item.fromString if hasattr(item, "fromString") else ""
+            to_val = item.toString if hasattr(item, "toString") else ""
+            changes.append(f"{item.field}: '{from_val}' → '{to_val}'")
+        comment = "; ".join(changes) if changes else "Fields updated"
+        return comment
 
     @staticmethod
     def sort_by_issue_key(issue: Issue):
@@ -773,9 +770,6 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         issue_copy = copy.deepcopy(issue)
 
-        minor_change_fields = {"summary", "affectsVersions", "status"}
-        major_change_fields = {"fixVersions", "description"}
-
         histories = sorted(getattr(issue_copy.changelog, "histories", []), key=lambda h: h.created)
         major = 1
         minor = 0
@@ -784,8 +778,8 @@ class JiraRequirementReader(AbstractRequirementReader):
         for history in histories:
             changed_fields = {item.field for item in getattr(history, "items", [])}
 
-            is_major = bool(major_change_fields & changed_fields)
-            is_minor = bool(minor_change_fields & changed_fields)
+            is_major = bool(MAJOR_CHANGE_FIELDS & changed_fields)
+            is_minor = bool(MINOR_CHANGE_FIELDS & changed_fields)
 
             # If we've reached or passed the target version, revert fields to their previous values
             if (major > target_major) or (major == target_major and minor >= target_minor):
