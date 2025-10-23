@@ -34,6 +34,7 @@ from testbench_requirement_service.models.requirement import (
     UserDefinedAttributeResponse,
 )
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
+import copy
 
 
 class JiraProjectConfig(BaseModel):
@@ -247,7 +248,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             project=project,
             baseline=baseline,
             fields=fields,
-            expand="renderedFields",
+            expand="renderedFields,changelog",
         )
         return self._build_extendedrequirementobject_from_issue(issue, key, baseline)
 
@@ -263,43 +264,48 @@ class JiraRequirementReader(AbstractRequirementReader):
         )
 
         versions = []
-
+        minor = 0
+        major = 1 
         # Add creation as the initial version
         versions.append(
             RequirementVersionObject(
-                name="1.0",
+                name=f"{major}.{minor}",
                 date=issue.fields.created,
-                author=getattr(issue.fields.creator, "displayName", ""),
+                author=issue.fields.creator.displayName,
                 comment="Initial version",  # TODO: maybe use a more meaningful comment
             )
         )
 
-        current_summary = issue.fields.summary
-        relevant_fields = {
-            "summary",
-            "description",
-            "status",
-            self.config.baseline_field,
-        }
+        # Define which fields trigger version bumps
+        minor_change_fields = {"summary", "affectsVersions", "status"}
+        major_change_fields = {"fixVersions", "description"}
 
-        # Add newer versions from issue changelog if there are relevant changes
         histories = sorted(issue.changelog.histories, key=lambda h: h.created)
-        for idx, history in enumerate(histories, start=1):
-            summary = current_summary
-            changed_fields = []
-            for item in history.items:
-                if item.field == "summary":
-                    summary = item.toString or current_summary
-                changed_fields.append(item.field)
+        for history in histories:
+            changed_fields = {item.field for item in history.items}
 
-            relevant_change = any(field in relevant_fields for field in changed_fields)
-            if relevant_change:
+            is_major = bool(major_change_fields & changed_fields)
+            is_minor = bool(minor_change_fields & changed_fields)
+
+            if is_major:
+                major += 1
+                minor = 0
                 versions.append(
                     RequirementVersionObject(
-                        name=f"1.{idx}",
-                        date=history.created,
-                        author=history.author.displayName,
-                        comment=self._get_change_comment(history),
+                    name=f"{major}.{minor}",
+                    date=history.created,
+                    author=getattr(history.author, "displayName", "Unknown"),
+                    comment=self._get_change_comment(history),
+                    )
+                )
+            elif is_minor:
+                minor += 1
+                versions.append(
+                    RequirementVersionObject(
+                    name=f"{major}.{minor}",
+                    date=history.created,
+                    author=getattr(history.author, "displayName", "Unknown"),
+                    comment=self._get_change_comment(history),
                     )
                 )
 
@@ -743,18 +749,96 @@ class JiraRequirementReader(AbstractRequirementReader):
                 valueType="BOOLEAN",
                 booleanValue=bool(field_value),
             )
+        
+    def _get_issue_version(self, issue: Issue, key: RequirementKey) -> Issue:
+        """
+        Reconstructs the issue's fields to reflect their state at the specified version.
+        Modifies the issue object in-place.
+
+        Args:
+            issue (Issue): The Jira issue object.
+            key (RequirementKey): The requirement key containing the target version.
+
+        Returns:
+            Issue: The issue object with fields set to the specified version.
+        """
+        if key is None:
+            return issue
+
+        try:
+            target_major, target_minor = map(int, key.version.split("."))
+        except Exception:
+            # Fallback to current issue if version parsing fails
+            return issue
+
+        issue_copy = copy.deepcopy(issue)
+
+        minor_change_fields = {"summary", "affectsVersions", "status"}
+        major_change_fields = {"fixVersions", "description"}
+
+        histories = sorted(getattr(issue_copy.changelog, "histories", []), key=lambda h: h.created)
+        major = 1
+        minor = 0
+        updated_fields = set()
+
+        for history in histories:
+            changed_fields = {item.field for item in getattr(history, "items", [])}
+
+            is_major = bool(major_change_fields & changed_fields)
+            is_minor = bool(minor_change_fields & changed_fields)
+
+            # If we've reached or passed the target version, revert fields to their previous values
+            if (major > target_major) or (major == target_major and minor >= target_minor):
+                for item in getattr(history, "items", []):
+                    if item.field in changed_fields and item.field not in updated_fields:
+                        self._set_issue_field(issue_copy, item.field, item.fromString)
+                        updated_fields.add(item.field)
+            else:
+                for item in getattr(history, "items", []):
+                    if item.field in changed_fields:
+                        self._set_issue_field(issue_copy, item.field, item.toString)
+                        updated_fields.add(item.field)
+
+            if is_major:
+                major += 1
+                minor = 0
+            elif is_minor:
+                minor += 1
+        
+        if major ==  target_major and minor == target_minor:
+            return issue
+
+        return issue_copy
+
+    def _set_issue_field(self, issue: Issue, field_name: str, value: Any) -> None:
+        """
+        Helper to set a field value on the issue.fields object, handling nested attributes.
+        """
+        if hasattr(issue.renderedFields, field_name):
+            setattr(issue.renderedFields, field_name, value)
+    
+        if hasattr(issue.fields, field_name):
+            attr = getattr(issue.fields, field_name)
+            if hasattr(attr, "name"):
+                attr.name = value
+            elif hasattr(attr, "displayName"):
+                attr.displayName = value
+            else:
+                setattr(issue.fields, field_name, value)
+        else:
+            setattr(issue.fields, field_name, value)
 
     def _build_requirementobjectnode_from_issue(
         self, issue: Issue, key: RequirementKey | None = None, is_requirement: bool = True
     ) -> RequirementObjectNode:
         assignee = getattr(issue.fields, "assignee", None)
         creator = getattr(issue.fields, "creator", None)
-        if assignee:
+        owner = ""
+        if assignee and getattr(assignee, "displayName", None) != None:
             owner = assignee.displayName
-        elif creator:
-            owner = creator.displayName if creator else ""
-        else:
-            owner = ""
+        elif creator and getattr(creator, "displayName", None) != None:
+            owner = creator.displayName
+            
 
         status_field = getattr(issue.fields, "status", None)
         status = status_field.name if status_field else ""
@@ -830,6 +914,7 @@ class JiraRequirementReader(AbstractRequirementReader):
     def _build_extendedrequirementobject_from_issue(
         self, issue: Issue, key: RequirementKey, baseline: str
     ) -> ExtendedRequirementObject:
+        issue = self._get_issue_version(issue, key)
         requirement_object = self._build_requirementobjectnode_from_issue(
             issue, key
         )  # TODO: set is_requirement properly
