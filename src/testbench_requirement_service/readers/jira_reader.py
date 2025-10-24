@@ -266,6 +266,9 @@ class JiraRequirementReader(AbstractRequirementReader):
             expand="changelog",
         )
 
+        return self._generate_requirement_versions(issue)
+
+    def _generate_requirement_versions(self, issue:Issue):
         versions = []
         minor = 0
         major = 1 
@@ -274,14 +277,14 @@ class JiraRequirementReader(AbstractRequirementReader):
             RequirementVersionObject(
                 name=f"{major}.{minor}",
                 date=issue.fields.created,
-                author=issue.fields.creator.displayName,
+                author=getattr(issue.fields.creator, "displayName", "Unknown"),
                 comment="Initial version",  # TODO: maybe use a more meaningful comment
             )
         )
 
         histories = sorted(issue.changelog.histories, key=lambda h: h.created)
         for history in histories:
-            changed_fields = {item.field for item in history.items}
+            changed_fields = {item.field for item in getattr(history, "items", [])}
 
             is_major = bool(MAJOR_CHANGE_FIELDS & changed_fields)
             is_minor = bool(MINOR_CHANGE_FIELDS & changed_fields)
@@ -307,8 +310,8 @@ class JiraRequirementReader(AbstractRequirementReader):
                     comment=self._get_change_comment(history),
                     )
                 )
-
         return versions
+            
 
     # TODO: Maybe extract a more meaningful comment. Different languages?
     def _get_change_comment(self, history) -> str:
@@ -764,14 +767,14 @@ class JiraRequirementReader(AbstractRequirementReader):
         Returns:
             Issue: The issue object with fields set to the specified version.
         """
-        if key is None:
+        if key is None or key.version == "current":
             return issue
 
         try:
             target_major, target_minor = map(int, key.version.split("."))
-        except Exception:
-            # Fallback to current issue if version parsing fails
-            return issue
+        except Exception as e:
+            self.logger.error(f"Invalid version format '{key.version}' for requirement key '{key.id}': {e}")
+            raise ValueError(f"Invalid version format '{key.version}' for requirement key '{key.id}'. Expected format 'major.minor'.") from e
 
         issue_copy = copy.deepcopy(issue)
 
@@ -848,7 +851,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         return RequirementObjectNode(
             name=getattr(issue.fields, "summary", ""),
             extendedID=issue.key,
-            key=key or RequirementKey(id=issue.key, version="1.0"),
+            key=key or RequirementKey(id=issue.key, version="current"),
             owner=owner,
             status=status,
             priority=priority,
