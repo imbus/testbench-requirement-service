@@ -36,13 +36,13 @@ from testbench_requirement_service.models.requirement import (
 )
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 
-MINOR_CHANGE_FIELDS = {"summary", "affectsVersions", "status"}
-MAJOR_CHANGE_FIELDS = {"fixVersions", "description"}
+MINOR_CHANGE_FIELDS = {"summary", "description", "affectsVersions", "status"}
+MAJOR_CHANGE_FIELDS = {"fixVersions"}
 
 
 class JiraProjectConfig(BaseModel):
     requirement_types: list[str] | None = None
-    requirement_node_types: list[str] | None = None
+    requirement_group_types: list[str] | None = None
 
 
 class JiraRequirementReaderConfig(BaseModel):
@@ -60,8 +60,8 @@ class JiraRequirementReaderConfig(BaseModel):
     key_cert: str | None = None
 
     baseline_field: str = "fixVersions"
-    requirement_types: list[str] = ["Story"]
-    requirement_node_types: list[str] = ["Epic"]
+    requirement_types: list[str] = ["Story", "Task"]
+    requirement_group_types: list[str] = ["Epic"]
 
     projects: dict[str, JiraProjectConfig] = ModelField(default_factory=dict)
 
@@ -381,46 +381,8 @@ class JiraRequirementReader(AbstractRequirementReader):
             f"{project.name} ({project.key})": project for project in self.jira.projects()
         }
 
-    def _fetch_baselines_for_project(self, project: str) -> list[str]:
-        project_key = self.projects[project].key
-        issue_fields = self._fetch_project_issue_fields(project_key)
-        for field in issue_fields:
-            if hasattr(field, "key"):
-                field_id = field.key
-            elif hasattr(field, "fieldId"):
-                field_id = field.fieldId
-            else:
-                field_id = field.name
-                logging.warning(
-                    f"Field {field.name} has no key or fieldId.\n"
-                    f"  dir: {dir(field)}\n"
-                    f"  type: {type(field)}"
-                )
-            if self.config.baseline_field in (field.name, field_id):
-                self._baselines[project] = self._extract_baselines_from_issue_field(field)
-                return self._baselines[project]
-        self.logger.warning(f"Field {self.config.baseline_field} not found in project {project}")
-        return []
-
-    def _get_baselines_for_project(self, project: str) -> list[str]:
-        if not self._baselines or project not in self._baselines:
-            # Cache miss: fetch baselines
-            self._fetch_baselines_for_project(project)
-        return self._baselines.get(project, [])
-
-    def _extract_baselines_from_issue_field(self, field: Field) -> list[str]:
-        baselines = []
-        for value in field.allowedValues:
-            if hasattr(value, "name"):
-                baselines.append(value.name)
-            elif hasattr(value, "value"):
-                baselines.append(value.value)
-            else:
-                self.logger.debug(f"Unknown allowed value format: {value} {type(value)}")
-        return baselines
-
     def _fetch_project_issue_fields(self, project_key: str) -> list[Field]:
-        issue_fields: dict[str, Field] = {}
+        fields_dict: dict[str, Field] = {}
 
         try:
             if self.use_new_issuetypes_endpoint:
@@ -428,30 +390,74 @@ class JiraRequirementReader(AbstractRequirementReader):
                 issue_types = self.jira.project_issue_types(project_key, maxResults=100)
                 for issue_type in issue_types:
                     try:
-                        issue_fields = self.jira.project_issue_fields(
+                        fields_list = self.jira.project_issue_fields(
                             project_key, issue_type=issue_type.id, maxResults=100
                         )
-                        for field in issue_fields:
-                            issue_fields[field.id] = field
+                        for field in fields_list:
+                            fields_dict[field.id] = field
                     except Exception as e:
                         self.logger.warning(
-                            f"Error fetching issue fields for issue type {issue_type.id}"
+                            f"Error fetching issue fields for issue type {issue_type.id}: {e}"
                         )
-                        self.logger.debug(e)
             else:
                 self.logger.debug("_fetch_project_issue_fields: Use old createmeta endpoint")
                 createmeta = self.jira.createmeta(project_key, expand="projects.issuetypes.fields")
                 issue_types = createmeta["projects"][0]["issuetypes"]
                 for issue_type in issue_types:
                     for field_id, field_data in issue_type["fields"].items():
-                        issue_fields[field_id] = Field(
-                            {}, session=self.jira._session, raw=field_data
+                        fields_dict[field_id] = Field(
+                            options=self.jira._options, session=self.jira._session, raw=field_data
                         )
         except Exception as e:
-            self.logger.error(f"Error fetching issue fields for project {project_key}")
-            raise e
+            self.logger.error(f"Error fetching issue fields for project {project_key}: {e}")
+            raise
 
-        return list(issue_fields.values())
+        return list(fields_dict.values())
+
+    def _get_field_id(self, field):
+        for attr in ("id", "key", "fieldId"):
+            if hasattr(field, attr):
+                return getattr(field, attr)
+        self.logger.warning(f"Field {field.name} has no id, key, or fieldId.")
+        return field.name
+
+    def _is_version_type_field(self, field: Field) -> bool:
+        schema_type = getattr(field.schema, "type", None)
+        items_type = getattr(field.schema, "items", None)
+        return schema_type == "version" or (schema_type == "array" and items_type == "version")
+
+    def _fetch_baseline_field(self, project_key: str) -> Field | None:
+        issue_fields = self._fetch_project_issue_fields(project_key)
+        for field in issue_fields:
+            field_id = self._get_field_id(field)
+            if self.config.baseline_field in (field_id, field.name):
+                return field
+        self.logger.warning(
+            f"Configured baseline_field '{self.config.baseline_field}' not found in project {project_key}"
+        )
+        return None
+
+    def _fetch_project_versions(self, project_key: str) -> list[str]:
+        try:
+            versions = self.jira.project_versions(project_key)
+            if not versions:
+                return []
+            return [version.name for version in versions if version.name]
+        except Exception as e:
+            self.logger.error(f"Error fetching project versions for {project_key}: {e}")
+            return []
+
+    def _fetch_baselines_for_project(self, project: str) -> list[str]:
+        project_key = self.projects[project].key
+        baselines = self._fetch_project_versions(project_key)
+        self._baselines[project] = baselines
+        return baselines
+
+    def _get_baselines_for_project(self, project: str) -> list[str]:
+        if not self._baselines or project not in self._baselines:
+            # Cache miss: fetch baselines
+            self._fetch_baselines_for_project(project)
+        return self._baselines.get(project, [])
 
     def _fetch_all_custom_fields(self) -> list[dict[str, Any]]:
         return [
@@ -607,11 +613,10 @@ class JiraRequirementReader(AbstractRequirementReader):
             if baseline != "Current Baseline" and baseline not in issue_baselines:
                 raise NotFound("Requirement not found")
 
-        # Check if the issue is of a requirement type
-        requirement_types = self._get_requirement_types_for_project(project)
-        requirement_node_types = self._get_requirement_node_types_for_project(project)
-        valid_types = requirement_types + requirement_node_types
-        if issue.fields.issuetype.name not in valid_types:
+        # Check if the issue is a requirement type or requirement group type
+        is_requirement = self._is_requirement_issue(issue, project)
+        is_requirement_group = self._is_requirement_group_issue(issue, project)
+        if not is_requirement and not is_requirement_group:
             raise NotFound("Requirement not found")
 
         return issue
@@ -651,9 +656,9 @@ class JiraRequirementReader(AbstractRequirementReader):
         else:
             jql_query = f'project = "{project_key}" AND {baseline_field} = "{baseline}"'
 
-        requirement_types = self._get_requirement_types_for_project(project)
-        requirement_node_types = self._get_requirement_node_types_for_project(project)
-        issuetypes = requirement_types + requirement_node_types
+        requirement_types = self._get_requirement_types(project)
+        requirement_group_types = self._get_requirement_group_types(project)
+        issuetypes = requirement_types + requirement_group_types
         issuetype_str = ",".join(f'"{issuetype}"' for issuetype in issuetypes)
         jql_query += f" AND issuetype IN ({issuetype_str})"
 
@@ -856,9 +861,8 @@ class JiraRequirementReader(AbstractRequirementReader):
     ) -> dict[str, RequirementObjectNode]:
         """Convert issues into requirement nodes."""
         requirement_nodes = {}
-        requirement_types = self._get_requirement_types_for_project(project)
         for issue in issues:
-            is_requirement = issue.fields.issuetype.name in requirement_types
+            is_requirement = self._is_requirement_issue(issue, project)
             req_node = self._build_requirementobjectnode_from_issue(
                 issue, is_requirement=is_requirement
             )
@@ -880,18 +884,14 @@ class JiraRequirementReader(AbstractRequirementReader):
 
                 parent_key = parent_obj.key
                 if parent_key not in requirement_nodes:
-                    parent_issue = self._fetch_issue(parent_key)
-                    parent = self._build_requirementobjectnode_from_issue(
-                        parent_issue
-                    )  # TODO: set is_requirement properly
-                    requirement_nodes[parent_key] = parent
+                    self.logger.warning(
+                        f"Parent issue {parent_key} of issue {issue.key} not found among fetched issues"
+                    )
+                    continue
 
                 parent = requirement_nodes[parent_key]
                 parent.children = parent.children or []
                 parent.children.append(requirement_nodes[issue.key])
-
-                if parent_key not in requirement_tree:
-                    requirement_tree[parent_key] = parent
         except Exception as e:
             self.logger.error(f"Error building requirement tree: {e}")
             return {}
@@ -948,18 +948,22 @@ class JiraRequirementReader(AbstractRequirementReader):
             return [str(value.value)]
         return [str(value)]
 
-    def _get_requirement_types_for_project(self, project: str) -> list[str]:
-        requirement_types = self.config.requirement_types
-        if "project" in self.config.projects:
+    def _get_requirement_types(self, project: str | None = None) -> list[str]:
+        if project and project in self.config.projects:
             project_config = self.config.projects[project]
             if project_config.requirement_types is not None:
-                requirement_types = project_config.requirement_types
-        return requirement_types
+                return project_config.requirement_types
+        return self.config.requirement_types
 
-    def _get_requirement_node_types_for_project(self, project: str) -> list[str]:
-        requirement_node_types = self.config.requirement_node_types
-        if "project" in self.config.projects:
+    def _get_requirement_group_types(self, project: str | None = None) -> list[str]:
+        if project and project in self.config.projects:
             project_config = self.config.projects[project]
-            if project_config.requirement_node_types is not None:
-                requirement_node_types = project_config.requirement_node_types
-        return requirement_node_types
+            if project_config.requirement_group_types is not None:
+                return project_config.requirement_group_types
+        return self.config.requirement_group_types
+
+    def _is_requirement_issue(self, issue: Issue, project: str | None = None) -> bool:
+        return issue.fields.issuetype.name in self._get_requirement_types(project)
+
+    def _is_requirement_group_issue(self, issue: Issue, project: str | None = None) -> bool:
+        return issue.fields.issuetype.name in self._get_requirement_group_types(project)
