@@ -313,7 +313,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         return versions
             
 
-    # TODO: Maybe extract a more meaningful comment. Different languages?
+    # TODO: Maybe different languages?
     def _get_change_comment(self, history) -> str:
         changes = []
         for item in history.items:
@@ -817,6 +817,8 @@ class JiraRequirementReader(AbstractRequirementReader):
         Helper to set a field value on the issue.fields object, handling nested attributes.
         """
         if hasattr(issue.renderedFields, field_name):
+            if (field_name == "description"):
+                value = self._format_description(value)
             setattr(issue.renderedFields, field_name, value)
     
         if hasattr(issue.fields, field_name):
@@ -970,3 +972,6 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def _is_requirement_group_issue(self, issue: Issue, project: str | None = None) -> bool:
         return issue.fields.issuetype.name in self._get_requirement_group_types(project)
+
+    def _format_description(self, description: str) -> str:
+        return "<p>" + description.replace('\n\n', '</p><p>')+ "</p>"
