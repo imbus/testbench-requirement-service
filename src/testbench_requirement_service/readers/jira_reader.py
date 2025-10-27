@@ -278,7 +278,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 name=f"{major}.{minor}",
                 date=issue.fields.created,
                 author=getattr(issue.fields.creator, "displayName", "Unknown"),
-                comment="Initial version",  # TODO: maybe use a more meaningful comment
+                comment=f"Issue created by {getattr(issue.fields.creator, 'displayName', 'Unknown')} on {datetime.strptime(issue.fields.created, '%Y-%m-%dT%H:%M:%S.%f%z').strftime('%Y-%m-%d %H:%M:%S')}",
             )
         )
 
@@ -562,7 +562,6 @@ class JiraRequirementReader(AbstractRequirementReader):
             mime_type, encoded = attachment_dict[attachment_id]
             img["src"] = f"data:{mime_type};base64,{encoded}"
 
-        # TODO: Sanitize HTML to prevent XSS if necessary
         return str(soup)
 
     def _fetch_issue(
