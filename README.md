@@ -356,20 +356,33 @@ The service includes built-in requirement reader classes that handle different f
 - **Description**: Reads requirement data from a Jira instance using the Jira REST API. The connection is configured via a `.toml` file.
 - **Configuration**:
   The configuration for the reader is read from a `.toml` file with a `[jira]` table as the main section.
+
   #### `[jira]`
 
   | Setting        | Type   | Description                                                                | Required | Default     |
   | -------------- | ------ | -------------------------------------------------------------------------- | -------- | ----------- |
-  | `server_url` | String | Base URL of the Jira REST API Server                                       | Yes      | -           |
-  | `auth_type`  | String | Authentication method to use. Valid values:`basic`, `token`, `oauth` | Yes      | `"basic"` |
+  | `server_url`   | String | Base URL of the Jira REST API Server                                       | Yes      | -           |
+  | `auth_type`    | String | Authentication method to use. Valid values: `basic`, `token`, `oauth`     | Yes      | `"basic"`  |
+  | `baseline_field` | String | Field used to identify baselines in Jira                                  | No       | `fixVersions` |
+  | `requirement_types` | List[String] | List of Jira issue types considered as requirements                     | No       | `["Story", "Task"]` |
+  | `requirement_group_types` | List[String] | List of Jira issue types considered as requirement groups              | No       | `["Epic"]` |
+
+  #### `[projects]`
+
+  | Setting        | Type   | Description                                                                | Required | Default     |
+  | -------------- | ------ | -------------------------------------------------------------------------- | -------- | ----------- |
+  | `requirement_types` | List[String] | Project-specific list of Jira issue types considered as requirements   | No       | Inherits from `[jira]` |
+  | `requirement_group_types` | List[String] | Project-specific list of Jira issue types considered as requirement groups | No       | Inherits from `[jira]` |
+
 - **Environment variables**:
   Depending on the configured `auth_type` in the `[jira]` table of your `.toml` configuration, certain environment variables must be set to provide authentication credentials.
 
   | auth_type | Required Environment Variables                                                                | Description                                                        |
   | --------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-  | `basic` | `JIRA_USERNAME`, `JIRA_API_TOKEN`                                                         | Used for Basic Authentication with username and API token          |
-  | `token` | `JIRA_BEARER_TOKEN`                                                                         | Used for token-based authentication (e.g., personal access tokens) |
-  | `oauth` | `JIRA_ACCESS_TOKEN`, `JIRA_ACCESS_TOKEN_SECRET`, `JIRA_CONSUMER_KEY`, `JIRA_KEY_CERT` | Used for OAuth 1.0a authentication                                 |
+  | `basic`   | `JIRA_USERNAME`, `JIRA_API_TOKEN`                                                             | Used for Basic Authentication with username and API token          |
+  | `token`   | `JIRA_BEARER_TOKEN`                                                                           | Used for token-based authentication (e.g., personal access tokens) |
+  | `oauth`   | `JIRA_ACCESS_TOKEN`, `JIRA_ACCESS_TOKEN_SECRET`, `JIRA_CONSUMER_KEY`, `JIRA_KEY_CERT`         | Used for OAuth 1.0a authentication                                 |
+
 - **Example Configuration**:
 
   ```toml
@@ -378,7 +391,14 @@ The service includes built-in requirement reader classes that handle different f
   [jira]
   server_url = "https://example.atlassian.net/"
   auth_type = "basic"
+  baseline_field = "fixVersions"
+  requirement_types = ["Story", "Task"]
+  requirement_group_types = ["Epic"]
 
+  [projects]
+  [projects.ProjectA]
+  requirement_types = ["Bug", "Task"]
+  requirement_group_types = ["Initiative"]
   ```
 
   Example `.env` file for basic authentication:
