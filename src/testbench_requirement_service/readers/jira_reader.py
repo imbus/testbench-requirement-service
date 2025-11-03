@@ -253,7 +253,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             fields=fields,
             expand="renderedFields,changelog",
         )
-        return self._build_extendedrequirementobject_from_issue(issue, key, baseline)
+        return self._build_extendedrequirementobject_from_issue(project, issue, key, baseline)
 
     def get_requirement_versions(
         self, project: str, baseline: str, key: RequirementKey
@@ -910,12 +910,19 @@ class JiraRequirementReader(AbstractRequirementReader):
         return f"<html><body>{description_html}</body></html>"
 
     def _build_extendedrequirementobject_from_issue(
-        self, issue: Issue, key: RequirementKey, baseline: str
+        self,
+        project: str, 
+        issue: Issue, 
+        key: RequirementKey, 
+        baseline: str
     ) -> ExtendedRequirementObject:
+        is_requirement = self._is_requirement_issue(issue, project)
         issue = self._get_issue_version(issue, key)
         requirement_object = self._build_requirementobjectnode_from_issue(
-            issue, key
-        )  # TODO: set is_requirement properly
+            issue=issue, 
+            key=key, 
+            is_requirement=is_requirement
+        )
 
         attachments_field = getattr(issue.fields, "attachment", None)
         if attachments_field:
