@@ -980,4 +980,6 @@ class JiraRequirementReader(AbstractRequirementReader):
         return issue.fields.issuetype.name in self._get_requirement_group_types(project)
 
     def _format_description(self, description: str) -> str:
-        return "<p>" + description.replace('\n\n', '</p><p>')+ "</p>"
+        if not isinstance(description, str) or not description:
+            return ""
+        return "<p>" + description.replace('\n\n', '</p><p>') + "</p>"
