@@ -892,8 +892,6 @@ class JiraRequirementReader(AbstractRequirementReader):
                 if parent_key not in requirement_nodes:
                     try:
                         parent_issue = self._fetch_issue(parent_key)
-                        print("---------------------------------------------")
-                        print(parent_issue)
                         requirement_nodes[parent_key] = (
                             self._build_requirementobjectnode_from_issue(
                                 parent_issue, is_requirement=False
@@ -906,7 +904,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                             f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
                         )
                         continue
-                
+
                 parent.children = parent.children or []
                 parent.children.append(requirement_nodes[issue.key])
 
