@@ -60,7 +60,7 @@ class JiraRequirementReaderConfig(BaseModel):
     key_cert: str | None = None
 
     baseline_field: str = "fixVersions"
-    requirement_types: list[str] = ["Story", "Task"]
+    requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
     requirement_group_types: list[str] = ["Epic"]
 
     projects: dict[str, JiraProjectConfig] = ModelField(default_factory=dict)
@@ -268,10 +268,10 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         return self._generate_requirement_versions(issue)
 
-    def _generate_requirement_versions(self, issue:Issue):
+    def _generate_requirement_versions(self, issue: Issue):
         versions = []
         minor = 0
-        major = 1 
+        major = 1
         # Add creation as the initial version
         versions.append(
             RequirementVersionObject(
@@ -294,24 +294,23 @@ class JiraRequirementReader(AbstractRequirementReader):
                 minor = 0
                 versions.append(
                     RequirementVersionObject(
-                    name=f"{major}.{minor}",
-                    date=history.created,
-                    author=getattr(history.author, "displayName", "Unknown"),
-                    comment=self._get_change_comment(history),
+                        name=f"{major}.{minor}",
+                        date=history.created,
+                        author=getattr(history.author, "displayName", "Unknown"),
+                        comment=self._get_change_comment(history),
                     )
                 )
             elif is_minor:
                 minor += 1
                 versions.append(
                     RequirementVersionObject(
-                    name=f"{major}.{minor}",
-                    date=history.created,
-                    author=getattr(history.author, "displayName", "Unknown"),
-                    comment=self._get_change_comment(history),
+                        name=f"{major}.{minor}",
+                        date=history.created,
+                        author=getattr(history.author, "displayName", "Unknown"),
+                        comment=self._get_change_comment(history),
                     )
                 )
         return versions
-            
 
     # TODO: Maybe different languages?
     def _get_change_comment(self, history) -> str:
@@ -753,7 +752,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 valueType="BOOLEAN",
                 booleanValue=bool(field_value),
             )
-        
+
     def _get_issue_version(self, issue: Issue, key: RequirementKey) -> Issue:
         """
         Reconstructs the issue's fields to reflect their state at the specified version.
@@ -772,8 +771,12 @@ class JiraRequirementReader(AbstractRequirementReader):
         try:
             target_major, target_minor = map(int, key.version.split("."))
         except Exception as e:
-            self.logger.error(f"Invalid version format '{key.version}' for requirement key '{key.id}': {e}")
-            raise ValueError(f"Invalid version format '{key.version}' for requirement key '{key.id}'. Expected format 'major.minor'.") from e
+            self.logger.error(
+                f"Invalid version format '{key.version}' for requirement key '{key.id}': {e}"
+            )
+            raise ValueError(
+                f"Invalid version format '{key.version}' for requirement key '{key.id}'. Expected format 'major.minor'."
+            ) from e
 
         issue_copy = copy.deepcopy(issue)
 
@@ -805,8 +808,8 @@ class JiraRequirementReader(AbstractRequirementReader):
                 minor = 0
             elif is_minor:
                 minor += 1
-        
-        if major ==  target_major and minor == target_minor:
+
+        if major == target_major and minor == target_minor:
             return issue
 
         return issue_copy
@@ -816,10 +819,10 @@ class JiraRequirementReader(AbstractRequirementReader):
         Helper to set a field value on the issue.fields object, handling nested attributes.
         """
         if hasattr(issue.renderedFields, field_name):
-            if (field_name == "description"):
+            if field_name == "description":
                 value = self._format_description(value)
             setattr(issue.renderedFields, field_name, value)
-    
+
         if hasattr(issue.fields, field_name):
             attr = getattr(issue.fields, field_name)
             if hasattr(attr, "name"):
@@ -841,7 +844,6 @@ class JiraRequirementReader(AbstractRequirementReader):
             owner = assignee.displayName
         elif creator and getattr(creator, "displayName", None) != None:
             owner = creator.displayName
-            
 
         status_field = getattr(issue.fields, "status", None)
         status = status_field.name if status_field else ""
@@ -888,10 +890,19 @@ class JiraRequirementReader(AbstractRequirementReader):
 
                 parent_key = parent_obj.key
                 if parent_key not in requirement_nodes:
-                    self.logger.warning(
-                        f"Parent issue {parent_key} of issue {issue.key} not found among fetched issues"
-                    )
-                    continue
+                    try:
+                        parent_issue = self._fetch_issue(parent_key)
+                        requirement_nodes[parent_key] = (
+                            self._build_requirementobjectnode_from_issue(
+                                parent_issue, is_requirement=False
+                            )
+                        )
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
+                        )
+                        requirement_tree[issue.key] = requirement_nodes[issue.key]
+                        continue
 
                 parent = requirement_nodes[parent_key]
                 parent.children = parent.children or []
@@ -910,18 +921,12 @@ class JiraRequirementReader(AbstractRequirementReader):
         return f"<html><body>{description_html}</body></html>"
 
     def _build_extendedrequirementobject_from_issue(
-        self,
-        project: str, 
-        issue: Issue, 
-        key: RequirementKey, 
-        baseline: str
+        self, project: str, issue: Issue, key: RequirementKey, baseline: str
     ) -> ExtendedRequirementObject:
         is_requirement = self._is_requirement_issue(issue, project)
         issue = self._get_issue_version(issue, key)
         requirement_object = self._build_requirementobjectnode_from_issue(
-            issue=issue, 
-            key=key, 
-            is_requirement=is_requirement
+            issue=issue, key=key, is_requirement=is_requirement
         )
 
         attachments_field = getattr(issue.fields, "attachment", None)
@@ -982,4 +987,4 @@ class JiraRequirementReader(AbstractRequirementReader):
     def _format_description(self, description: str) -> str:
         if not isinstance(description, str) or not description:
             return ""
-        return "<p>" + description.replace('\n\n', '</p><p>') + "</p>"
+        return "<p>" + description.replace("\n\n", "</p><p>") + "</p>"
