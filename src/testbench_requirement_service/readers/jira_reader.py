@@ -43,6 +43,9 @@ MAJOR_CHANGE_FIELDS = {"fixVersions"}
 class JiraProjectConfig(BaseModel):
     requirement_types: list[str] | None = None
     requirement_group_types: list[str] | None = None
+    baseline_field: str | None = None
+    baseline_jql: str | None = None
+    current_baseline_jql: str | None = None
 
 
 class JiraRequirementReaderConfig(BaseModel):
@@ -60,6 +63,11 @@ class JiraRequirementReaderConfig(BaseModel):
     key_cert: str | None = None
 
     baseline_field: str = "fixVersions"
+    baseline_jql: str = 'fixVersion = "{baseline}"'
+    current_baseline_jql: str = ''
+
+    use_sprints_as_requirement_groups: bool = False
+    
     requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
     requirement_group_types: list[str] = ["Epic"]
 
@@ -267,6 +275,8 @@ class JiraRequirementReader(AbstractRequirementReader):
             fields="summary,created,creator",
             expand="changelog",
         )
+
+        self.jira.sprints_by_name()
 
         return self._generate_requirement_versions(issue)
 
@@ -885,6 +895,10 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         try:
             for issue in issues:
+                print("--------------------------------------------------")
+                # print(issue.raw)
+                if hasattr(issue.fields, "Sprint"):
+                    print("here")
                 parent_obj = getattr(issue.fields, "parent", None)
                 if not parent_obj:
                     requirement_tree[issue.key] = requirement_nodes[issue.key]
