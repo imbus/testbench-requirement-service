@@ -896,7 +896,8 @@ class JiraRequirementReader(AbstractRequirementReader):
                         parent_issue = self._fetch_issue(parent_key)
                         requirement_nodes[parent_key] = (
                             self._build_requirementobjectnode_from_issue(
-                                parent_issue, is_requirement=False
+                                parent_issue,
+                                is_requirement=True,  # TODO: is_requirement?
                             )
                         )
                         parent = requirement_nodes[parent_key]
