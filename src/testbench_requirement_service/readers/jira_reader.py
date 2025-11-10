@@ -246,6 +246,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         self, project: str, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
         fields = "summary,creator,assignee,status,priority,description,issuetype,attachment"
+        # TODO: discuss whether project and baseline checks are needed here
         issue = self._fetch_issue(
             key.id,
             # project=project,
@@ -258,10 +259,11 @@ class JiraRequirementReader(AbstractRequirementReader):
     def get_requirement_versions(
         self, project: str, baseline: str, key: RequirementKey
     ) -> list[RequirementVersionObject]:
+        # TODO: discuss whether project and baseline checks are needed here
         issue = self._fetch_issue(
             key.id,
-            project=project,
-            baseline=baseline,
+            # project=project,
+            # baseline=baseline,
             fields="summary,created,creator",
             expand="changelog",
         )
