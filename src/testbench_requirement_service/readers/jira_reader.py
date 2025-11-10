@@ -248,8 +248,8 @@ class JiraRequirementReader(AbstractRequirementReader):
         fields = "summary,creator,assignee,status,priority,description,issuetype,attachment"
         issue = self._fetch_issue(
             key.id,
-            project=project,
-            baseline=baseline,
+            # project=project,
+            # baseline=baseline,
             fields=fields,
             expand="renderedFields,changelog",
         )
