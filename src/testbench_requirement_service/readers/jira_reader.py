@@ -65,8 +65,6 @@ class JiraRequirementReaderConfig(BaseModel):
     baseline_field: str = "fixVersions"
     baseline_jql: str = 'fixVersion = "{baseline}"'
     current_baseline_jql: str = ''
-
-    use_sprints_as_requirement_groups: bool = True
     
     requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
     requirement_group_types: list[str] = ["Epic"]
@@ -463,7 +461,8 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def _fetch_baselines_for_project(self, project: str) -> list[str]:
         project_key = self.projects[project].key
-        baselines = self._fetch_project_versions(project_key)
+        if self.config.baseline_field == "fixVersions":
+            baselines = self._fetch_project_versions(project_key)
         self._baselines[project] = baselines
         return baselines
 
@@ -649,6 +648,8 @@ class JiraRequirementReader(AbstractRequirementReader):
         if field_name.lower() == "fixversions":
             return "fixVersion"
         return field_name
+    
+
 
     def _fetch_issues(
         self,
@@ -663,11 +664,20 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         project_key = self.projects[project].key
         baseline_field = self._normalize_field_for_jql(self.config.baseline_field)
+        current_baseline_jql = self._get_current_baseline_jql(project)
+        baseline_jql = self._get_baseline_jql(project)
 
+        # Build JQL query for baseline filtering
         if baseline == "Current Baseline":
-            jql_query = f'project = "{project_key}"'
+            if current_baseline_jql:
+                jql_query = f'project = "{project_key}" AND {current_baseline_jql.format(baseline=baseline)}'
+            else:
+                jql_query = f'project = "{project_key}"'
         else:
-            jql_query = f'project = "{project_key}" AND {baseline_field} = "{baseline}"'
+            if baseline_jql:
+                jql_query = f'project = "{project_key}" AND {baseline_jql.format(baseline=baseline)}'
+            else:
+                jql_query = f'project = "{project_key}"'
 
         requirement_types = self._get_requirement_types(project)
         requirement_group_types = self._get_requirement_group_types(project)
@@ -909,56 +919,32 @@ class JiraRequirementReader(AbstractRequirementReader):
         requirement_tree = {}
 
         try:
-            if self.config.use_sprints_as_requirement_groups:
-                for field in self.jira.fields():
-                    if field.get("name") == "Sprint":
-                        field_key = field.get("key")
             for issue in issues:
-                if self.config.use_sprints_as_requirement_groups:
-                    if hasattr(issue.fields, field_key):
-                        for atr in getattr(issue.fields, field_key):
-                            sprint_id = atr.id
-                            if sprint_id not in requirement_nodes:
-                                sprint = self.jira.sprint(sprint_id)
-                                requirement_nodes[sprint_id] = self._build_requirementobjectnode_from_sprint(sprint)
-                            
-                            parent = requirement_nodes[sprint_id]
-                            parent.children = parent.children or []
-                            
-                            # Create a copy of the requirement node with a modified key
-                            issue_node_copy = copy.deepcopy(requirement_nodes[issue.key])
-                            # issue_node_copy.key = RequirementKey(
-                            #     id=f"{sprint_id}-{issue.key}",
-                            #     version=issue_node_copy.key.version
-                            # )
-                            parent.children.append(issue_node_copy)
-                            requirement_tree[sprint_id] = requirement_nodes[sprint_id]
-                else:       
-                    parent_obj = getattr(issue.fields, "parent", None)
-                    if not parent_obj:
-                        requirement_tree[issue.key] = requirement_nodes[issue.key]
+                parent_obj = getattr(issue.fields, "parent", None)
+                if not parent_obj:
+                    requirement_tree[issue.key] = requirement_nodes[issue.key]
+                    continue
+
+                parent_key = parent_obj.key
+                if parent_key not in requirement_nodes:
+                    try:
+                        parent_issue = self._fetch_issue(parent_key)
+                        requirement_nodes[parent_key] = (
+                            self._build_requirementobjectnode_from_issue(
+                                parent_issue,
+                                is_requirement=True,  # TODO: is_requirement?
+                            )
+                        )
+                        parent = requirement_nodes[parent_key]
+                        requirement_tree[parent_key] = parent
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
+                        )
                         continue
 
-                    parent_key = parent_obj.key
-                    if parent_key not in requirement_nodes:
-                        try:
-                            parent_issue = self._fetch_issue(parent_key)
-                            requirement_nodes[parent_key] = (
-                                self._build_requirementobjectnode_from_issue(
-                                    parent_issue,
-                                    is_requirement=True,  # TODO: is_requirement?
-                                )
-                            )
-                            parent = requirement_nodes[parent_key]
-                            requirement_tree[parent_key] = parent
-                        except Exception as e:
-                            self.logger.warning(
-                                f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
-                            )
-                            continue
-
-                    parent.children = parent.children or []
-                    parent.children.append(requirement_nodes[issue.key])
+                parent.children = parent.children or []
+                parent.children.append(requirement_nodes[issue.key])
 
         except Exception as e:
             self.logger.error(f"Error building requirement tree: {e}")
@@ -1030,6 +1016,20 @@ class JiraRequirementReader(AbstractRequirementReader):
             if project_config.requirement_group_types is not None:
                 return project_config.requirement_group_types
         return self.config.requirement_group_types
+    
+    def _get_baseline_jql(self, project: str | None = None):
+        if project and project in self.config.projects:
+            project_config = self.config.projects[project]
+            if project_config.baseline_jql is not None:
+                return project_config.baseline_jql
+        return self.config.baseline_jql
+    
+    def _get_current_baseline_jql(self, project: str | None = None):
+        if project and project in self.config.projects:
+            project_config = self.config.projects[project]
+            if project_config.current_baseline_jql is not None:
+                return project_config.current_baseline_jql 
+        return self.config.current_baseline_jql 
 
     def _is_requirement_issue(self, issue: Issue, project: str | None = None) -> bool:
         return issue.fields.issuetype.name in self._get_requirement_types(project)
