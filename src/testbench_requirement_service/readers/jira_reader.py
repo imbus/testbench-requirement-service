@@ -66,7 +66,7 @@ class JiraRequirementReaderConfig(BaseModel):
     baseline_jql: str = 'fixVersion = "{baseline}"'
     current_baseline_jql: str = ''
 
-    use_sprints_as_requirement_groups: bool = False
+    use_sprints_as_requirement_groups: bool = True
     
     requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
     requirement_group_types: list[str] = ["Epic"]
@@ -846,6 +846,21 @@ class JiraRequirementReader(AbstractRequirementReader):
         else:
             setattr(issue.fields, field_name, value)
 
+    def _build_requirementobjectnode_from_sprint(
+            self, sprint, key: RequirementKey | None = None, is_requirement: bool = False
+    ):
+        sprint_id = str(getattr(sprint, "id", ""))
+        return RequirementObjectNode(
+            name=getattr(sprint, "name", ""),
+            extendedID=sprint_id,
+            key=key or RequirementKey(id=sprint_id, version="current"),
+            owner="",
+            status=getattr(sprint, "state", ""),
+            priority="",
+            requirement=is_requirement,
+            children=[],
+        )
+
     def _build_requirementobjectnode_from_issue(
         self, issue: Issue, key: RequirementKey | None = None, is_requirement: bool = True
     ) -> RequirementObjectNode:
@@ -894,41 +909,61 @@ class JiraRequirementReader(AbstractRequirementReader):
         requirement_tree = {}
 
         try:
+            if self.config.use_sprints_as_requirement_groups:
+                for field in self.jira.fields():
+                    if field.get("name") == "Sprint":
+                        field_key = field.get("key")
             for issue in issues:
-                print("--------------------------------------------------")
-                # print(issue.raw)
-                if hasattr(issue.fields, "Sprint"):
-                    print("here")
-                parent_obj = getattr(issue.fields, "parent", None)
-                if not parent_obj:
-                    requirement_tree[issue.key] = requirement_nodes[issue.key]
-                    continue
-
-                parent_key = parent_obj.key
-                if parent_key not in requirement_nodes:
-                    try:
-                        parent_issue = self._fetch_issue(parent_key)
-                        requirement_nodes[parent_key] = (
-                            self._build_requirementobjectnode_from_issue(
-                                parent_issue,
-                                is_requirement=True,  # TODO: is_requirement?
-                            )
-                        )
-                        parent = requirement_nodes[parent_key]
-                        requirement_tree[parent_key] = parent
-                    except Exception as e:
-                        self.logger.warning(
-                            f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
-                        )
+                if self.config.use_sprints_as_requirement_groups:
+                    if hasattr(issue.fields, field_key):
+                        for atr in getattr(issue.fields, field_key):
+                            sprint_id = atr.id
+                            if sprint_id not in requirement_nodes:
+                                sprint = self.jira.sprint(sprint_id)
+                                requirement_nodes[sprint_id] = self._build_requirementobjectnode_from_sprint(sprint)
+                            
+                            parent = requirement_nodes[sprint_id]
+                            parent.children = parent.children or []
+                            
+                            # Create a copy of the requirement node with a modified key
+                            issue_node_copy = copy.deepcopy(requirement_nodes[issue.key])
+                            # issue_node_copy.key = RequirementKey(
+                            #     id=f"{sprint_id}-{issue.key}",
+                            #     version=issue_node_copy.key.version
+                            # )
+                            parent.children.append(issue_node_copy)
+                            requirement_tree[sprint_id] = requirement_nodes[sprint_id]
+                else:       
+                    parent_obj = getattr(issue.fields, "parent", None)
+                    if not parent_obj:
+                        requirement_tree[issue.key] = requirement_nodes[issue.key]
                         continue
 
-                parent.children = parent.children or []
-                parent.children.append(requirement_nodes[issue.key])
+                    parent_key = parent_obj.key
+                    if parent_key not in requirement_nodes:
+                        try:
+                            parent_issue = self._fetch_issue(parent_key)
+                            requirement_nodes[parent_key] = (
+                                self._build_requirementobjectnode_from_issue(
+                                    parent_issue,
+                                    is_requirement=True,  # TODO: is_requirement?
+                                )
+                            )
+                            parent = requirement_nodes[parent_key]
+                            requirement_tree[parent_key] = parent
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
+                            )
+                            continue
+
+                    parent.children = parent.children or []
+                    parent.children.append(requirement_nodes[issue.key])
 
         except Exception as e:
             self.logger.error(f"Error building requirement tree: {e}")
             return {}
-
+        print(requirement_tree)
         return requirement_tree
 
     def _build_rich_description(self, issue: Issue) -> str:
