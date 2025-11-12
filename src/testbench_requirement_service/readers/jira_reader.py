@@ -461,9 +461,11 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def _fetch_baselines_for_project(self, project: str) -> list[str]:
         project_key = self.projects[project].key
-        if self.config.baseline_field.lower() == "fixversions":
+        baseline_field = self._get_baseline_field(project)
+
+        if baseline_field.lower() == "fixversions":
             baselines = self._fetch_project_versions(project_key)
-        elif self.config.baseline_field.lower() == "sprint":
+        elif baseline_field.lower() == "sprint":
             baselines = self._get_sprint_baselines(project)
         else:
             baselines = []
@@ -701,8 +703,9 @@ class JiraRequirementReader(AbstractRequirementReader):
         project_key = self.projects[project].key
         current_baseline_jql = self._get_current_baseline_jql(project)
         baseline_jql = self._get_baseline_jql(project)
+        baseline_field = self._get_baseline_field(project)
 
-        if self.config.baseline_field.lower() == "sprint":
+        if baseline_field.lower() == "sprint":
             board_ids = self._get_board_ids(project)
             for board_id in board_ids:
                 sprints = self.jira.sprints(board_id)
@@ -1078,6 +1081,13 @@ class JiraRequirementReader(AbstractRequirementReader):
             if project_config.current_baseline_jql is not None:
                 return project_config.current_baseline_jql 
         return self.config.current_baseline_jql 
+    
+    def _get_baseline_field(self, project: str | None = None):
+        if project and project in self.config.projects:
+            project_config = self.config.projects[project]
+            if project_config.baseline_field is not None:
+                return project_config.baseline_field 
+        return self.config.baseline_field 
 
     def _is_requirement_issue(self, issue: Issue, project: str | None = None) -> bool:
         return issue.fields.issuetype.name in self._get_requirement_types(project)
