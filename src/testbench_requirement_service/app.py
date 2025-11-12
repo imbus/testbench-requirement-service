@@ -1,13 +1,15 @@
 from pathlib import Path
 
-from jira import JIRAError
 from sanic import Sanic
 from sanic.config import Config
 
 from testbench_requirement_service.exceptions import handle_jira_error
 from testbench_requirement_service.middlewares import check_request_auth, log_request, log_response
 from testbench_requirement_service.routes import router
-from testbench_requirement_service.utils.dependencies import check_excel_dependencies
+from testbench_requirement_service.utils.dependencies import (
+    check_excel_dependencies,
+    check_jira_dependencies,
+)
 
 
 class AppConfig(Config):
@@ -55,8 +57,12 @@ def create_app(name: str, config: AppConfig | None = None) -> Sanic:
         config = AppConfig()
     app.update_config(config)
 
+    # Check optional dependencies and raise ImportError if missing
     if "ExcelRequirementReader" in app.config.READER_CLASS:
-        check_excel_dependencies()
+        check_excel_dependencies(raise_on_missing=True)
+
+    if "JiraRequirementReader" in app.config.READER_CLASS:
+        check_jira_dependencies(raise_on_missing=True)
 
     # Register middlewares
     app.register_middleware(check_request_auth, "request")
@@ -64,7 +70,12 @@ def create_app(name: str, config: AppConfig | None = None) -> Sanic:
     app.register_middleware(log_response, "response")  # type: ignore
 
     # Register exception handlers
-    app.exception(JIRAError)(handle_jira_error)
+    try:
+        from jira import JIRAError  # noqa: PLC0415
+
+        app.exception(JIRAError)(handle_jira_error)
+    except ImportError:
+        pass
 
     # Register blueprints
     app.blueprint(router)

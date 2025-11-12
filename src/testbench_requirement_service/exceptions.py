@@ -1,4 +1,9 @@
-from jira import JIRAError
+from __future__ import annotations
+
+try:  # noqa: SIM105
+    from jira import JIRAError
+except ImportError:
+    pass
 from sanic import Forbidden, NotFound, Request, ServerError
 
 

@@ -16,15 +16,6 @@ dependencies = [
   "click>=8.1.8,<9.0.0",
   "tomli>=2.2.1,<3.0.0",
   "python-dotenv>=1.1.1",
-
-  # TODO: remove excel dependencies from main dependencies
-  "pandas>=2.2.3,<3.0.0",
-  "openpyxl>=3.1.5,<4.0.0",
-  "xlrd>=2.0.1,<3.0.0",
-  "javaproperties>=0.8.2,<1.0.0",
-  # TODO: remove jira dependencies from main dependencies
-  "beautifulsoup4>=4.13.5,<5.0.0",
-  "jira>=3.10.5,<4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -35,8 +26,8 @@ excel = [
   "javaproperties>=0.8.2,<1.0.0",
 ]
 jira = [
-  "beautifulsoup4>=4.13.5,<5.0.0",
   "jira>=3.10.5,<4.0.0",
+  "beautifulsoup4>=4.13.5,<5.0.0",
 ]
 dev = [
   "ruff>=0.9.6",
