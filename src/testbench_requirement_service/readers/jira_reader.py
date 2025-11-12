@@ -461,8 +461,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def _fetch_baselines_for_project(self, project: str) -> list[str]:
         project_key = self.projects[project].key
-        if self.config.baseline_field == "fixVersions":
-            baselines = self._fetch_project_versions(project_key)
+        baselines = self._fetch_project_versions(project_key)
         self._baselines[project] = baselines
         return baselines
 
@@ -670,14 +669,19 @@ class JiraRequirementReader(AbstractRequirementReader):
         # Build JQL query for baseline filtering
         if baseline == "Current Baseline":
             if current_baseline_jql:
-                jql_query = f'project = "{project_key}" AND {current_baseline_jql.format(baseline=baseline)}'
+                jql_query = 'project = "{project_key}" AND ' + baseline_jql
+                jql_query = jql_query.format(project_key=project_key, baseline=baseline)
             else:
                 jql_query = f'project = "{project_key}"'
         else:
             if baseline_jql:
-                jql_query = f'project = "{project_key}" AND {baseline_jql.format(baseline=baseline)}'
+                jql_query = 'project = "{project_key}" AND ' + baseline_jql
+                jql_query = jql_query.format(project_key=project_key, baseline=baseline)
+
             else:
                 jql_query = f'project = "{project_key}"'
+
+        print(jql_query)
 
         requirement_types = self._get_requirement_types(project)
         requirement_group_types = self._get_requirement_group_types(project)
@@ -942,15 +946,17 @@ class JiraRequirementReader(AbstractRequirementReader):
                             f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
                         )
                         continue
-
+                else:
+                    parent = requirement_nodes[parent_key]
                 parent.children = parent.children or []
                 parent.children.append(requirement_nodes[issue.key])
 
         except Exception as e:
             self.logger.error(f"Error building requirement tree: {e}")
             return {}
-        print(requirement_tree)
+
         return requirement_tree
+
 
     def _build_rich_description(self, issue: Issue) -> str:
         """
