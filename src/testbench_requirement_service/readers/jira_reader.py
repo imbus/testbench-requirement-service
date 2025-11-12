@@ -3,7 +3,6 @@
 
 import base64
 import copy
-import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -12,6 +11,7 @@ import sys
 from typing import Any, Literal
 
 from sanic import NotFound
+from sanic.log import logger
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -64,7 +64,7 @@ class JiraRequirementReaderConfig(BaseModel):
 
     baseline_field: str = "fixVersions"
     baseline_jql: str = 'fixVersion = "{baseline}"'
-    current_baseline_jql: str = ''
+    current_baseline_jql: str = ""
     
     requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
     requirement_group_types: list[str] = ["Epic"]
@@ -120,9 +120,6 @@ class JiraRequirementReaderConfig(BaseModel):
 
 class JiraRequirementReader(AbstractRequirementReader):
     def __init__(self, config_path: str):
-        self.logger = logging.getLogger(__name__)
-        self.logger.level = logging.DEBUG
-
         self.config = self._load_and_validate_config_from_path(Path(config_path))
 
         self.jira = self._connect()
@@ -180,7 +177,7 @@ class JiraRequirementReader(AbstractRequirementReader):
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         issues = self._fetch_issues(project, baseline)
         if not issues:
-            self.logger.debug(f"No issues found for project '{project}' and baseline '{baseline}'")
+            logger.debug(f"No issues found for project '{project}' and baseline '{baseline}'")
 
         issues.sort(key=self.sort_by_issue_key)
         requirement_nodes = self._build_requirement_nodes(issues, project)
@@ -398,7 +395,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         try:
             if self.use_new_issuetypes_endpoint:
-                self.logger.debug("_fetch_project_issue_fields: Use new issuetypes endpoint")
+                logger.debug("_fetch_project_issue_fields: Use new issuetypes endpoint")
                 issue_types = self.jira.project_issue_types(project_key, maxResults=100)
                 for issue_type in issue_types:
                     try:
@@ -408,11 +405,11 @@ class JiraRequirementReader(AbstractRequirementReader):
                         for field in fields_list:
                             fields_dict[field.id] = field
                     except Exception as e:
-                        self.logger.warning(
+                        logger.warning(
                             f"Error fetching issue fields for issue type {issue_type.id}: {e}"
                         )
             else:
-                self.logger.debug("_fetch_project_issue_fields: Use old createmeta endpoint")
+                logger.debug("_fetch_project_issue_fields: Use old createmeta endpoint")
                 createmeta = self.jira.createmeta(project_key, expand="projects.issuetypes.fields")
                 issue_types = createmeta["projects"][0]["issuetypes"]
                 for issue_type in issue_types:
@@ -421,7 +418,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                             options=self.jira._options, session=self.jira._session, raw=field_data
                         )
         except Exception as e:
-            self.logger.error(f"Error fetching issue fields for project {project_key}: {e}")
+            logger.error(f"Error fetching issue fields for project {project_key}: {e}")
             raise
 
         return list(fields_dict.values())
@@ -430,7 +427,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         for attr in ("id", "key", "fieldId"):
             if hasattr(field, attr):
                 return getattr(field, attr)
-        self.logger.warning(f"Field {field.name} has no id, key, or fieldId.")
+        logger.warning(f"Field {field.name} has no id, key, or fieldId.")
         return field.name
 
     def _is_version_type_field(self, field: Field) -> bool:
@@ -444,7 +441,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             field_id = self._get_field_id(field)
             if self.config.baseline_field in (field_id, field.name):
                 return field
-        self.logger.warning(
+        logger.warning(
             f"Configured baseline_field '{self.config.baseline_field}' not found in project {project_key}"
         )
         return None
@@ -456,7 +453,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 return []
             return [version.name for version in versions if version.name]
         except Exception as e:
-            self.logger.error(f"Error fetching project versions for {project_key}: {e}")
+            logger.error(f"Error fetching project versions for {project_key}: {e}")
             return []
 
     def _fetch_baselines_for_project(self, project: str) -> list[str]:
@@ -500,7 +497,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         description = getattr(issue.renderedFields, "description", "")
         if not description:
-            self.logger.warning(f"Issue {issue.key} missing renderedFields.description")
+            logger.warning(f"Issue {issue.key} missing renderedFields.description")
             return ""
 
         # Build attachment dictionary mapping attachment ID to tuple (mime type, encoded data)
@@ -510,17 +507,17 @@ class JiraRequirementReader(AbstractRequirementReader):
             try:
                 mime_type = getattr(attachment, "mimeType", None)
                 if not mime_type:
-                    self.logger.warning(f"Attachment {attachment.id} missing mimeType metadata")
+                    logger.warning(f"Attachment {attachment.id} missing mimeType metadata")
                     continue
                 if mime_type not in allowed_image_mime_types:
-                    self.logger.warning(
+                    logger.warning(
                         f"Attachment {attachment.id} has disallowed mimeType: {mime_type}"
                     )
                     continue
 
                 size = getattr(attachment, "size", None)
                 if size and size > max_embedded_image_size:
-                    self.logger.warning(
+                    logger.warning(
                         f"Attachment {attachment.id} size ({size} bytes) exceeds "
                         f"maximum allowed size ({max_embedded_image_size} bytes)"
                     )
@@ -530,7 +527,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
                 actual_size = len(image_bytes)
                 if actual_size > max_embedded_image_size:
-                    self.logger.warning(
+                    logger.warning(
                         f"Attachment {attachment.id} size ({size} bytes) exceeds "
                         f"maximum allowed size ({max_embedded_image_size} bytes)"
                     )
@@ -538,11 +535,11 @@ class JiraRequirementReader(AbstractRequirementReader):
 
                 encoded = base64.b64encode(image_bytes).decode("utf-8")
                 attachment_dict[attachment.id] = (mime_type, encoded)
-                self.logger.debug(
+                logger.debug(
                     f"Successfully processed attachment {attachment_id} ({len(image_bytes)} bytes)"
                 )
             except Exception as e:
-                self.logger.debug(f"Could not process attachment {attachment.id}: {e}")
+                logger.debug(f"Could not process attachment {attachment.id}: {e}")
                 continue
 
         # Embed images in the issue description
@@ -557,15 +554,13 @@ class JiraRequirementReader(AbstractRequirementReader):
             match = jira_attachment_url_pattern.fullmatch(src)
             if not match:
                 img.attrs.pop("src", None)
-                self.logger.warning(f"Removed image with unsupported src: {src}")
+                logger.warning(f"Removed image with unsupported src: {src}")
                 continue
 
             attachment_id = match.group(1)
             if attachment_id not in attachment_dict:
                 img.attrs.pop("src", None)
-                self.logger.warning(
-                    f"Attachment {attachment_id} not found in validated attachments"
-                )
+                logger.warning(f"Attachment {attachment_id} not found in validated attachments")
                 continue
 
             mime_type, encoded = attachment_dict[attachment_id]
@@ -609,7 +604,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 fields = ",".join(list(set(field.strip() for field in fields.split(","))))
             issue = self.jira.issue(issue_id, fields=fields, expand=expand, properties=properties)
         except JIRAError as e:
-            self.logger.debug(f"Error fetching issue {issue_id}: {e}")
+            logger.debug(f"Error fetching issue {issue_id}: {e}")
             raise NotFound("Requirement not found") from e
 
         # If project is specified, check if the issue belongs to the specified project
@@ -723,7 +718,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 start_at += maxResults
             return issues
         except JIRAError as e:
-            self.logger.error(f"Error fetching issues: {e}")
+            logger.error(f"Error fetching issues: {e}")
             return []
 
     def _extract_valuetype_from_issue_field(
@@ -797,7 +792,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         try:
             target_major, target_minor = map(int, key.version.split("."))
         except Exception as e:
-            self.logger.error(
+            logger.error(
                 f"Invalid version format '{key.version}' for requirement key '{key.id}': {e}"
             )
             raise ValueError(
@@ -942,7 +937,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                         parent = requirement_nodes[parent_key]
                         requirement_tree[parent_key] = parent
                     except Exception as e:
-                        self.logger.warning(
+                        logger.warning(
                             f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
                         )
                         continue
@@ -952,7 +947,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 parent.children.append(requirement_nodes[issue.key])
 
         except Exception as e:
-            self.logger.error(f"Error building requirement tree: {e}")
+            logger.error(f"Error building requirement tree: {e}")
             return {}
 
         return requirement_tree
