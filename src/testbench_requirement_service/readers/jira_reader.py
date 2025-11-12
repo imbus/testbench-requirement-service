@@ -62,8 +62,8 @@ class JiraRequirementReaderConfig(BaseModel):
     consumer_key: str | None = None
     key_cert: str | None = None
 
-    baseline_field: str = "Sprint"
-    baseline_jql: str = 'Sprint = "{baseline}"'
+    baseline_field: str = "dropdown"
+    baseline_jql: str = 'dropdown = "{baseline}"'
     current_baseline_jql: str = ''
     
     requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
@@ -465,6 +465,21 @@ class JiraRequirementReader(AbstractRequirementReader):
             baselines = self._fetch_project_versions(project_key)
         elif self.config.baseline_field.lower() == "sprint":
             baselines = self._get_sprint_baselines(project)
+        else:
+            baselines = []
+            fields = self.jira.createmeta(
+                projectKeys=project_key, 
+                issuetypeNames='', 
+                expand='projects.issuetypes.fields'
+            )["projects"][0]["issuetypes"][0]["fields"]
+            for _, field_info in fields.items():
+                if field_info.get("name") == self.config.baseline_field:
+                    allowed_values = field_info.get("allowedValues") or []
+                    baselines = [
+                        (av.get("name") or av.get("value") or str(av))
+                        for av in allowed_values
+                    ]
+                    break
         self._baselines[project] = baselines
         return baselines
     
@@ -709,8 +724,6 @@ class JiraRequirementReader(AbstractRequirementReader):
 
             else:
                 jql_query = f'project = "{project_key}"'
-
-        print(jql_query)
 
         requirement_types = self._get_requirement_types(project)
         requirement_group_types = self._get_requirement_group_types(project)
