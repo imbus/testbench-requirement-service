@@ -20,7 +20,7 @@ else:
 try:
     from bs4 import BeautifulSoup
     from jira import JIRA, Issue, JIRAError, Project
-    from jira.resources import Field
+    from jira.resources import Board, Field, Sprint
 except ImportError:
     pass
 from pydantic import BaseModel, ValidationError, model_validator
@@ -43,11 +43,11 @@ MAJOR_CHANGE_FIELDS = {"fixVersions"}
 
 
 class JiraProjectConfig(BaseModel):
-    requirement_types: list[str] | None = None
-    requirement_group_types: list[str] | None = None
     baseline_field: str | None = None
     baseline_jql: str | None = None
     current_baseline_jql: str | None = None
+    requirement_types: list[str] | None = None
+    requirement_group_types: list[str] | None = None
 
 
 class JiraRequirementReaderConfig(BaseModel):
@@ -66,8 +66,7 @@ class JiraRequirementReaderConfig(BaseModel):
 
     baseline_field: str = "fixVersions"
     baseline_jql: str = 'fixVersion = "{baseline}"'
-    current_baseline_jql: str = ''
-    
+    current_baseline_jql: str = ""
     requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
     requirement_group_types: list[str] = ["Epic"]
 
@@ -469,43 +468,57 @@ class JiraRequirementReader(AbstractRequirementReader):
         if baseline_field.lower() == "fixversions":
             baselines = self._fetch_project_versions(project_key)
         elif baseline_field.lower() == "sprint":
-            baselines = self._get_sprint_baselines(project)
+            baselines = self._fetch_sprint_baselines(project_key)
         else:
-            baselines = []
-            fields = self.jira.createmeta(
-                projectKeys=project_key, 
-                issuetypeNames='', 
-                expand='projects.issuetypes.fields'
-            )["projects"][0]["issuetypes"][0]["fields"]
-            for _, field_info in fields.items():
-                if field_info.get("name") == self.config.baseline_field:
-                    allowed_values = field_info.get("allowedValues") or []
+            baseline_field_obj = self._fetch_baseline_field(project_key)
+            if baseline_field_obj:
+                if self._is_version_type_field(baseline_field_obj):
+                    baselines = self._fetch_project_versions(project_key)
+                else:
+                    allowed_values = getattr(baseline_field_obj, "allowedValues", []) or []
                     baselines = [
-                        (av.get("name") or av.get("value") or str(av))
-                        for av in allowed_values
+                        av.get("name") or av.get("value") or str(av) for av in allowed_values
                     ]
-                    break
+            else:
+                logger.warning(f"Baseline field not found for project {project}")
+                baselines = []
         self._baselines[project] = baselines
         return baselines
-    
 
-    def _get_board_ids(self, project: str):
-        boards = self.jira.boards()
-        board_ids = []
-        for board in boards:
-            if board.location.name == project:
-                board_ids.append(board.id)
-        
-        return board_ids
-    
-    def _get_sprint_baselines(self, project: str):
+    def _fetch_project_boards(self, project_key: str) -> list[Board]:
+        try:
+            return self.jira.boards(projectKeyOrID=project_key)  # type: ignore[no-any-return]
+        except JIRAError as e:
+            logger.error(f"Error fetching boards for project {project_key}: {e}")
+            return []
+
+    def _fetch_sprints(self, board_id: int) -> list[Sprint]:
+        try:
+            return self.jira.sprints(board_id)  # type: ignore[no-any-return]
+        except JIRAError as e:
+            logger.error(f"Error fetching sprints for board {board_id}: {e}")
+            return []
+
+    def _fetch_sprint_baselines(self, project_key: str) -> list[str]:
         baselines = []
-        board_ids = self._get_board_ids(project)
-        for bord_id in board_ids:
-            sprints = self.jira.sprints(bord_id)
+        boards = self._fetch_project_boards(project_key)
+        scrum_boards = [board for board in boards if board.type == "scrum"]
+        for board in scrum_boards:
+            sprints = self._fetch_sprints(board.id)
             for sprint in sprints:
                 baselines.append(sprint.name)
         return baselines
+
+    def _fetch_sprint_by_name(self, project_key: str, sprint_name: str) -> Sprint | None:
+        boards = self._fetch_project_boards(project_key)
+        scrum_boards = [board for board in boards if board.type == "scrum"]
+        for board in scrum_boards:
+            sprints = self._fetch_sprints(board.id)
+            for sprint in sprints:
+                if sprint.name == sprint_name:
+                    return sprint
+        logger.warning(f"Sprint '{sprint_name}' not found in project '{project_key}'")
+        return None
 
     def _get_baselines_for_project(self, project: str) -> list[str]:
         if not self._baselines or project not in self._baselines:
@@ -687,8 +700,6 @@ class JiraRequirementReader(AbstractRequirementReader):
         if field_name.lower() == "fixversions":
             return "fixVersion"
         return field_name
-    
-
 
     def _fetch_issues(  # noqa: PLR0913
         self,
@@ -702,32 +713,12 @@ class JiraRequirementReader(AbstractRequirementReader):
         """Fetch issues from Jira depending on API mode."""
 
         project_key = self.projects[project].key
-        current_baseline_jql = self._get_current_baseline_jql(project)
-        baseline_jql = self._get_baseline_jql(project)
-        baseline_field = self._get_baseline_field(project)
 
-        if baseline_field.lower() == "sprint":
-            board_ids = self._get_board_ids(project)
-            for board_id in board_ids:
-                sprints = self.jira.sprints(board_id)
-                for sprint in sprints:
-                    if sprint.name == baseline:
-                        baseline = sprint.id
+        jql_query = f'project = "{project_key}"'
 
-        # Build JQL query for baseline filtering
-        if baseline == "Current Baseline":
-            if current_baseline_jql:
-                jql_query = 'project = "{project_key}" AND ' + baseline_jql
-                jql_query = jql_query.format(project_key=project_key, baseline=baseline)
-            else:
-                jql_query = f'project = "{project_key}"'
-        else:
-            if baseline_jql:
-                jql_query = 'project = "{project_key}" AND ' + baseline_jql
-                jql_query = jql_query.format(project_key=project_key, baseline=baseline)
-
-            else:
-                jql_query = f'project = "{project_key}"'
+        baseline_query = self._build_baseline_jql(project, baseline)
+        if baseline_query:
+            jql_query += f" AND {baseline_query}"
 
         requirement_types = self._get_requirement_types(project)
         requirement_group_types = self._get_requirement_group_types(project)
@@ -771,6 +762,33 @@ class JiraRequirementReader(AbstractRequirementReader):
         except JIRAError as e:
             logger.error(f"Error fetching issues: {e}")
             return []
+
+    def _build_baseline_jql(self, project: str, baseline: str) -> str | None:
+        """
+        Build the JQL query string for filtering issues by baseline.
+
+        If the baseline is "Current Baseline", uses the current_baseline_jql template for the project.
+        Otherwise, uses the baseline_jql template for the project.
+        If neither JQL template is available or is empty, returns None.
+
+        The returned string should be a valid JQL clause, e.g. 'fixVersion = "{baseline}"'.
+        If a template is found, it is formatted with the baseline name.
+
+        Args:
+            project (str): The project name.
+            baseline (str): The baseline name.
+
+        Returns:
+            str | None: The formatted JQL clause, or None if no template is available.
+        """  # noqa: E501
+        if baseline == "Current Baseline":
+            jql_template = self._get_current_baseline_jql(project)
+        else:
+            jql_template = self._get_baseline_jql(project)
+        if not jql_template:
+            logger.debug(f"No JQL template found for project '{project}' and baseline '{baseline}'")
+            return None
+        return jql_template.format(baseline=baseline)
 
     def _extract_valuetype_from_issue_field(
         self,
@@ -907,7 +925,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             setattr(issue.fields, field_name, value)
 
     def _build_requirementobjectnode_from_sprint(
-            self, sprint, key: RequirementKey | None = None, is_requirement: bool = False
+        self, sprint, key: RequirementKey | None = None, is_requirement: bool = False
     ):
         sprint_id = str(getattr(sprint, "id", ""))
         return RequirementObjectNode(
@@ -1003,7 +1021,6 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         return requirement_tree
 
-
     def _build_rich_description(self, issue: Issue) -> str:
         """
         Render Jira issue description with embedded images inside a full HTML body.
@@ -1068,27 +1085,27 @@ class JiraRequirementReader(AbstractRequirementReader):
             if project_config.requirement_group_types is not None:
                 return project_config.requirement_group_types
         return self.config.requirement_group_types
-    
-    def _get_baseline_jql(self, project: str | None = None):
+
+    def _get_baseline_jql(self, project: str | None = None) -> str:
         if project and project in self.config.projects:
             project_config = self.config.projects[project]
             if project_config.baseline_jql is not None:
                 return project_config.baseline_jql
         return self.config.baseline_jql
-    
-    def _get_current_baseline_jql(self, project: str | None = None):
+
+    def _get_current_baseline_jql(self, project: str | None = None) -> str:
         if project and project in self.config.projects:
             project_config = self.config.projects[project]
             if project_config.current_baseline_jql is not None:
-                return project_config.current_baseline_jql 
-        return self.config.current_baseline_jql 
-    
-    def _get_baseline_field(self, project: str | None = None):
+                return project_config.current_baseline_jql
+        return self.config.current_baseline_jql
+
+    def _get_baseline_field(self, project: str | None = None) -> str:
         if project and project in self.config.projects:
             project_config = self.config.projects[project]
             if project_config.baseline_field is not None:
-                return project_config.baseline_field 
-        return self.config.baseline_field 
+                return project_config.baseline_field
+        return self.config.baseline_field
 
     def _is_requirement_issue(self, issue: Issue, project: str | None = None) -> bool:
         return issue.fields.issuetype.name in self._get_requirement_types(project)
