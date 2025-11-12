@@ -53,8 +53,15 @@ def cli(ctx):
 )
 def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR0913
     """Start the TestBench Requirement Service."""
+    print(r"""  ______          __  ____                  __       ____  __  ___   _____                 _         
+ /_  __/__  _____/ /_/ __ )___  ____  _____/ /_     / __ \/  |/  /  / ___/___  ______   __(_)_______ 
+  / / / _ \/ ___/ __/ __  / _ \/ __ \/ ___/ __ \   / /_/ / /|_/ /   \__ \/ _ \/ ___/ | / / / ___/ _ \
+ / / /  __(__  ) /_/ /_/ /  __/ / / / /__/ / / /  / _, _/ /  / /   ___/ /  __/ /   | |/ / / /__/  __/
+/_/  \___/____/\__/_____/\___/_/ /_/\___/_/ /_/  /_/ |_/_/  /_/   /____/\___/_/    |___/_/\___/\___/ 
+                                                                                                     """)  # noqa: W291, E501
+
     load_dotenv()
-    app_name = "RequirementWrapperAPI"
+    app_name = "TestBenchRequirementService"
     loglevel = "DEBUG" if dev else None
     app_config = AppConfig(config, reader_class, reader_config, loglevel)
     factory = partial(create_app, app_name, app_config)
@@ -64,7 +71,7 @@ def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR091
         host = getattr(app.config, "HOST", None)
     if not port:
         port = getattr(app.config, "PORT", None)
-    app.prepare(host=host, port=port, dev=dev)
+    app.prepare(host=host, port=port, dev=dev, access_log=True)
     try:
         Sanic.serve(primary=app, app_loader=loader)
     except Exception as e:
