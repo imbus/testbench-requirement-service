@@ -62,8 +62,8 @@ class JiraRequirementReaderConfig(BaseModel):
     consumer_key: str | None = None
     key_cert: str | None = None
 
-    baseline_field: str = "fixVersions"
-    baseline_jql: str = 'fixVersion = "{baseline}"'
+    baseline_field: str = "Sprint"
+    baseline_jql: str = 'Sprint = "{baseline}"'
     current_baseline_jql: str = ''
     
     requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
@@ -461,8 +461,30 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def _fetch_baselines_for_project(self, project: str) -> list[str]:
         project_key = self.projects[project].key
-        baselines = self._fetch_project_versions(project_key)
+        if self.config.baseline_field.lower() == "fixversions":
+            baselines = self._fetch_project_versions(project_key)
+        elif self.config.baseline_field.lower() == "sprint":
+            baselines = self._get_sprint_baselines(project)
         self._baselines[project] = baselines
+        return baselines
+    
+
+    def _get_board_ids(self, project: str):
+        boards = self.jira.boards()
+        board_ids = []
+        for board in boards:
+            if board.location.name == project:
+                board_ids.append(board.id)
+        
+        return board_ids
+    
+    def _get_sprint_baselines(self, project: str):
+        baselines = []
+        board_ids = self._get_board_ids(project)
+        for bord_id in board_ids:
+            sprints = self.jira.sprints(bord_id)
+            for sprint in sprints:
+                baselines.append(sprint.name)
         return baselines
 
     def _get_baselines_for_project(self, project: str) -> list[str]:
@@ -662,9 +684,16 @@ class JiraRequirementReader(AbstractRequirementReader):
         """Fetch issues from Jira depending on API mode."""
 
         project_key = self.projects[project].key
-        baseline_field = self._normalize_field_for_jql(self.config.baseline_field)
         current_baseline_jql = self._get_current_baseline_jql(project)
         baseline_jql = self._get_baseline_jql(project)
+
+        if self.config.baseline_field.lower() == "sprint":
+            board_ids = self._get_board_ids(project)
+            for board_id in board_ids:
+                sprints = self.jira.sprints(board_id)
+                for sprint in sprints:
+                    if sprint.name == baseline:
+                        baseline = sprint.id
 
         # Build JQL query for baseline filtering
         if baseline == "Current Baseline":
