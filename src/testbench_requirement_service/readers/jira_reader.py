@@ -1,13 +1,12 @@
-# mypy: ignore-errors
-# ruff: noqa
+from __future__ import annotations
 
 import base64
 import copy
 import os
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
-import sys
 from typing import Any, Literal
 
 from sanic import NotFound
@@ -18,9 +17,12 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from bs4 import BeautifulSoup
-from jira import JIRA, Issue, JIRAError, Project
-from jira.resources import Field
+try:
+    from bs4 import BeautifulSoup
+    from jira import JIRA, Issue, JIRAError, Project
+    from jira.resources import Field
+except ImportError:
+    pass
 from pydantic import BaseModel, ValidationError, model_validator
 from pydantic.fields import Field as ModelField
 
@@ -72,24 +74,27 @@ class JiraRequirementReaderConfig(BaseModel):
     projects: dict[str, JiraProjectConfig] = ModelField(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_config(self):
+    def validate_config(self):  # noqa: C901
         if self.auth_type == "basic":
             self.username = self.username or os.getenv("JIRA_USERNAME")
             if not self.username:
                 raise ValueError(
-                    "Jira username must be provided for basic auth (via config or JIRA_USERNAME env)"
+                    "Jira username must be provided for basic auth "
+                    "(via config or JIRA_USERNAME env)"
                 )
 
             self.api_token = self.api_token or os.getenv("JIRA_API_TOKEN")
             if not self.api_token:
                 raise ValueError(
-                    "Jira API token must be provided for basic auth (via config or JIRA_API_TOKEN env)"
+                    "Jira API token must be provided for basic auth "
+                    "(via config or JIRA_API_TOKEN env)"
                 )
         elif self.auth_type == "token":
             self.token = self.token or os.getenv("JIRA_BEARER_TOKEN")
             if not self.token:
                 raise ValueError(
-                    "Jira Personal Access Token must be provided for token auth (via config or JIRA_BEARER_TOKEN env)"
+                    "Jira Personal Access Token must be provided for token auth "
+                    "(via config or JIRA_BEARER_TOKEN env)"
                 )
         elif self.auth_type == "oauth":
             self.access_token = self.access_token or os.getenv("JIRA_ACCESS_TOKEN")
@@ -100,15 +105,18 @@ class JiraRequirementReaderConfig(BaseModel):
             self.key_cert = self.key_cert or os.getenv("JIRA_KEY_CERT")
             if not self.access_token:
                 raise ValueError(
-                    "Jira Access Token must be provided for OAuth (via config or JIRA_ACCESS_TOKEN env)"
+                    "Jira Access Token must be provided for OAuth "
+                    "(via config or JIRA_ACCESS_TOKEN env)"
                 )
             if not self.access_token_secret:
                 raise ValueError(
-                    "Jira Access Token Secret must be provided for OAuth (via config or JIRA_ACCESS_TOKEN_SECRET env)"
+                    "Jira Access Token Secret must be provided for OAuth "
+                    "(via config or JIRA_ACCESS_TOKEN_SECRET env)"
                 )
             if not self.consumer_key:
                 raise ValueError(
-                    "Jira consumer key must be provided for OAuth (via config or JIRA_CONSUMER_KEY env)"
+                    "Jira consumer key must be provided for OAuth "
+                    "(via config or JIRA_CONSUMER_KEY env)"
                 )
             if not self.key_cert:
                 raise ValueError(
@@ -131,7 +139,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         # key: project name (format: "{project.name} ({project.key})"), value: Project Resource
         self._projects: dict[str, Project] = {}
-        # key: project name (format: "{project.name} ({project.key})"), value: list of project baselines as str
+        # key: project name (format: "{project.name} ({project.key})"), value: list of baselines
         self._baselines: dict[str, list[str]] = {}
 
     @property
@@ -221,7 +229,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         issues = self._fetch_issues(
             project,
             baseline,
-            fields=["key"] + field_ids,
+            fields=",".join(["key", *field_ids]),
             extra_jql=extra_jql,
         )
         issue_map = {issue.key: issue for issue in issues}
@@ -270,22 +278,22 @@ class JiraRequirementReader(AbstractRequirementReader):
             fields="summary,created,creator",
             expand="changelog",
         )
-
-        self.jira.sprints_by_name()
-
         return self._generate_requirement_versions(issue)
 
-    def _generate_requirement_versions(self, issue: Issue):
+    def _generate_requirement_versions(self, issue: Issue) -> list[RequirementVersionObject]:
         versions = []
         minor = 0
         major = 1
         # Add creation as the initial version
+        creator = getattr(issue.fields.creator, "displayName", "Unknown")
+        created_dt = datetime.strptime(issue.fields.created, "%Y-%m-%dT%H:%M:%S.%f%z")
+        created_str = created_dt.strftime("%Y-%m-%d %H:%M:%S")
         versions.append(
             RequirementVersionObject(
                 name=f"{major}.{minor}",
-                date=issue.fields.created,
-                author=getattr(issue.fields.creator, "displayName", "Unknown"),
-                comment=f"Issue created by {getattr(issue.fields.creator, 'displayName', 'Unknown')} on {datetime.strptime(issue.fields.created, '%Y-%m-%dT%H:%M:%S.%f%z').strftime('%Y-%m-%d %H:%M:%S')}",
+                date=created_dt,
+                author=creator,
+                comment=f"Issue created by {creator} on {created_str}",
             )
         )
 
@@ -326,8 +334,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             from_val = item.fromString if hasattr(item, "fromString") else ""
             to_val = item.toString if hasattr(item, "toString") else ""
             changes.append(f"{item.field}: '{from_val}' → '{to_val}'")
-        comment = "; ".join(changes) if changes else "Fields updated"
-        return comment
+        return "; ".join(changes) if changes else "Fields updated"
 
     @staticmethod
     def sort_by_issue_key(issue: Issue):
@@ -336,7 +343,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         except (AttributeError, ValueError, IndexError):
             return float("inf")  # Push invalid/malformed keys to the end
 
-    def _load_config_dict_from_path(self, config_path: Path) -> dict[str, str]:
+    def _load_config_dict_from_path(self, config_path: Path) -> dict[str, Any]:
         if not config_path.exists():
             raise FileNotFoundError(f"Reader config file not found at: '{config_path.resolve()}'")
 
@@ -355,7 +362,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         if config_prefix not in config_dict:
             raise ValueError(f"TOML section [{config_prefix}] not found in reader config file.")
 
-        project_configs = config_dict["projects"] if "projects" in config_dict else {}
+        project_configs = config_dict.get("projects", {})
 
         try:
             return JiraRequirementReaderConfig(
@@ -369,11 +376,11 @@ class JiraRequirementReader(AbstractRequirementReader):
         if self.config.auth_type == "basic":
             return JIRA(
                 server=self.config.server_url,
-                basic_auth=(self.config.username, self.config.api_token),
+                basic_auth=(self.config.username or "", self.config.api_token or ""),
             )
-        elif self.config.auth_type == "token":
+        if self.config.auth_type == "token":
             return JIRA(server=self.config.server_url, token_auth=self.config.token)
-        elif self.config.auth_type == "oauth":
+        if self.config.auth_type == "oauth":
             return JIRA(
                 oauth={
                     "access_token": self.config.access_token,
@@ -382,13 +389,12 @@ class JiraRequirementReader(AbstractRequirementReader):
                     "key_cert": self.config.key_cert,
                 }
             )
-        else:
-            raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
+        raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
 
-    def _fetch_projects(self) -> list:
-        self._projects = {
-            f"{project.name} ({project.key})": project for project in self.jira.projects()
-        }
+    def _fetch_projects(self) -> list[Project]:
+        projects = self.jira.projects()
+        self._projects = {f"{project.name} ({project.key})": project for project in projects}
+        return projects
 
     def _fetch_project_issue_fields(self, project_key: str) -> list[Field]:
         fields_dict: dict[str, Field] = {}
@@ -442,7 +448,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             if self.config.baseline_field in (field_id, field.name):
                 return field
         logger.warning(
-            f"Configured baseline_field '{self.config.baseline_field}' not found in project {project_key}"
+            f"Configured baseline_field '{self.config.baseline_field}' not found in project {project_key}"  # noqa: E501
         )
         return None
 
@@ -473,7 +479,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             field for field in self.jira.fields() if field.get("id", "").startswith("customfield_")
         ]
 
-    def _embed_jira_images(self, issue: Issue) -> str:
+    def _embed_jira_images(self, issue: Issue) -> str:  # noqa: C901
         """
         Embed Jira images referenced in an issue's rendered description by converting relative URLs
         and Jira attachment URLs into absolute URLs or inline base64-encoded data URIs.
@@ -490,7 +496,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         Returns:
             str: HTML string with images embedded as absolute URLs or data URIs.
-        """
+        """  # noqa: E501
         allowed_image_mime_types = {"image/png", "image/jpeg", "image/gif"}
         max_embedded_image_size = 5 * 1024 * 1024  # 5 MB limit for embedded images
         jira_attachment_url_pattern = re.compile(r"^/rest/api/\d+/attachment/content/(\d+)$")
@@ -536,7 +542,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 encoded = base64.b64encode(image_bytes).decode("utf-8")
                 attachment_dict[attachment.id] = (mime_type, encoded)
                 logger.debug(
-                    f"Successfully processed attachment {attachment_id} ({len(image_bytes)} bytes)"
+                    f"Successfully processed attachment {attachment.id} ({len(image_bytes)} bytes)"
                 )
             except Exception as e:
                 logger.debug(f"Could not process attachment {attachment.id}: {e}")
@@ -546,7 +552,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         soup = BeautifulSoup(description, "html.parser")
         img_tags = soup.find_all("img")
         for img in img_tags:
-            src = img.get("src", "")
+            src = str(img.get("src", ""))
             if src.startswith("/images/"):
                 img["src"] = f"{self.jira.server_url}{src}"
                 continue
@@ -568,7 +574,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         return str(soup)
 
-    def _fetch_issue(
+    def _fetch_issue(  # noqa: PLR0913
         self,
         issue_id: str,
         project: str | None = None,
@@ -593,7 +599,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         Raises:
             NotFound: If the issue does not exist, or does not belong to the specified project/baseline, or is not a requirement type.
-        """
+        """  # noqa: E501
         try:
             if fields and fields != "*all":
                 if project:
@@ -601,7 +607,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 if baseline:
                     fields += f",{self.config.baseline_field}"
                 fields += ",issuetype"
-                fields = ",".join(list(set(field.strip() for field in fields.split(","))))
+                fields = ",".join(list({field.strip() for field in fields.split(",")}))
             issue = self.jira.issue(issue_id, fields=fields, expand=expand, properties=properties)
         except JIRAError as e:
             logger.debug(f"Error fetching issue {issue_id}: {e}")
@@ -645,7 +651,7 @@ class JiraRequirementReader(AbstractRequirementReader):
     
 
 
-    def _fetch_issues(
+    def _fetch_issues(  # noqa: PLR0913
         self,
         project: str,
         baseline: str,
@@ -700,22 +706,22 @@ class JiraRequirementReader(AbstractRequirementReader):
                 )
             # Manual pagination for older Jira Server versions
             start_at = 0
-            maxResults = 1000
+            max_results = 1000
             issues: list[Issue] = []
             while True:
                 chunk = self.jira.search_issues(
                     jql_query,
                     startAt=start_at,
-                    maxResults=maxResults,
+                    maxResults=max_results,
                     fields=fields,
                     expand=expand,
                     properties=properties,
                 )
                 issues.extend(chunk)
-                if len(chunk) < maxResults:
+                if len(chunk) < max_results:
                     # No more pages
                     break
-                start_at += maxResults
+                start_at += max_results
             return issues
         except JIRAError as e:
             logger.error(f"Error fetching issues: {e}")
@@ -729,12 +735,11 @@ class JiraRequirementReader(AbstractRequirementReader):
         field_type = schema.get("type")
         if field_type == "array":
             return "ARRAY"
-        elif field_type == "boolean":
+        if field_type == "boolean":
             return "BOOLEAN"
-        else:
-            return "STRING"
+        return "STRING"
 
-    def _build_userdefinedattribute_object(
+    def _build_userdefinedattribute_object(  # noqa: RET503
         self, field: dict[str, Any], field_value: Any
     ) -> UserDefinedAttribute:
         value_type = self._extract_valuetype_from_issue_field(field)
@@ -750,7 +755,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 valueType="STRING",
                 stringValue=string_value,
             )
-        elif value_type == "ARRAY":
+        if value_type == "ARRAY":
             if isinstance(field_value, list):
                 string_values = []
                 for item in field_value:
@@ -767,14 +772,14 @@ class JiraRequirementReader(AbstractRequirementReader):
                 valueType="ARRAY",
                 stringValues=string_values,
             )
-        elif value_type == "BOOLEAN":
+        if value_type == "BOOLEAN":
             return UserDefinedAttribute(
                 name=field["name"],
                 valueType="BOOLEAN",
                 booleanValue=bool(field_value),
             )
 
-    def _get_issue_version(self, issue: Issue, key: RequirementKey) -> Issue:
+    def _get_issue_version(self, issue: Issue, key: RequirementKey) -> Issue:  # noqa: C901
         """
         Reconstructs the issue's fields to reflect their state at the specified version.
         Modifies the issue object in-place.
@@ -796,7 +801,8 @@ class JiraRequirementReader(AbstractRequirementReader):
                 f"Invalid version format '{key.version}' for requirement key '{key.id}': {e}"
             )
             raise ValueError(
-                f"Invalid version format '{key.version}' for requirement key '{key.id}'. Expected format 'major.minor'."
+                f"Invalid version format '{key.version}' for requirement key '{key.id}'. "
+                "Expected format 'major.minor'."
             ) from e
 
         issue_copy = copy.deepcopy(issue)
@@ -876,9 +882,9 @@ class JiraRequirementReader(AbstractRequirementReader):
         assignee = getattr(issue.fields, "assignee", None)
         creator = getattr(issue.fields, "creator", None)
         owner = ""
-        if assignee and getattr(assignee, "displayName", None) != None:
+        if assignee and getattr(assignee, "displayName", None):
             owner = assignee.displayName
-        elif creator and getattr(creator, "displayName", None) != None:
+        elif creator and getattr(creator, "displayName", None):
             owner = creator.displayName
 
         status_field = getattr(issue.fields, "status", None)
@@ -938,7 +944,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                         requirement_tree[parent_key] = parent
                     except Exception as e:
                         logger.warning(
-                            f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
+                            f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"  # noqa: E501
                         )
                         continue
                 else:

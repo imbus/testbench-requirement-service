@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-import javaproperties
-import pandas as pd  # type: ignore
+try:
+    import javaproperties
+    import pandas as pd  # type: ignore
+except ImportError:
+    pass
 from sanic.exceptions import NotFound
 
 from testbench_requirement_service.models.requirement import (
@@ -43,15 +48,19 @@ class ExcelRequirementReader(AbstractRequirementReader):
     def get_baselines(self, project: str) -> list[BaselineObject]:
         allowed_suffixes = self._get_allowed_suffixes_for_project(project)
         files = self._get_files_in_project_path(project)
-        return [
-            BaselineObject(
-                name=f.stem,
-                date=datetime.fromtimestamp(f.stat().st_birthtime).astimezone(),
+        baselines = []
+        for file in files:
+            if file.suffix not in allowed_suffixes:
+                continue
+            stat_result = file.stat()
+            creation_timestamp = getattr(stat_result, "st_birthtime", stat_result.st_ctime)
+            baseline = BaselineObject(
+                name=file.stem,
+                date=datetime.fromtimestamp(creation_timestamp, timezone.utc),
                 type="UNLOCKED",
             )
-            for f in files
-            if f.suffix in allowed_suffixes
-        ]
+            baselines.append(baseline)
+        return baselines
 
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         baseline_path = self._get_baseline_path(project, baseline)
