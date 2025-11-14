@@ -191,3 +191,6 @@ results/
 
 # Requirement files
 requirements
+
+# Do not ignore config.py in the readers directory
+!src/testbench_requirement_service/readers/**/config.py
