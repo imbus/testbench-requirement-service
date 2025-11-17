@@ -214,7 +214,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def _fetch_baselines_for_project(self, project: str) -> list[str]:
         project_key = self.projects[project].key
-        baseline_field = self._get_baseline_field(project)
+        baseline_field = self._get_config_value("baseline_field", project)
 
         if baseline_field.lower() == "fixversions":
             baselines = self.jira_client.fetch_project_versions(project_key)
@@ -324,8 +324,8 @@ class JiraRequirementReader(AbstractRequirementReader):
         if baseline_query:
             jql_query += f" AND {baseline_query}"
 
-        requirement_types = self._get_requirement_types(project)
-        requirement_group_types = self._get_requirement_group_types(project)
+        requirement_types = self._get_config_value("requirement_types", project)
+        requirement_group_types = self._get_config_value("requirement_group_types", project)
         issuetypes = requirement_types + requirement_group_types
         issuetype_str = ",".join(f'"{issuetype}"' for issuetype in issuetypes)
         jql_query += f" AND issuetype IN ({issuetype_str})"
@@ -354,9 +354,9 @@ class JiraRequirementReader(AbstractRequirementReader):
             str | None: The formatted JQL clause, or None if no template is available.
         """  # noqa: E501
         if baseline == "Current Baseline":
-            jql_template = self._get_current_baseline_jql(project)
+            jql_template = self._get_config_value("current_baseline_jql", project)
         else:
-            jql_template = self._get_baseline_jql(project)
+            jql_template = self._get_config_value("baseline_jql", project)
         if not jql_template:
             logger.debug(f"No JQL template found for project '{project}' and baseline '{baseline}'")
             return None
@@ -414,43 +414,26 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         return requirement_tree
 
-    def _get_requirement_types(self, project: str | None = None) -> list[str]:
+    def _get_config_value(self, attr: str, project: str | None = None):
+        """
+        Retrieve a configuration value, optionally project-specific, falling back to global config.
+        Args:
+            attr (str): The attribute name to retrieve.
+            project (str | None): The project name, if any.
+        Returns:
+            The value of the attribute, or None if not found.
+        """
         if project and project in self.config.projects:
             project_config = self.config.projects[project]
-            if project_config.requirement_types is not None:
-                return project_config.requirement_types
-        return self.config.requirement_types
-
-    def _get_requirement_group_types(self, project: str | None = None) -> list[str]:
-        if project and project in self.config.projects:
-            project_config = self.config.projects[project]
-            if project_config.requirement_group_types is not None:
-                return project_config.requirement_group_types
-        return self.config.requirement_group_types
-
-    def _get_baseline_jql(self, project: str | None = None) -> str:
-        if project and project in self.config.projects:
-            project_config = self.config.projects[project]
-            if project_config.baseline_jql is not None:
-                return project_config.baseline_jql
-        return self.config.baseline_jql
-
-    def _get_current_baseline_jql(self, project: str | None = None) -> str:
-        if project and project in self.config.projects:
-            project_config = self.config.projects[project]
-            if project_config.current_baseline_jql is not None:
-                return project_config.current_baseline_jql
-        return self.config.current_baseline_jql
-
-    def _get_baseline_field(self, project: str | None = None) -> str:
-        if project and project in self.config.projects:
-            project_config = self.config.projects[project]
-            if project_config.baseline_field is not None:
-                return project_config.baseline_field
-        return self.config.baseline_field
+            value = getattr(project_config, attr, None)
+            if value is not None:
+                return value
+        return getattr(self.config, attr, None)
 
     def _is_requirement_issue(self, issue: Issue, project: str | None = None) -> bool:
-        return issue.fields.issuetype.name in self._get_requirement_types(project)
+        return issue.fields.issuetype.name in self._get_config_value("requirement_types", project)
 
     def _is_requirement_group_issue(self, issue: Issue, project: str | None = None) -> bool:
-        return issue.fields.issuetype.name in self._get_requirement_group_types(project)
+        return issue.fields.issuetype.name in self._get_config_value(
+            "requirement_group_types", project
+        )
