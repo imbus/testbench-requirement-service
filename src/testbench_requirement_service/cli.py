@@ -36,7 +36,7 @@ def cli(ctx):
     "--reader-config",
     type=str,
     metavar="PATH",
-    help="Path to the reader config file  [default: reader_config.py]",
+    help="Path to the reader config file  [default: reader_config.toml]",
 )
 @click.option(
     "--host", type=str, metavar="HOST", help="Host to run the service on  [default: 127.0.0.1]"

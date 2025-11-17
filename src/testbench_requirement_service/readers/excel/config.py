@@ -1,19 +1,6 @@
 from pathlib import Path
 
-try:  # noqa: SIM105
-    import javaproperties
-except ImportError:
-    pass
-
-
-def load_config_from_path(config_path: Path) -> dict[str, str]:
-    if not config_path.exists():
-        raise FileNotFoundError(f"Reader config file not found: '{config_path.resolve()}'.")
-    try:
-        with config_path.open("r") as config_file:
-            return javaproperties.load(config_file)
-    except Exception as e:
-        raise ImportError(f"Importing reader config from '{config_path}' failed.") from e
+from testbench_requirement_service.readers.utils import load_properties_config_from_path
 
 
 def validate_required_settings_in_config(config: dict[str, str]):
@@ -222,6 +209,6 @@ def validate_config(config: dict[str, str], is_project_config: bool = False) -> 
     return config
 
 
-def load_and_validate_config_from_path(config_path: Path) -> dict[str, str]:
-    config = load_config_from_path(config_path)
+def load_excel_config_from_path(config_path: Path) -> dict[str, str]:
+    config = load_properties_config_from_path(config_path)
     return validate_config(config)

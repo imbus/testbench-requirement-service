@@ -22,7 +22,7 @@ from testbench_requirement_service.models.requirement import (
 )
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 from testbench_requirement_service.readers.jira.client import JiraClient
-from testbench_requirement_service.readers.jira.config import load_and_validate_config_from_path
+from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
 from testbench_requirement_service.readers.jira.utils import (
     build_extendedrequirementobject_from_issue,
     build_requirementobjectnode_from_issue,
@@ -33,11 +33,16 @@ from testbench_requirement_service.readers.jira.utils import (
     get_field_id,
     is_version_type_field,
 )
+from testbench_requirement_service.readers.utils import load_reader_config_from_path
 
 
 class JiraRequirementReader(AbstractRequirementReader):
     def __init__(self, config_path: str):
-        self.config = load_and_validate_config_from_path(Path(config_path))
+        self.config = load_reader_config_from_path(
+            config_path=Path(config_path),
+            config_class=JiraRequirementReaderConfig,
+            config_prefix="jira",
+        )
         self.jira_client = JiraClient(self.config)
 
         # key: project name (format: "{project.name} ({project.key})"), value: Project Resource
@@ -360,7 +365,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         if not jql_template:
             logger.debug(f"No JQL template found for project '{project}' and baseline '{baseline}'")
             return None
-        return jql_template.format(baseline=baseline)
+        return str(jql_template).format(baseline=baseline)
 
     def _build_requirement_nodes(
         self, issues: list[Issue], project: str

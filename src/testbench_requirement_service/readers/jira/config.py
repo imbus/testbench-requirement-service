@@ -1,13 +1,7 @@
 import os
-import sys
-from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-from pydantic import BaseModel, ValidationError, model_validator
+from pydantic import BaseModel, model_validator
 from pydantic.fields import Field as ModelField
 
 
@@ -92,32 +86,3 @@ class JiraRequirementReaderConfig(BaseModel):
                 )
 
         return self
-
-
-def load_config_dict_from_path(config_path: Path) -> dict[str, Any]:
-    if not config_path.exists():
-        raise FileNotFoundError(f"Reader config file not found at: '{config_path.resolve()}'")
-
-    try:
-        with config_path.open("rb") as config_file:
-            config_dict = tomllib.load(config_file)
-    except tomllib.TOMLDecodeError as e:
-        raise ValueError(f"Failed to parse TOML in reader config file: {e}") from e
-
-    return config_dict
-
-
-def load_and_validate_config_from_path(config_path: Path) -> JiraRequirementReaderConfig:
-    config_dict = load_config_dict_from_path(config_path)
-
-    config_prefix = "jira"
-    if config_prefix not in config_dict:
-        raise ValueError(f"TOML section [{config_prefix}] not found in reader config file.")
-
-    project_configs = config_dict.get("projects", {})
-
-    try:
-        return JiraRequirementReaderConfig(**config_dict[config_prefix], projects=project_configs)
-    except ValidationError as e:
-        error_message = "; ".join([err["msg"] for err in e.errors()])
-        raise ValueError(f"Invalid reader config: {error_message}") from e

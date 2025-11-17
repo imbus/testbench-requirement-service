@@ -16,21 +16,22 @@ from testbench_requirement_service.models.requirement import (
     UserDefinedAttributeResponse,
 )
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
-from testbench_requirement_service.readers.jsonl.config import load_and_validate_config_from_path
+from testbench_requirement_service.readers.jsonl.config import JsonlRequirementReaderConfig
 from testbench_requirement_service.readers.jsonl.models import FileRequirementObjectNode
 from testbench_requirement_service.readers.jsonl.utils import (
     build_extendedrequirementobject_from_file_object,
     build_requirementobject_from_file_object,
 )
+from testbench_requirement_service.readers.utils import load_reader_config_from_path
 
 
 class JsonlRequirementReader(AbstractRequirementReader):
     def __init__(self, config_path: str):
-        self.config = load_and_validate_config_from_path(Path(config_path))
-
-    @property
-    def requirements_path(self) -> Path:
-        return Path(self.config.BASE_DIR)
+        self.config = load_reader_config_from_path(
+            config_path=Path(config_path),
+            config_class=JsonlRequirementReaderConfig,
+            config_prefix="jsonl",
+        )
 
     def project_exists(self, project: str) -> bool:
         return self._get_project_path(project).exists()
@@ -39,9 +40,9 @@ class JsonlRequirementReader(AbstractRequirementReader):
         return self._get_baseline_path(project, baseline).exists()
 
     def get_projects(self) -> list[str]:
-        if not self.requirements_path.exists():
+        if not self.config.requirements_path.exists():
             return []
-        return [p.name for p in self.requirements_path.iterdir() if p.is_dir()]
+        return [p.name for p in self.config.requirements_path.iterdir() if p.is_dir()]
 
     def get_baselines(self, project: str) -> list[BaselineObject]:
         return [
@@ -87,7 +88,7 @@ class JsonlRequirementReader(AbstractRequirementReader):
         )
 
     def get_user_defined_attributes(self) -> list[UserDefinedAttribute]:
-        filepath = self.requirements_path / "UserDefinedAttributes.json"
+        filepath = self.config.requirements_path / "UserDefinedAttributes.json"
         if not filepath.exists():
             return []
         with filepath.open("r") as f:
@@ -170,7 +171,7 @@ class JsonlRequirementReader(AbstractRequirementReader):
         return versions
 
     def _get_project_path(self, project: str) -> Path:
-        return self.requirements_path / project
+        return self.config.requirements_path / project
 
     def _get_baseline_path(self, project: str, baseline: str) -> Path:
         return self._get_project_path(project) / f"{baseline}.jsonl"

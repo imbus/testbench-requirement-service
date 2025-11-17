@@ -1,24 +1,16 @@
 from pathlib import Path
 
-from testbench_requirement_service.utils.helpers import import_module_from_file_path
+from pydantic import BaseModel, field_validator
 
 
-def load_config_from_path(config_path: Path):
-    try:
-        return import_module_from_file_path(config_path)
-    except Exception as e:
-        raise ImportError(f"Importing reader config from '{config_path.resolve()}' failed.") from e
+class JsonlRequirementReaderConfig(BaseModel):
+    requirements_path: Path
 
-
-def load_and_validate_config_from_path(config_path: Path):
-    config = load_config_from_path(config_path)
-
-    if not hasattr(config, "BASE_DIR"):
-        raise KeyError("BASE_DIR is missing in reader config file.")
-    if not getattr(config, "BASE_DIR", None):
-        raise ValueError("BASE_DIR is required in reader config file.")
-    base_dir = Path(config.BASE_DIR)
-    if not base_dir.exists():
-        raise FileNotFoundError(f"BASE_DIR not found: '{base_dir.resolve()}'.")
-
-    return config
+    @field_validator("requirements_path", mode="after")
+    @classmethod
+    def validate_requirements_path(cls, requirements_path: Path) -> Path:
+        if not requirements_path.exists():
+            raise FileNotFoundError(
+                f"requirements_path not found: '{requirements_path.resolve()}'."
+            )
+        return requirements_path

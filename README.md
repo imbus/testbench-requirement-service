@@ -77,18 +77,19 @@ If successful, a `config.py` file will be created with `PASSWORD_HASH` and `SALT
 
 You will also need to configure the requirement reader that the service will use.
 
-Create a `reader_config.py` file in your current working directory and define the necessary settings for the requirement reader. If you prefer to store the configuration file elsewhere, you can specify a custom path, but remember to provide this path when starting the service.
+Create a `reader_config.toml` file in your current working directory and define the necessary settings for the requirement reader. If you prefer to store the configuration file elsewhere, you can specify a custom path, but remember to provide this path when starting the service.
 
 The requirement reader will receive the path to this configuration file as a parameter in its constructor, allowing it to load and work with your settings.
 
-For the default requirement reader, `JsonlRequirementReader`, you must define at least the `BASE_DIR` setting in your `reader_config.py`. This should be the path to the directory containing the requirement files for your service.
+For the default requirement reader, `JsonlRequirementReader`, you must define at least the `requirements_path` setting in your `reader_config.toml`. This should be the path to the directory containing the requirement files for your service.
 
 Here’s an example of the minimum configuration for `JsonlRequirementReader`:
 
 ```python
-# reader_config.py
+# reader_config.toml
 
-BASE_DIR = "requirements/"
+[jsonl]
+requirements_path = "requirements/"
 ```
 
 Once the configuration is complete, you're ready to start the service.
@@ -123,7 +124,7 @@ testbench-requirement-service start --host 127.0.0.2 --port 8002
 | ------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
 | `--config`        | Path to the app configuration file                | `config.py`                                                    |
 | `--reader-class`  | Path or module string to the reader class         | `testbench_requirement_service.readers.JsonlRequirementReader` |
-| `--reader-config` | Path to the reader configuration file             | `reader_config.py`                                             |
+| `--reader-config` | Path to the reader configuration file             | `reader_config.toml`                                           |
 | `--host`          | Host to run the service on                        | `127.0.0.1`                                                    |
 | `--port`          | Port to run the service on                        | `8000`                                                         |
 | `--dev`           | Run the service in dev mode (debug + auto reload) | Not set                                                          |
@@ -174,11 +175,11 @@ The service includes built-in requirement reader classes that handle different f
 
 ### [JsonlRequirementReader](src/testbench_requirement_service/readers/jsonl_reader.py) *(Default)*
 
-- **Description**: Reads requirement data from `.jsonl` (JSON Lines) files. The configuration for the reader is specified in a Python `.py` file.
+- **Description**: Reads requirement data from `.jsonl` (JSON Lines) files. The configuration for the reader is specified in a `.toml` file.
 - **Required Configuration**:
-  - `BASE_DIR`: Path to the directory containing the requirement files.
+  - `requirements_path`: Path to the directory containing the requirement files.
 - **Required Schema**:
-  - ***Projects*** are directories located at the top level inside `BASE_DIR`.
+  - ***Projects*** are directories located at the top level inside `requirements_path`.
   - ***Baselines*** are `.jsonl` files stored within a project directory.
   - ***Requirements*** are JSON objects, each represented as a separate line in a baseline `.jsonl` file.
     A requirement follows this Schema:
@@ -217,7 +218,7 @@ The service includes built-in requirement reader classes that handle different f
 
     If the `"requirement"` attribute is set to `true`, the object represents an actual requirement. Otherwise, it serves only as a node in the requirements tree structure.
     Root requirement objects have their `"parent"` attribute set to `null`.
-  - ***UserDefinedAttributes*** are specified in the `UserDefinedAttributes.json` file, located at the top level in `BASE_DIR`.
+  - ***UserDefinedAttributes*** are specified in the `UserDefinedAttributes.json` file, located at the top level in `requirements_path`.
     This file follows the Schema below:
 
     ```json
@@ -229,10 +230,11 @@ The service includes built-in requirement reader classes that handle different f
     ]
     ```
 - **Example Configuration**:
-  Here's an example of how to configure the `JsonlRequirementReader` in the `.py` configuration file:
+  Here's an example of how to configure the `JsonlRequirementReader` in the `.toml` configuration file:
   ```python
-  # reader_config.py
-  BASE_DIR = "requirements/"
+  # reader_config.toml
+  [jsonl]
+  requirements_path = "requirements/"
   ```
 
 ### [ExcelRequirementReader](src/testbench_requirement_service/readers/excel_reader.py)
@@ -359,30 +361,28 @@ The service includes built-in requirement reader classes that handle different f
 
   #### `[jira]`
 
-  | Setting        | Type   | Description                                                                | Required | Default     |
-  | -------------- | ------ | -------------------------------------------------------------------------- | -------- | ----------- |
-  | `server_url`   | String | Base URL of the Jira REST API Server                                       | Yes      | -           |
-  | `auth_type`    | String | Authentication method to use. Valid values: `basic`, `token`, `oauth`     | Yes      | `"basic"`  |
-  | `baseline_field` | String | Field used to identify baselines in Jira                                  | No       | `fixVersions` |
-  | `requirement_types` | List[String] | List of Jira issue types considered as requirements                     | No       | `["Story", "Task"]` |
-  | `requirement_group_types` | List[String] | List of Jira issue types considered as requirement groups              | No       | `["Epic"]` |
+  | Setting                     | Type         | Description                                                                | Required | Default               |
+  | --------------------------- | ------------ | -------------------------------------------------------------------------- | -------- | --------------------- |
+  | `server_url`              | String       | Base URL of the Jira REST API Server                                       | Yes      | -                     |
+  | `auth_type`               | String       | Authentication method to use. Valid values:`basic`, `token`, `oauth` | Yes      | `"basic"`           |
+  | `baseline_field`          | String       | Field used to identify baselines in Jira                                   | No       | `fixVersions`       |
+  | `requirement_types`       | List[String] | List of Jira issue types considered as requirements                        | No       | `["Story", "Task"]` |
+  | `requirement_group_types` | List[String] | List of Jira issue types considered as requirement groups                  | No       | `["Epic"]`          |
 
   #### `[projects]`
 
-  | Setting        | Type   | Description                                                                | Required | Default     |
-  | -------------- | ------ | -------------------------------------------------------------------------- | -------- | ----------- |
-  | `requirement_types` | List[String] | Project-specific list of Jira issue types considered as requirements   | No       | Inherits from `[jira]` |
+  | Setting                     | Type         | Description                                                                | Required | Default                  |
+  | --------------------------- | ------------ | -------------------------------------------------------------------------- | -------- | ------------------------ |
+  | `requirement_types`       | List[String] | Project-specific list of Jira issue types considered as requirements       | No       | Inherits from `[jira]` |
   | `requirement_group_types` | List[String] | Project-specific list of Jira issue types considered as requirement groups | No       | Inherits from `[jira]` |
-
 - **Environment variables**:
   Depending on the configured `auth_type` in the `[jira]` table of your `.toml` configuration, certain environment variables must be set to provide authentication credentials.
 
   | auth_type | Required Environment Variables                                                                | Description                                                        |
   | --------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-  | `basic`   | `JIRA_USERNAME`, `JIRA_API_TOKEN`                                                             | Used for Basic Authentication with username and API token          |
-  | `token`   | `JIRA_BEARER_TOKEN`                                                                           | Used for token-based authentication (e.g., personal access tokens) |
-  | `oauth`   | `JIRA_ACCESS_TOKEN`, `JIRA_ACCESS_TOKEN_SECRET`, `JIRA_CONSUMER_KEY`, `JIRA_KEY_CERT`         | Used for OAuth 1.0a authentication                                 |
-
+  | `basic` | `JIRA_USERNAME`, `JIRA_API_TOKEN`                                                         | Used for Basic Authentication with username and API token          |
+  | `token` | `JIRA_BEARER_TOKEN`                                                                         | Used for token-based authentication (e.g., personal access tokens) |
+  | `oauth` | `JIRA_ACCESS_TOKEN`, `JIRA_ACCESS_TOKEN_SECRET`, `JIRA_CONSUMER_KEY`, `JIRA_KEY_CERT` | Used for OAuth 1.0a authentication                                 |
 - **Example Configuration**:
 
   ```toml

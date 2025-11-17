@@ -26,7 +26,7 @@ class AppConfig(Config):
 
         self.CONFIG_PATH = "config.py"
         self.READER_CLASS = "testbench_requirement_service.readers.JsonlRequirementReader"
-        self.READER_CONFIG_PATH = "reader_config.py"
+        self.READER_CONFIG_PATH = "reader_config.toml"
         self.LOGLEVEL = "INFO"
         self.OAS_UI_DEFAULT = "swagger"
         self.OAS_UI_REDOC = False

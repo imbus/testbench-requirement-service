@@ -21,8 +21,7 @@ from testbench_requirement_service.models.requirement import (
 )
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 from testbench_requirement_service.readers.excel.config import (
-    load_and_validate_config_from_path,
-    load_config_from_path,
+    load_excel_config_from_path,
     validate_config,
 )
 from testbench_requirement_service.readers.excel.utils import (
@@ -33,11 +32,12 @@ from testbench_requirement_service.readers.excel.utils import (
     get_config_for_user_defined_attribute,
     read_data_frame_from_file_path,
 )
+from testbench_requirement_service.readers.utils import load_properties_config_from_path
 
 
 class ExcelRequirementReader(AbstractRequirementReader):
     def __init__(self, config_path: str):
-        self.config = load_and_validate_config_from_path(Path(config_path))
+        self.config = load_excel_config_from_path(Path(config_path))
 
     @property
     def requirements_path(self) -> Path:
@@ -216,7 +216,7 @@ class ExcelRequirementReader(AbstractRequirementReader):
     def _get_config_for_project(self, project: str) -> dict[str, str]:
         project_config_path = self._get_project_path(project) / f"{project}.properties"
         if project_config_path.exists():
-            project_config = load_config_from_path(project_config_path)
+            project_config = load_properties_config_from_path(project_config_path)
             return validate_config(self.config.copy() | project_config, True)
         return self.config
 
