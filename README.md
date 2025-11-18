@@ -27,15 +27,35 @@ pip install testbench-requirement-service
 
 This will install the base version of the tool.
 
-### 2. Optional: Install Excel functionality
+### 2. Optional: Install extras
 
-If you need support for reading Excel files (`ExcelRequirementReader`), you should install the tool with the optional Excel dependencies:
+If you need additional readers, you can install optional dependency groups.
+
+#### Excel support (optional)
+
+If you need support for reading requirements from Excel or text files (`ExcelRequirementReader`), install the Excel/text-file extras:
 
 ```powershell
 pip install testbench-requirement-service[excel]
 ```
 
-This will install additional libraries like `pandas`, `openpyxl` and `xlrd`, which are required for handling Excel files.
+This installs the dependencies required by the `ExcelRequirementReader` (for reading `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` files).
+
+#### Jira support (optional)
+
+If you need support for reading requirements from Jira (`JiraRequirementReader`), install the Jira extras:
+
+```powershell
+pip install testbench-requirement-service[jira]
+```
+
+This installs the Python Jira client and HTML parsing library required by the Jira reader (packages: `jira`, `beautifulsoup4`).
+
+You can install both extras at once:
+
+```powershell
+pip install testbench-requirement-service[excel,jira]
+```
 
 ### 3. Verify the installation
 
@@ -173,7 +193,7 @@ For the raw OpenAPI JSON schema, use the built-in endpoint `/docs/openapi.json`:
 
 The service includes built-in requirement reader classes that handle different file formats. Below is a list of the currently available readers:
 
-### [JsonlRequirementReader](src/testbench_requirement_service/readers/jsonl_reader.py) *(Default)*
+### [JsonlRequirementReader](src/testbench_requirement_service/readers/jsonl/reader.py) *(Default)*
 
 - **Description**: Reads requirement data from `.jsonl` (JSON Lines) files.
 - **Configuration**:
@@ -243,7 +263,7 @@ The service includes built-in requirement reader classes that handle different f
   requirements_path = "requirements/"
   ```
 
-### [ExcelRequirementReader](src/testbench_requirement_service/readers/excel_reader.py)
+### [ExcelRequirementReader](src/testbench_requirement_service/readers/excel/reader.py)
 
 - **Description**: Reads requirement data from various file formats, including `.xlsx`, `.xls`, `.csv`, `.tsv`, and `.txt` files. The reader allows for flexible configuration to handle either Microsoft Excel formats (`.xlsx` or `.xls`) or CSV/Text files (`.csv`, `.tsv` or `.txt`).
 - **Configuration**:
@@ -359,7 +379,7 @@ The service includes built-in requirement reader classes that handle different f
   - ***Requirements*** are represented as separate lines within a baseline file.
   - To use a ***project-specific configuration***, place a `.properties` file inside the project directory, named after the project. For example, if the project is named `Project1`, the configuration file must be named `Project1.properties`.
 
-### [JiraRequirementReader](src/testbench_requirement_service/readers/jira_reader.py)
+### [JiraRequirementReader](src/testbench_requirement_service/readers/jira/reader.py)
 
 - **Description**: Reads requirement data from a Jira instance using the Jira REST API. The connection is configured via a `.toml` file.
 - **Configuration**:
