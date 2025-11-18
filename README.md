@@ -81,7 +81,7 @@ Create a `reader_config.toml` file in your current working directory and define 
 
 The requirement reader will receive the path to this configuration file as a parameter in its constructor, allowing it to load and work with your settings.
 
-For the default requirement reader, `JsonlRequirementReader`, you must define at least the `requirements_path` setting in your `reader_config.toml`. This should be the path to the directory containing the requirement files for your service.
+For the default requirement reader, `JsonlRequirementReader`, add the `requirements_path` setting in the main `[jsonl]` section of your `reader_config.toml`. This should point to the directory containing the requirement files used by the service.
 
 Here’s an example of the minimum configuration for `JsonlRequirementReader`:
 
@@ -175,9 +175,15 @@ The service includes built-in requirement reader classes that handle different f
 
 ### [JsonlRequirementReader](src/testbench_requirement_service/readers/jsonl_reader.py) *(Default)*
 
-- **Description**: Reads requirement data from `.jsonl` (JSON Lines) files. The configuration for the reader is specified in a `.toml` file.
-- **Required Configuration**:
-  - `requirements_path`: Path to the directory containing the requirement files.
+- **Description**: Reads requirement data from `.jsonl` (JSON Lines) files.
+- **Configuration**:
+  The configuration for the reader is read from a `.toml` file with a `[jsonl]` table as the main section.
+
+  #### `[jsonl]`
+
+  | Setting                     | Type         | Description                                                                | Required | Default               |
+  | --------------------------- | ------------ | -------------------------------------------------------------------------- | -------- | --------------------- |
+  | `requirements_path`         | String       | Path to the directory containing the requirement files.                    | Yes      | -                     |
 - **Required Schema**:
   - ***Projects*** are directories located at the top level inside `requirements_path`.
   - ***Baselines*** are `.jsonl` files stored within a project directory.
@@ -366,13 +372,18 @@ The service includes built-in requirement reader classes that handle different f
   | `server_url`              | String       | Base URL of the Jira REST API Server                                       | Yes      | -                     |
   | `auth_type`               | String       | Authentication method to use. Valid values:`basic`, `token`, `oauth` | Yes      | `"basic"`           |
   | `baseline_field`          | String       | Field used to identify baselines in Jira                                   | No       | `fixVersions`       |
+  | `baseline_jql`          | String | JQL query template used to select issues that belong to a specific baseline.<br />Use the `{baseline}` placeholder which will be replaced with the baseline value when executing the query. | No | `fixVersion = "{baseline}"` |
+  | `current_baseline_jql`  | String | JQL query template used to resolve the active/current baseline.<br />Use the `{baseline}` placeholder if needed. Leave empty to disable automatic current-baseline resolution. | No | `""` |
   | `requirement_types`       | List[String] | List of Jira issue types considered as requirements                        | No       | `["Story", "Task"]` |
   | `requirement_group_types` | List[String] | List of Jira issue types considered as requirement groups                  | No       | `["Epic"]`          |
 
-  #### `[projects]`
+  #### `[jira.projects.<project>]`
 
   | Setting                     | Type         | Description                                                                | Required | Default                  |
-  | --------------------------- | ------------ | -------------------------------------------------------------------------- | -------- | ------------------------ |
+  | --------------------------- | ------------ | -------------------------------------------------------------------------- | -------- | --------------------- |
+  | `baseline_field`         | String | Project-specific field used to identify baselines in Jira                                                                 | No | Inherits from `[jira]` |
+  | `baseline_jql`           | String | Project-specific JQL query template used to select issues that belong to a specific baseline.<br />Use the `{baseline}` placeholder which will be replaced with the baseline value when executing the query. | No | Inherits from `[jira]` |
+  | `current_baseline_jql`   | String | Project-specific JQL query template used to resolve the active/current baseline.<br />Use the `{baseline}` placeholder if needed. Leave empty to disable automatic current-baseline resolution. | No | Inherits from `[jira]` |
   | `requirement_types`       | List[String] | Project-specific list of Jira issue types considered as requirements       | No       | Inherits from `[jira]` |
   | `requirement_group_types` | List[String] | Project-specific list of Jira issue types considered as requirement groups | No       | Inherits from `[jira]` |
 - **Environment variables**:
@@ -391,12 +402,16 @@ The service includes built-in requirement reader classes that handle different f
   [jira]
   server_url = "https://example.atlassian.net/"
   auth_type = "basic"
-  baseline_field = "fixVersions"
+  baseline_field = "Sprint"
+  baseline_jql = "Sprint = '{baseline}'"
+  current_baseline_jql = ""
   requirement_types = ["Story", "Task"]
   requirement_group_types = ["Epic"]
 
-  [projects]
-  [projects.ProjectA]
+  [jira.projects."Project A"]
+  baseline_field = "fixVersions"
+  baseline_jql = "fixVersion = '{baseline}'"
+  current_baseline_jql = ""
   requirement_types = ["Bug", "Task"]
   requirement_group_types = ["Initiative"]
   ```
