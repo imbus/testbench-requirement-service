@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 try:  # noqa: SIM105
     import pandas as pd  # type: ignore
@@ -21,27 +22,23 @@ from testbench_requirement_service.models.requirement import (
 )
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 from testbench_requirement_service.readers.excel.config import (
-    load_excel_config_from_path,
-    validate_config,
+    ExcelRequirementReaderConfig,
+    ExcelRequirementReaderProjectConfig,
+    UserDefinedAttributeConfig,
 )
 from testbench_requirement_service.readers.excel.utils import (
     build_extendedrequirementobject_from_row_data,
     build_requirementobjectnode_from_row_data,
     build_requirementversionobject_from_row_data,
-    build_user_defined_attribute_configs,
     get_config_for_user_defined_attribute,
     read_data_frame_from_file_path,
 )
-from testbench_requirement_service.readers.utils import load_properties_config_from_path
+from testbench_requirement_service.readers.utils import load_reader_config_from_path
 
 
 class ExcelRequirementReader(AbstractRequirementReader):
     def __init__(self, config_path: str):
-        self.config = load_excel_config_from_path(Path(config_path))
-
-    @property
-    def requirements_path(self) -> Path:
-        return Path(self.config["requirementsDataPath"])
+        self.config = load_reader_config_from_path(Path(config_path), ExcelRequirementReaderConfig)
 
     def project_exists(self, project: str) -> bool:
         return self._get_project_path(project).exists()
@@ -50,9 +47,9 @@ class ExcelRequirementReader(AbstractRequirementReader):
         return self._get_baseline_path(project, baseline).exists()
 
     def get_projects(self) -> list[str]:
-        if not self.requirements_path.exists():
+        if not self.config.requirementsDataPath.exists():
             return []
-        return [p.name for p in self.requirements_path.iterdir() if p.is_dir()]
+        return [p.name for p in self.config.requirementsDataPath.iterdir() if p.is_dir()]
 
     def get_baselines(self, project: str) -> list[BaselineObject]:
         allowed_suffixes = self._get_allowed_suffixes_for_project(project)
@@ -109,9 +106,9 @@ class ExcelRequirementReader(AbstractRequirementReader):
 
     def get_user_defined_attributes(self) -> list[UserDefinedAttribute]:
         udf_definitions: list[UserDefinedAttribute] = []
-        for udf_config in build_user_defined_attribute_configs(self.config):
+        for udf_config in self.config.udf_configs:
             udf_definitions.append(
-                UserDefinedAttribute(name=udf_config["name"], valueType=udf_config["valueType"])
+                UserDefinedAttribute(name=udf_config.name, valueType=udf_config.type)
             )
         return udf_definitions
 
@@ -133,7 +130,7 @@ class ExcelRequirementReader(AbstractRequirementReader):
         keys_df = pd.DataFrame([key.model_dump() for key in requirement_keys])
         filtered_df = pd.merge(df, keys_df, on=["id", "version"], how="inner")
 
-        udf_configs = {}
+        udf_configs: dict[str, UserDefinedAttributeConfig] = {}
         for name in attribute_names:
             udf_config = get_config_for_user_defined_attribute(name, config)
             if udf_config is None:
@@ -150,17 +147,19 @@ class ExcelRequirementReader(AbstractRequirementReader):
                 if name not in row:
                     continue
 
+                udf: dict[str, Any] = {"name": name, "valueType": udf_config.type}
+
                 udf_value: str = row[name]
 
-                if udf_config["valueType"] == "STRING":
-                    udf_config["stringValue"] = udf_value
-                if udf_config["valueType"] == "ARRAY":
-                    sep = config.get("arrayValueSeparator")
-                    udf_config["stringValues"] = udf_value.split(sep) if udf_value else []
-                if udf_config["valueType"] == "BOOLEAN":
-                    udf_config["booleanValue"] = udf_value == udf_config["trueValue"]
+                if udf["valueType"] == "STRING":
+                    udf["stringValue"] = udf_value
+                if udf["valueType"] == "ARRAY":
+                    sep = config.arrayValueSeparator
+                    udf["stringValues"] = udf_value.split(sep) if udf_value else []
+                if udf["valueType"] == "BOOLEAN":
+                    udf["booleanValue"] = udf_value == udf_config.trueValue
 
-                user_defined_attributes.append(UserDefinedAttribute(**udf_config))
+                user_defined_attributes.append(UserDefinedAttribute(**udf))
 
             udfs_list.append(
                 UserDefinedAttributeResponse(key=key, userDefinedAttributes=user_defined_attributes)
@@ -201,7 +200,7 @@ class ExcelRequirementReader(AbstractRequirementReader):
         return requirement_versions
 
     def _get_project_path(self, project: str) -> Path:
-        return self.requirements_path / project
+        return self.config.requirementsDataPath / project
 
     def _get_baseline_path(self, project: str, baseline: str) -> Path:
         allowed_suffixes = self._get_allowed_suffixes_for_project(project)
@@ -213,21 +212,23 @@ class ExcelRequirementReader(AbstractRequirementReader):
             return self._get_project_path(project) / f"{baseline}{allowed_suffixes[0]}"
         return file_path
 
-    def _get_config_for_project(self, project: str) -> dict[str, str]:
+    def _get_config_for_project(self, project: str) -> ExcelRequirementReaderConfig:
         project_config_path = self._get_project_path(project) / f"{project}.properties"
         if project_config_path.exists():
-            project_config = load_properties_config_from_path(project_config_path)
-            return validate_config(self.config.copy() | project_config, True)
+            project_config = load_reader_config_from_path(
+                project_config_path, ExcelRequirementReaderProjectConfig
+            )
+            return self.config.model_copy(update=project_config.model_dump(exclude_unset=True))
         return self.config
 
     def _get_allowed_suffixes_for_project(self, project: str) -> list:
         config = self._get_config_for_project(project)
-        if config.get("useExcelDirectly", "").lower() == "true":
+        if config.useExcelDirectly:
             return [".xls", ".xlsx"]
-        return config["baselineFileExtensions"].split(",")
+        return config.baselineFileExtensions
 
     def _get_files_in_project_path(self, project: str, pattern: str = "*"):
         config = self._get_config_for_project(project)
-        if config.get("baselinesFromSubfolders", "").lower() == "true":
+        if config.baselinesFromSubfolders:
             return self._get_project_path(project).rglob(pattern)
         return self._get_project_path(project).glob(pattern)
