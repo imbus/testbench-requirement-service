@@ -9,6 +9,9 @@ from sanic.log import logger
 
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
 
+DEFAULT_MAX_RESULTS = 100
+DEFAULT_CHUNK_SIZE = 100
+
 
 class JiraClient:
     def __init__(self, config: JiraRequirementReaderConfig):
@@ -52,42 +55,94 @@ class JiraClient:
             logger.debug(f"Error fetching issue {issue_id}: {e}")
             return None
 
-    def fetch_issues(
+    def fetch_issues(  # noqa: PLR0913
+        self,
+        issue_keys: list[str],
+        base_jql: str | None = None,
+        fields: str | None = "*all",
+        expand: str | None = None,
+        properties: str | None = None,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+        max_results: int = DEFAULT_MAX_RESULTS,
+    ) -> list[Issue]:
+        """Fetch issues for a list of keys, optionally combined with base JQL.
+
+        Example base_jql: "project = ABC AND status = Done".
+        """
+
+        if not issue_keys:
+            return []
+
+        def chunks(lst: list[str], n: int):
+            for i in range(0, len(lst), n):
+                yield lst[i : i + n]
+
+        all_issues: list[Issue] = []
+
+        try:
+            for batch in chunks(issue_keys, chunk_size):
+                keys_str = ",".join(batch)
+                if base_jql:
+                    jql = f"({base_jql}) AND issuekey IN ({keys_str})"
+                else:
+                    jql = f"issuekey IN ({keys_str})"
+
+                batch_issues = self.fetch_issues_by_jql(
+                    jql_query=jql,
+                    fields=fields,
+                    expand=expand,
+                    properties=properties,
+                    max_results=max_results,
+                )
+                all_issues.extend(batch_issues)
+
+            return all_issues
+        except JIRAError as e:
+            logger.debug(f"Error fetching issues by keys: {e}")
+            return []
+
+    def fetch_issues_by_jql(
         self,
         jql_query: str,
         fields: str | None = "*all",
         expand: str | None = None,
         properties: str | None = None,
+        max_results: int = DEFAULT_MAX_RESULTS,
     ) -> list[Issue]:
         try:
-            if not self.use_manual_pagination:
-                return list(
-                    self.jira.search_issues(
+            issues: list[Issue] = []
+
+            if self.use_manual_pagination:
+                start_at = 0
+                while True:
+                    issues_chunk = self.jira.search_issues(
                         jql_query,
-                        maxResults=1000,
+                        startAt=start_at,
+                        maxResults=max_results,
                         fields=fields,
                         expand=expand,
                         properties=properties,
                     )
-                )
-            # Manual pagination for older Jira Server versions
-            start_at = 0
-            max_results = 1000
-            issues: list[Issue] = []
-            while True:
-                chunk = self.jira.search_issues(
-                    jql_query,
-                    startAt=start_at,
-                    maxResults=max_results,
-                    fields=fields,
-                    expand=expand,
-                    properties=properties,
-                )
-                issues.extend(chunk)
-                if len(chunk) < max_results:
-                    # No more pages
-                    break
-                start_at += max_results
+                    issues.extend(list(issues_chunk))
+                    if len(issues_chunk) < max_results:
+                        # No more pages
+                        break
+                    start_at += max_results
+            else:
+                next_page_token = None
+                while True:
+                    issues_chunk = self.jira.enhanced_search_issues(
+                        jql_str=jql_query,
+                        nextPageToken=next_page_token,
+                        maxResults=max_results,
+                        fields=fields,
+                        expand=expand,
+                        properties=properties,
+                    )
+                    issues.extend(list(issues_chunk))
+                    if not issues_chunk.nextPageToken:
+                        break
+                    next_page_token = issues_chunk.nextPageToken
             return issues
         except JIRAError as e:
             logger.debug(f"Error fetching issues: {e}")

@@ -95,7 +95,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         jql_query = self._build_issues_jql(project, baseline)
-        issues = self.jira_client.fetch_issues(jql_query)
+        issues = self.jira_client.fetch_issues_by_jql(jql_query, expand="changelog")
         if not issues:
             logger.debug(f"No issues found for project '{project}' and baseline '{baseline}'")
 
@@ -136,10 +136,10 @@ class JiraRequirementReader(AbstractRequirementReader):
         field_ids = [field["id"] for field in fields]
 
         issue_keys = [req_key.id for req_key in requirement_keys]
-        extra_jql = f"issuekey IN ({','.join(issue_keys)})"
-
-        jql_query = self._build_issues_jql(project, baseline, extra_jql)
-        issues = self.jira_client.fetch_issues(jql_query, fields=",".join(["key", *field_ids]))
+        base_jql = self._build_issues_jql(project, baseline)
+        issues = self.jira_client.fetch_issues(
+            issue_keys, base_jql, fields=",".join(["key", *field_ids])
+        )
         issue_map = {issue.key: issue for issue in issues}
 
         user_defined_attributes: list[UserDefinedAttributeResponse] = []
