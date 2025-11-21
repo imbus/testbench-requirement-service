@@ -99,6 +99,12 @@ class JiraRequirementReader(AbstractRequirementReader):
         if not issues:
             logger.debug(f"No issues found for project '{project}' and baseline '{baseline}'")
 
+        issue_ids = [issue.id for issue in issues]
+        issue_changelogs = self.jira_client.fetch_changelog_histories(issue_ids)
+        for issue in issues:
+            histories = issue_changelogs.get(issue.id, [])
+            issue.changelog.histories = histories
+
         issues.sort(key=self.sort_by_issue_key)
         requirement_nodes = self._build_requirement_nodes(issues, project)
         requirement_tree = self._build_requirement_tree(issues, requirement_nodes)
@@ -369,7 +375,10 @@ class JiraRequirementReader(AbstractRequirementReader):
                 parent_key = parent_obj.key
                 if parent_key not in requirement_nodes:
                     try:
-                        parent_issue = self.jira_client.fetch_issue(parent_key)
+                        fields = self._prepare_fields("summary,created,creator")
+                        parent_issue = self.jira_client.fetch_issue(
+                            parent_key, fields=fields, expand="changelog"
+                        )
                         if not parent_issue:
                             raise ValueError(f"Parent issue {parent_key} not found")
                         requirement_nodes[parent_key] = build_requirementobjectnode_from_issue(

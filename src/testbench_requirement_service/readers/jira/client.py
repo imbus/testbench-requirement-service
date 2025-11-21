@@ -2,7 +2,7 @@ from typing import Any
 
 try:
     from jira import JIRA, JIRAError
-    from jira.resources import Board, Field, Issue, Project, Sprint
+    from jira.resources import Board, Field, Issue, Project, Sprint, dict2resource
 except ImportError:
     pass
 from sanic.log import logger
@@ -233,3 +233,142 @@ class JiraClient:
         except JIRAError as e:
             logger.debug(f"Error fetching custom fields: {e}")
             return []
+
+    def fetch_issue_changelog_histories(self, issue_id: str) -> list[Any]:
+        """
+        Fetch the full changelog histories list for a single issue using pagination.
+
+        Args:
+            issue_id: Issue ID string.
+
+        Returns:
+            A list of resource objects with dotted-access support for all nested attributes,
+            containing the complete changelog histories merged from all pages.
+        """
+        url = self.jira._get_url(f"issue/{issue_id}/changelog")
+        start_at = 0
+        max_results = 100
+        all_histories: list[Any] = []
+
+        try:
+            while True:
+                params = {"startAt": start_at, "maxResults": max_results}
+                response = self.jira._session.get(url, params=params)
+                response.raise_for_status()
+                page_data = response.json()
+
+                # Convert raw dicts to resource objects with dotted access (recursive)
+                histories = page_data.get("histories", [])
+                all_histories.extend(dict2resource(h) for h in histories)
+
+                start_at += max_results
+                if start_at >= page_data.get("total", 0):
+                    break
+
+            return all_histories
+
+        except Exception as e:
+            logger.debug(f"Error fetching changelog histories for issue {issue_id}: {e}")
+            return []
+
+    def bulk_fetch_issue_changelog_histories(  # noqa: C901
+        self, issue_ids: list[str], batch_size: int = 100
+    ) -> dict[str, list[Any]]:
+        """
+        Fetch changelog histories for given issues in batches using /rest/api/3/changelog/bulkfetch,
+        handling pagination with nextPageToken for each batch.
+
+        Args:
+            issue_ids: List of issue IDs to fetch changelog histories for.
+            batch_size: Number of issues per bulkfetch request (max depends on Jira instance).
+
+        Returns:
+            Dictionary mapping issue ID to list of resource objects with dotted-access support
+            for all nested attributes.
+        """
+
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from list."""
+            for i in range(0, len(lst), n):
+                yield lst[i : i + n]
+
+        url = self.jira._get_url("changelog/bulkfetch")
+        issue_changelogs: dict[str, list[Any]] = {}
+
+        try:
+            for batch in chunks(issue_ids, batch_size):
+                next_page_token: str | None = None
+
+                while True:
+                    payload = {"issueIdsOrKeys": batch}
+                    if next_page_token:
+                        payload["nextPageToken"] = next_page_token
+
+                    response = self.jira._session.post(url, json=payload)
+                    response.raise_for_status()
+                    page_data = response.json()
+
+                    # Process each issue's changelog histories directly
+                    for issue_changelog in page_data.get("issueChangeLogs", []):
+                        issue_id = issue_changelog.get("issueId")
+                        if not issue_id:
+                            continue
+
+                        changelog_histories = issue_changelog.get("changeHistories", [])
+                        converted_histories = [dict2resource(h) for h in changelog_histories]
+
+                        if issue_id in issue_changelogs:
+                            issue_changelogs[issue_id].extend(converted_histories)
+                        else:
+                            issue_changelogs[issue_id] = converted_histories
+
+                    next_page_token = page_data.get("nextPageToken")
+                    if not next_page_token:
+                        break
+
+            return issue_changelogs
+
+        except Exception as e:
+            logger.debug(f"Error bulk fetching issue changelog histories: {e}")
+            return {}
+
+    def fetch_changelog_histories(
+        self, issue_ids: list[str], batch_size: int = 100
+    ) -> dict[str, list[Any]]:
+        """
+        Fetch changelog histories for multiple issues efficiently.
+
+        Attempts bulk fetch in batches first. If bulk fetch fails, falls back
+        to per-issue paginated fetches.
+
+        Args:
+            issue_ids: List of issue IDs.
+            batch_size: Batch size for bulk fetch calls.
+
+        Returns:
+            Dictionary mapping issue ID to list of resource objects with dotted-access support
+            for all nested attributes.
+        """
+        issue_changelogs = {}
+
+        try:
+            # Attempt bulk fetch first
+            issue_changelogs = self.bulk_fetch_issue_changelog_histories(
+                issue_ids, batch_size=batch_size
+            )
+            if issue_changelogs:
+                return issue_changelogs  # Return if bulk fetch succeeded
+            logger.debug("Bulk fetch returned empty, falling back to per-issue fetch.")
+        except Exception as e:
+            logger.debug(f"Bulk fetch failed: {e}. Falling back to per-issue fetch.")
+
+        # Fallback: fetch one issue at a time if bulk fails or empty
+        for issue_id in issue_ids:
+            try:
+                histories = self.fetch_issue_changelog_histories(issue_id)
+                issue_changelogs[issue_id] = histories
+            except Exception as e:
+                logger.debug(f"Failed to fetch changelog for issue {issue_id}: {e}")
+                issue_changelogs[issue_id] = []
+
+        return issue_changelogs

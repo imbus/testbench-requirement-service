@@ -30,7 +30,7 @@ def build_requirementobjectnode_from_sprint(
     return RequirementObjectNode(
         name=getattr(sprint, "name", ""),
         extendedID=sprint_id,
-        key=key or RequirementKey(id=sprint_id, version="current"),
+        key=key or RequirementKey(id=sprint_id, version="1.0"),
         owner="",
         status=getattr(sprint, "state", ""),
         priority="",
@@ -106,6 +106,11 @@ def is_version_type_field(field: Field) -> bool:
     return schema_type == "version" or (schema_type == "array" and items_type == "version")
 
 
+def get_current_requirement_version(issue: Issue) -> RequirementVersionObject:
+    requirement_versions = generate_requirement_versions(issue)
+    return requirement_versions[-1]
+
+
 def generate_requirement_versions(issue: Issue) -> list[RequirementVersionObject]:
     versions = []
     minor = 0
@@ -124,34 +129,30 @@ def generate_requirement_versions(issue: Issue) -> list[RequirementVersionObject
         )
     )
 
-    histories = sorted(issue.changelog.histories, key=lambda h: h.created)
+    histories = sorted(getattr(issue.changelog, "histories", []), key=lambda h: h.created)
     for history in histories:
         changed_fields = {item.field for item in getattr(history, "items", [])}
 
         is_major = bool(MAJOR_CHANGE_FIELDS & changed_fields)
         is_minor = bool(MINOR_CHANGE_FIELDS & changed_fields)
 
+        if not is_major and not is_minor:
+            continue
+
         if is_major:
             major += 1
             minor = 0
-            versions.append(
-                RequirementVersionObject(
-                    name=f"{major}.{minor}",
-                    date=history.created,
-                    author=getattr(history.author, "displayName", "Unknown"),
-                    comment=get_change_comment(history),
-                )
-            )
         elif is_minor:
             minor += 1
-            versions.append(
-                RequirementVersionObject(
-                    name=f"{major}.{minor}",
-                    date=history.created,
-                    author=getattr(history.author, "displayName", "Unknown"),
-                    comment=get_change_comment(history),
-                )
+
+        versions.append(
+            RequirementVersionObject(
+                name=f"{major}.{minor}",
+                date=history.created,
+                author=getattr(history.author, "displayName", "Unknown"),
+                comment=get_change_comment(history),
             )
+        )
 
     return versions
 
@@ -159,9 +160,9 @@ def generate_requirement_versions(issue: Issue) -> list[RequirementVersionObject
 # TODO: Maybe different languages?
 def get_change_comment(history) -> str:
     changes = []
-    for item in history.items:
-        from_val = item.fromString if hasattr(item, "fromString") else ""
-        to_val = item.toString if hasattr(item, "toString") else ""
+    for item in getattr(history, "items", []):
+        from_val = getattr(item, "fromString", "")
+        to_val = getattr(item, "toString", "")
         changes.append(f"{item.field}: '{from_val}' → '{to_val}'")
     return "; ".join(changes) if changes else "Fields updated"
 
@@ -226,9 +227,6 @@ def get_issue_version(issue: Issue, key: RequirementKey) -> Issue:  # noqa: C901
     Returns:
         Issue: The issue object with fields set to the specified version.
     """
-    if key is None or key.version == "current":
-        return issue
-
     try:
         target_major, target_minor = map(int, key.version.split("."))
     except Exception as e:
@@ -292,10 +290,14 @@ def build_requirementobjectnode_from_issue(
     priority_field = getattr(issue.fields, "priority", None)
     priority = priority_field.name if priority_field else ""
 
+    if key is None:
+        requirement_version = get_current_requirement_version(issue).name
+        key = RequirementKey(id=issue.key, version=requirement_version)
+
     return RequirementObjectNode(
         name=getattr(issue.fields, "summary", ""),
         extendedID=issue.key,
-        key=key or RequirementKey(id=issue.key, version="current"),
+        key=key,
         owner=owner,
         status=status,
         priority=priority,
