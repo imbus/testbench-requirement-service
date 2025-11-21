@@ -4,6 +4,8 @@ import re
 from datetime import datetime
 from typing import Any, Literal
 
+from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
+
 try:
     from bs4 import BeautifulSoup
     from jira.resources import Field, Issue
@@ -18,9 +20,6 @@ from testbench_requirement_service.models.requirement import (
     RequirementVersionObject,
     UserDefinedAttribute,
 )
-
-MINOR_CHANGE_FIELDS = {"summary", "description", "affectsVersions", "status"}
-MAJOR_CHANGE_FIELDS = {"fixVersions"}
 
 
 def build_requirementobjectnode_from_sprint(
@@ -106,7 +105,9 @@ def is_version_type_field(field: Field) -> bool:
     return schema_type == "version" or (schema_type == "array" and items_type == "version")
 
 
-def generate_requirement_versions(issue: Issue) -> list[RequirementVersionObject]:
+def generate_requirement_versions(
+    project: str, issue: Issue, config: JiraRequirementReaderConfig
+) -> list[RequirementVersionObject]:
     versions = []
     minor = 0
     major = 1
@@ -128,8 +129,7 @@ def generate_requirement_versions(issue: Issue) -> list[RequirementVersionObject
     for history in histories:
         changed_fields = {item.field for item in getattr(history, "items", [])}
 
-        is_major = bool(MAJOR_CHANGE_FIELDS & changed_fields)
-        is_minor = bool(MINOR_CHANGE_FIELDS & changed_fields)
+        is_major, is_minor = classify_change_scope(project, changed_fields, config)
 
         if is_major:
             major += 1
@@ -214,7 +214,9 @@ def set_issue_field(issue: Issue, field_name: str, value: Any) -> None:
         setattr(issue.fields, field_name, value)
 
 
-def get_issue_version(issue: Issue, key: RequirementKey) -> Issue:  # noqa: C901
+def get_issue_version(
+    project: str, issue: Issue, key: RequirementKey, config: JiraRequirementReaderConfig
+) -> Issue:  # noqa: C901
     """
     Reconstructs the issue's fields to reflect their state at the specified version.
     Modifies the issue object in-place.
@@ -248,8 +250,7 @@ def get_issue_version(issue: Issue, key: RequirementKey) -> Issue:  # noqa: C901
     for history in histories:
         changed_fields = {item.field for item in getattr(history, "items", [])}
 
-        is_major = bool(MAJOR_CHANGE_FIELDS & changed_fields)
-        is_minor = bool(MINOR_CHANGE_FIELDS & changed_fields)
+        is_major, is_minor = classify_change_scope(project, changed_fields, config)
 
         # If we've reached or passed the target version, revert fields to their previous values
         if (major > target_major) or (major == target_major and minor >= target_minor):
@@ -275,16 +276,26 @@ def get_issue_version(issue: Issue, key: RequirementKey) -> Issue:  # noqa: C901
     return issue_copy
 
 
+def classify_change_scope(
+    project: str, changed_fields: set[str], config: JiraRequirementReaderConfig
+) -> tuple[bool, bool]:
+    major_fields = set(get_config_value(config, "major_change_fields", project))
+    minor_fields = set(get_config_value(config, "minor_change_fields", project))
+
+    return (
+        bool(major_fields & changed_fields),
+        bool(minor_fields & changed_fields),
+    )
+
+
 def build_requirementobjectnode_from_issue(
-    issue: Issue, key: RequirementKey | None = None, is_requirement: bool = True
+    issue: Issue,
+    owner_field_name: str,
+    key: RequirementKey | None = None,
+    is_requirement: bool = True,
 ) -> RequirementObjectNode:
-    assignee = getattr(issue.fields, "assignee", None)
-    creator = getattr(issue.fields, "creator", None)
-    owner = ""
-    if assignee and getattr(assignee, "displayName", None):
-        owner = assignee.displayName
-    elif creator and getattr(creator, "displayName", None):
-        owner = creator.displayName
+    owner_value = getattr(issue.fields, owner_field_name, None)
+    owner = getattr(owner_value, "displayName", "") if owner_value else ""
 
     status_field = getattr(issue.fields, "status", None)
     status = status_field.name if status_field else ""
@@ -306,16 +317,10 @@ def build_requirementobjectnode_from_issue(
 
 def build_extendedrequirementobject_from_issue(
     issue: Issue,
-    key: RequirementKey,
     baseline: str,
-    is_requirement: bool,
+    requirement_object: RequirementObjectNode,
     jira_server_url: str,
 ) -> ExtendedRequirementObject:
-    issue = get_issue_version(issue, key)
-    requirement_object = build_requirementobjectnode_from_issue(
-        issue=issue, key=key, is_requirement=is_requirement
-    )
-
     attachments_field = getattr(issue.fields, "attachment", None)
     if attachments_field:
         attachments = [attachment.content for attachment in attachments_field if attachment.content]
@@ -430,3 +435,22 @@ def embed_jira_images(issue: Issue, jira_server_url: str, field_id: str = "descr
         img["src"] = f"data:{mime_type};base64,{encoded}"
 
     return str(soup)
+
+
+def get_config_value(
+    config: JiraRequirementReaderConfig, attr: str, project: str | None = None
+) -> str:
+    """
+    Retrieve a configuration value, optionally project-specific, falling back to global config.
+    Args:
+        attr (str): The attribute name to retrieve.
+        project (str | None): The project name, if any.
+    Returns:
+        The value of the attribute, or None if not found.
+    """
+    if project and project in config.projects:
+        project_config = config.projects[project]
+        value = getattr(project_config, attr, None)
+        if value is not None:
+            return value
+    return getattr(config, attr, None)
