@@ -27,6 +27,7 @@ from testbench_requirement_service.readers.jira.utils import (
     build_extendedrequirementobject_from_issue,
     build_requirementobjectnode_from_issue,
     build_userdefinedattribute_object,
+    embed_jira_images,
     extract_baselines_from_issue,
     extract_valuetype_from_issue_field,
     generate_requirement_versions,
@@ -139,7 +140,9 @@ class JiraRequirementReader(AbstractRequirementReader):
         extra_jql = f"issuekey IN ({','.join(issue_keys)})"
 
         jql_query = self._build_issues_jql(project, baseline, extra_jql)
-        issues = self.jira_client.fetch_issues(jql_query, fields=",".join(["key", *field_ids]))
+        issues = self.jira_client.fetch_issues(
+            jql_query, fields=",".join(["key", *field_ids]), expand="renderedFields"
+        )
         issue_map = {issue.key: issue for issue in issues}
 
         user_defined_attributes: list[UserDefinedAttributeResponse] = []
@@ -152,7 +155,16 @@ class JiraRequirementReader(AbstractRequirementReader):
             for field in fields:
                 if not hasattr(issue.fields, field["id"]):
                     continue
-                field_value = getattr(issue.fields, field["id"])
+                if (
+                    hasattr(issue.renderedFields, field["id"])
+                    and field["name"] in self.config.renderd_fields
+                ):
+                    text = embed_jira_images(
+                        issue, jira_server_url=self.config.server_url, field_id=field["id"]
+                    )
+                    field_value = f"<html><body>{text}</body></html>"
+                else:
+                    field_value = getattr(issue.fields, field["id"])
                 udas.append(build_userdefinedattribute_object(field, field_value))
 
             user_defined_attributes.append(
@@ -165,7 +177,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         self, project: str, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
         fields = self._prepare_fields(
-            "summary,creator,assignee,status,priority,description,issuetype,attachment",
+            "summary,creator,assignee,status,priority,description,issuetype,attachment,",
             project,
             baseline,
         )

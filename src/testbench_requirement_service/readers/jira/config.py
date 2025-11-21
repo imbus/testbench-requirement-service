@@ -32,6 +32,7 @@ class JiraRequirementReaderConfig(BaseModel):
     current_baseline_jql: str = ""
     requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
     requirement_group_types: list[str] = ["Epic"]
+    renderd_fields: list[str] | None = None
 
     projects: dict[str, JiraProjectConfig] = ModelField(default_factory=dict)
 

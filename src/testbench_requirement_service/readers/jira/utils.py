@@ -338,7 +338,7 @@ def build_rich_description(issue: Issue, jira_server_url: str) -> str:
     return f"<html><body>{description_html}</body></html>"
 
 
-def embed_jira_images(issue: Issue, jira_server_url: str) -> str:  # noqa: C901
+def embed_jira_images(issue: Issue, jira_server_url: str, field_id: str = "description") -> str:  # noqa: C901
     """
     Embed Jira images referenced in an issue's rendered description by converting relative URLs
     and Jira attachment URLs into absolute URLs or inline base64-encoded data URIs.
@@ -360,9 +360,9 @@ def embed_jira_images(issue: Issue, jira_server_url: str) -> str:  # noqa: C901
     max_embedded_image_size = 5 * 1024 * 1024  # 5 MB limit for embedded images
     jira_attachment_url_pattern = re.compile(r"^/rest/api/\d+/attachment/content/(\d+)$")
 
-    description = getattr(issue.renderedFields, "description", "")
+    description = getattr(issue.renderedFields, field_id, "")
     if not description:
-        logger.warning(f"Issue {issue.key} missing renderedFields.description")
+        logger.warning(f"Issue {issue.key} missing renderedFields.{field_id}")
         return ""
 
     # Build attachment dictionary mapping attachment ID to tuple (mime type, encoded data)
