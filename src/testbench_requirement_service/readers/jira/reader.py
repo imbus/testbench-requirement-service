@@ -27,10 +27,12 @@ from testbench_requirement_service.readers.jira.utils import (
     build_extendedrequirementobject_from_issue,
     build_requirementobjectnode_from_issue,
     build_userdefinedattribute_object,
+    embed_jira_images,
     extract_baselines_from_issue,
     extract_valuetype_from_issue_field,
     generate_requirement_versions,
     get_field_id,
+    get_issue_version,
     is_version_type_field,
 )
 from testbench_requirement_service.readers.utils import load_reader_config_from_path
@@ -107,7 +109,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         issues.sort(key=self.sort_by_issue_key)
         requirement_nodes = self._build_requirement_nodes(issues, project)
-        requirement_tree = self._build_requirement_tree(issues, requirement_nodes)
+        requirement_tree = self._build_requirement_tree(project, issues, requirement_nodes)
 
         return BaselineObjectNode(
             name=baseline,
@@ -144,7 +146,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         issue_keys = [req_key.id for req_key in requirement_keys]
         base_jql = self._build_issues_jql(project, baseline)
         issues = self.jira_client.fetch_issues(
-            issue_keys, base_jql, fields=",".join(["key", *field_ids])
+            issue_keys, base_jql, fields=",".join(["key", *field_ids]), expand="renderedFields"
         )
         issue_map = {issue.key: issue for issue in issues}
 
@@ -158,7 +160,16 @@ class JiraRequirementReader(AbstractRequirementReader):
             for field in fields:
                 if not hasattr(issue.fields, field["id"]):
                     continue
-                field_value = getattr(issue.fields, field["id"])
+                if hasattr(issue.renderedFields, field["id"]) and field[
+                    "name"
+                ] in self._get_config_value("renderd_fields", project):
+                    text = embed_jira_images(
+                        issue, jira_server_url=self.config.server_url, field_id=field["id"]
+                    )
+                    field_value = f"<html><head></head><body>{text}</body></html>"
+                    print(field_value)
+                else:
+                    field_value = getattr(issue.fields, field["id"])
                 udas.append(build_userdefinedattribute_object(field, field_value))
 
             user_defined_attributes.append(
@@ -171,7 +182,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         self, project: str, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
         fields = self._prepare_fields(
-            "summary,creator,assignee,status,priority,description,issuetype,attachment",
+            "summary,creator,assignee,status,priority,description,issuetype,attachment,",
             project,
             baseline,
         )
@@ -182,11 +193,17 @@ class JiraRequirementReader(AbstractRequirementReader):
         self._validate_issue(
             issue
         )  # TODO: discuss whether project and baseline checks are needed here
+        issue = get_issue_version(project, issue, key, self.config)
+        requirement_object = build_requirementobjectnode_from_issue(
+            issue=issue,
+            owner_field_name=self._get_config_value("owner", project),
+            key=key,
+            is_requirement=True,
+        )
         return build_extendedrequirementobject_from_issue(
             issue=issue,
-            key=key,
             baseline=baseline,
-            is_requirement=True,
+            requirement_object=requirement_object,
             jira_server_url=self.config.server_url,
         )
 
@@ -200,7 +217,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         self._validate_issue(
             issue
         )  # TODO: discuss whether project and baseline checks are needed here
-        return generate_requirement_versions(issue)
+        return generate_requirement_versions(project, issue, self.config)
 
     def _build_project_dict(self, projects: list[Project]) -> dict[str, Project]:
         return {f"{project.name} ({project.key})": project for project in projects}
@@ -355,16 +372,22 @@ class JiraRequirementReader(AbstractRequirementReader):
         """Convert issues into requirement nodes."""
         requirement_nodes = {}
         for issue in issues:
-            req_node = build_requirementobjectnode_from_issue(issue, is_requirement=True)
+            is_requirement = True  # TODO: fix ?
+            req_node = build_requirementobjectnode_from_issue(
+                issue,
+                owner_field_name=self._get_config_value("owner", project),
+                is_requirement=is_requirement,
+            )
             requirement_nodes[issue.key] = req_node
         return requirement_nodes
 
     def _build_requirement_tree(
-        self, issues: list[Issue], requirement_nodes: dict[str, RequirementObjectNode]
+        self, project: str, issues: list[Issue], requirement_nodes: dict[str, RequirementObjectNode]
     ) -> dict[str, RequirementObjectNode]:
         """Link requirement nodes into a tree structure."""
         requirement_tree = {}
-
+        print("---")
+        print(self._get_config_value("owner", project))
         try:
             for issue in issues:
                 parent_obj = getattr(issue.fields, "parent", None)
@@ -383,6 +406,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                             raise ValueError(f"Parent issue {parent_key} not found")
                         requirement_nodes[parent_key] = build_requirementobjectnode_from_issue(
                             parent_issue,
+                            owner_field_name=self._get_config_value("owner", project),
                             is_requirement=True,  # TODO: is_requirement?
                         )
                         parent = requirement_nodes[parent_key]
@@ -403,7 +427,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         return requirement_tree
 
-    def _get_config_value(self, attr: str, project: str | None = None):
+    def _get_config_value(self, attr: str, project: str | None = None) -> str:
         """
         Retrieve a configuration value, optionally project-specific, falling back to global config.
         Args:
@@ -416,8 +440,8 @@ class JiraRequirementReader(AbstractRequirementReader):
             project_config = self.config.projects[project]
             value = getattr(project_config, attr, None)
             if value is not None:
-                return value
-        return getattr(self.config, attr, None)
+                return value  # type: ignore
+        return getattr(self.config, attr, None)  # type: ignore
 
     def _is_requirement_group_issue(self, issue: Issue, project: str | None = None) -> bool:
         return issue.fields.issuetype.name in self._get_config_value(
