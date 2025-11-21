@@ -9,7 +9,6 @@ class JiraProjectConfig(BaseModel):
     baseline_field: str | None = None
     baseline_jql: str | None = None
     current_baseline_jql: str | None = None
-    requirement_types: list[str] | None = None
     requirement_group_types: list[str] | None = None
 
 
@@ -28,9 +27,10 @@ class JiraRequirementReaderConfig(BaseModel):
     key_cert: str | None = None
 
     baseline_field: str = "fixVersions"
-    baseline_jql: str = 'fixVersion = "{baseline}"'
-    current_baseline_jql: str = ""
-    requirement_types: list[str] = ["Story", "User Story", "Task", "Bug"]
+    baseline_jql: str = 'project = "{project}" AND fixVersion = "{baseline}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")'  # noqa: E501
+    current_baseline_jql: str = (
+        'project = "{project}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")'
+    )
     requirement_group_types: list[str] = ["Epic"]
 
     projects: dict[str, JiraProjectConfig] = ModelField(default_factory=dict)

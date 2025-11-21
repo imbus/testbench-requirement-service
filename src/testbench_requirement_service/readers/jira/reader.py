@@ -180,7 +180,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             issue=issue,
             key=key,
             baseline=baseline,
-            is_requirement=self._is_requirement_issue(issue, project),
+            is_requirement=True,
             jira_server_url=self.config.server_url,
         )
 
@@ -278,7 +278,6 @@ class JiraRequirementReader(AbstractRequirementReader):
         Checks that the issue:
         - belongs to the specified project (if provided),
         - is associated with the specified baseline (if provided and not "Current Baseline"),
-        - and is either a requirement or a requirement group.
         Args:
             issue: The Jira issue to validate.
             project: Optional project identifier; if provided the issue must belong to this project.
@@ -298,12 +297,6 @@ class JiraRequirementReader(AbstractRequirementReader):
             if baseline != "Current Baseline" and baseline not in issue_baselines:
                 raise NotFound("Requirement not found")
 
-        # Check if the issue is a requirement type or requirement group type
-        is_requirement = self._is_requirement_issue(issue, project)
-        is_requirement_group = self._is_requirement_group_issue(issue, project)
-        if not is_requirement and not is_requirement_group:
-            raise NotFound("Requirement not found")
-
     def _normalize_field_for_jql(self, field_name: str) -> str:
         """
         Normalize Jira field names to their canonical JQL equivalents.
@@ -321,51 +314,34 @@ class JiraRequirementReader(AbstractRequirementReader):
         return field_name
 
     def _build_issues_jql(self, project: str, baseline: str, extra_jql: str | None = None) -> str:
-        project_key = self.projects[project].key
-
-        jql_query = f'project = "{project_key}"'
-
-        baseline_query = self._build_baseline_jql(project, baseline)
-        if baseline_query:
-            jql_query += f" AND {baseline_query}"
-
-        requirement_types = self._get_config_value("requirement_types", project)
-        requirement_group_types = self._get_config_value("requirement_group_types", project)
-        issuetypes = requirement_types + requirement_group_types
-        issuetype_str = ",".join(f'"{issuetype}"' for issuetype in issuetypes)
-        jql_query += f" AND issuetype IN ({issuetype_str})"
-
+        jql_query = self._build_baseline_jql(project, baseline)
         if extra_jql:
             jql_query += f" AND {extra_jql}"
-
         return jql_query
 
-    def _build_baseline_jql(self, project: str, baseline: str) -> str | None:
+    def _build_baseline_jql(self, project: str, baseline: str) -> str:
         """
         Build the JQL query string for filtering issues by baseline.
 
         If the baseline is "Current Baseline", uses the current_baseline_jql template for the project.
         Otherwise, uses the baseline_jql template for the project.
-        If neither JQL template is available or is empty, returns None.
 
         The returned string should be a valid JQL clause, e.g. 'fixVersion = "{baseline}"'.
-        If a template is found, it is formatted with the baseline name.
+        The template is formatted with the project name and baseline name.
 
         Args:
             project (str): The project name.
             baseline (str): The baseline name.
 
         Returns:
-            str | None: The formatted JQL clause, or None if no template is available.
+            str: The formatted JQL clause.
         """  # noqa: E501
         if baseline == "Current Baseline":
             jql_template = self._get_config_value("current_baseline_jql", project)
         else:
             jql_template = self._get_config_value("baseline_jql", project)
-        if not jql_template:
-            logger.debug(f"No JQL template found for project '{project}' and baseline '{baseline}'")
-            return None
-        return str(jql_template).format(baseline=baseline)
+        project_key = self.projects[project].key
+        return str(jql_template).format(project=project_key, baseline=baseline)
 
     def _build_requirement_nodes(
         self, issues: list[Issue], project: str
@@ -373,8 +349,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         """Convert issues into requirement nodes."""
         requirement_nodes = {}
         for issue in issues:
-            is_requirement = self._is_requirement_issue(issue, project)
-            req_node = build_requirementobjectnode_from_issue(issue, is_requirement=is_requirement)
+            req_node = build_requirementobjectnode_from_issue(issue, is_requirement=True)
             requirement_nodes[issue.key] = req_node
         return requirement_nodes
 
@@ -434,9 +409,6 @@ class JiraRequirementReader(AbstractRequirementReader):
             if value is not None:
                 return value
         return getattr(self.config, attr, None)
-
-    def _is_requirement_issue(self, issue: Issue, project: str | None = None) -> bool:
-        return issue.fields.issuetype.name in self._get_config_value("requirement_types", project)
 
     def _is_requirement_group_issue(self, issue: Issue, project: str | None = None) -> bool:
         return issue.fields.issuetype.name in self._get_config_value(
