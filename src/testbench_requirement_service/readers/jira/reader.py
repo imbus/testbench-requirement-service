@@ -26,7 +26,6 @@ from testbench_requirement_service.readers.jira.config import JiraRequirementRea
 from testbench_requirement_service.readers.jira.utils import (
     build_extendedrequirementobject_from_issue,
     build_requirementobjectnode_from_issue,
-    build_rich_description,
     build_userdefinedattribute_object,
     embed_jira_images,
     extract_baselines_from_issue,
@@ -199,9 +198,7 @@ class JiraRequirementReader(AbstractRequirementReader):
         )
         return build_extendedrequirementobject_from_issue(
             issue=issue,
-            # key=key,
             baseline=baseline,
-            # is_requirement=self._is_requirement_issue(issue, project),
             requirement_object=requirement_object,
             jira_server_url=self.config.server_url,
         )

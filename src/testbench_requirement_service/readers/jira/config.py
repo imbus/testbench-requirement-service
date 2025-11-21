@@ -11,10 +11,10 @@ class JiraProjectConfig(BaseModel):
     current_baseline_jql: str | None = None
     requirement_types: list[str] | None = None
     requirement_group_types: list[str] | None = None
-    owner: str | None = None
-    renderd_fields: list[str] | None = None
     major_change_fields: list[str] | None = None
     minor_change_fields: list[str] | None = None
+    owner: str | None = None
+    renderd_fields: list[str] | None = None
 
 
 class JiraRequirementReaderConfig(BaseModel):
