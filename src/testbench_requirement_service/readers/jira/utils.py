@@ -105,10 +105,11 @@ def is_version_type_field(field: Field) -> bool:
     return schema_type == "version" or (schema_type == "array" and items_type == "version")
 
 
-# TODO: Fix
-# def get_current_requirement_version(issue: Issue) -> RequirementVersionObject:
-#     requirement_versions = generate_requirement_versions(issue)
-#     return requirement_versions[-1]
+def get_current_requirement_version(
+    project: str, issue: Issue, config: JiraRequirementReaderConfig
+) -> RequirementVersionObject:
+    requirement_versions = generate_requirement_versions(project, issue, config)
+    return requirement_versions[-1]
 
 
 def generate_requirement_versions(
@@ -288,8 +289,10 @@ def classify_change_scope(
 
 
 def build_requirementobjectnode_from_issue(
+    project: str,
     issue: Issue,
     owner_field_name: str,
+    config: JiraRequirementReaderConfig,
     key: RequirementKey | None = None,
     is_requirement: bool = True,
 ) -> RequirementObjectNode:
@@ -303,10 +306,8 @@ def build_requirementobjectnode_from_issue(
     priority = priority_field.name if priority_field else ""
 
     if key is None:
-        # TODO: Fix get_current_requirement_version usage
-        # requirement_version = get_current_requirement_version(issue).name
-        # key = RequirementKey(id=issue.key, version=requirement_version)
-        key = RequirementKey(id=issue.key, version="1.0")
+        requirement_version = get_current_requirement_version(project, issue, config).name
+        key = RequirementKey(id=issue.key, version=requirement_version)
 
     return RequirementObjectNode(
         name=getattr(issue.fields, "summary", ""),

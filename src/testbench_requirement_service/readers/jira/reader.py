@@ -167,7 +167,6 @@ class JiraRequirementReader(AbstractRequirementReader):
                         issue, jira_server_url=self.config.server_url, field_id=field["id"]
                     )
                     field_value = f"<html><head></head><body>{text}</body></html>"
-                    print(field_value)
                 else:
                     field_value = getattr(issue.fields, field["id"])
                 udas.append(build_userdefinedattribute_object(field, field_value))
@@ -195,8 +194,10 @@ class JiraRequirementReader(AbstractRequirementReader):
         )  # TODO: discuss whether project and baseline checks are needed here
         issue = get_issue_version(project, issue, key, self.config)
         requirement_object = build_requirementobjectnode_from_issue(
+            project=project,
             issue=issue,
             owner_field_name=self._get_config_value("owner", project),
+            config=self.config,
             key=key,
             is_requirement=True,
         )
@@ -374,8 +375,10 @@ class JiraRequirementReader(AbstractRequirementReader):
         for issue in issues:
             is_requirement = True  # TODO: fix ?
             req_node = build_requirementobjectnode_from_issue(
-                issue,
+                project=project,
+                issue=issue,
                 owner_field_name=self._get_config_value("owner", project),
+                config=self.config,
                 is_requirement=is_requirement,
             )
             requirement_nodes[issue.key] = req_node
@@ -386,8 +389,6 @@ class JiraRequirementReader(AbstractRequirementReader):
     ) -> dict[str, RequirementObjectNode]:
         """Link requirement nodes into a tree structure."""
         requirement_tree = {}
-        print("---")
-        print(self._get_config_value("owner", project))
         try:
             for issue in issues:
                 parent_obj = getattr(issue.fields, "parent", None)
@@ -405,8 +406,10 @@ class JiraRequirementReader(AbstractRequirementReader):
                         if not parent_issue:
                             raise ValueError(f"Parent issue {parent_key} not found")
                         requirement_nodes[parent_key] = build_requirementobjectnode_from_issue(
-                            parent_issue,
+                            project=project,
+                            issue=parent_issue,
                             owner_field_name=self._get_config_value("owner", project),
+                            config=self.config,
                             is_requirement=True,  # TODO: is_requirement?
                         )
                         parent = requirement_nodes[parent_key]
