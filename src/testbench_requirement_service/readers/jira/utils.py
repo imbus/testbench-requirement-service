@@ -293,9 +293,11 @@ def build_requirementobjectnode_from_issue(
     issue: Issue,
     owner_field_name: str,
     config: JiraRequirementReaderConfig,
-    key: RequirementKey | None = None,
-    is_requirement: bool = True,
+    **node_options: Any,
 ) -> RequirementObjectNode:
+    key: RequirementKey | None = node_options.get("key")
+    is_requirement: bool = node_options.get("is_requirement", True)
+
     owner_value = getattr(issue.fields, owner_field_name, None)
     owner = getattr(owner_value, "displayName", "") if owner_value else ""
 
