@@ -162,7 +162,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                     continue
                 if hasattr(issue.renderedFields, field["id"]) and field[
                     "name"
-                ] in self._get_config_value("renderd_fields", project):
+                ] in self._get_config_value("rendered_fields", project):
                     text = embed_jira_images(
                         issue, jira_server_url=self.config.server_url, field_id=field["id"]
                     )

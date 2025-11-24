@@ -2,7 +2,7 @@ import os
 from typing import Literal
 
 from pydantic import BaseModel, model_validator
-from pydantic.fields import Field as ModelField
+from pydantic.fields import Field
 
 
 class JiraProjectConfig(BaseModel):
@@ -13,7 +13,7 @@ class JiraProjectConfig(BaseModel):
     major_change_fields: list[str] | None = None
     minor_change_fields: list[str] | None = None
     owner: str | None = None
-    renderd_fields: list[str] | None = None
+    rendered_fields: list[str] | None = None
 
 
 class JiraRequirementReaderConfig(BaseModel):
@@ -39,9 +39,9 @@ class JiraRequirementReaderConfig(BaseModel):
     major_change_fields: list[str] = ["fixVersions"]
     minor_change_fields: list[str] = ["summary", "description", "affectsVersions", "status"]
     owner: str = "assignee"
-    renderd_fields: list[str] = []
+    rendered_fields: list[str] = Field(default_factory=list)
 
-    projects: dict[str, JiraProjectConfig] = ModelField(default_factory=dict)
+    projects: dict[str, JiraProjectConfig] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_config(self):  # noqa: C901
