@@ -205,7 +205,9 @@ def validate_column_separator(v: str) -> str:
 
 
 def build_baseline_file_extensions_field(config: dict) -> list[str]:
-    value = config.get("baselineFileExtensions", "")
+    if "baselineFileExtensions" not in config:
+        return []
+    value = config["baselineFileExtensions"]
     if isinstance(value, list):
         extensions = value
     else:
@@ -223,6 +225,8 @@ def build_requirement_description_field(config: dict) -> list[int]:
         and key.rpartition(".")[2].isdigit()
         and int(key.rpartition(".")[2]) >= 1
     ]
+    if not description_settings:
+        return []
     description_settings.sort()
     description_columns: list[int] = []
     for setting in description_settings:
