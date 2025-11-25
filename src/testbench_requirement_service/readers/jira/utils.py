@@ -300,6 +300,7 @@ def build_requirementobjectnode_from_issue(
 
     owner_value = getattr(issue.fields, owner_field_name, None)
     owner = getattr(owner_value, "displayName", "") if owner_value else ""
+    owner = owner if owner else ""
 
     status_field = getattr(issue.fields, "status", None)
     status = status_field.name if status_field else ""
