@@ -196,7 +196,7 @@ def format_description(description: str) -> str:
     return "<p>" + description.replace("\n\n", "</p><p>") + "</p>"
 
 
-def set_issue_field(issue: Issue, field_name: str, value: Any) -> None:
+def set_issue_field(issue: Issue, field_name: str, value: Any, field) -> None:
     """
     Helper to set a field value on the issue.fields object, handling nested attributes.
     """
@@ -218,7 +218,11 @@ def set_issue_field(issue: Issue, field_name: str, value: Any) -> None:
 
 
 def get_issue_version(  # noqa: C901
-    project: str, issue: Issue, key: RequirementKey, config: JiraRequirementReaderConfig
+    project: str,
+    issue: Issue,
+    key: RequirementKey,
+    config: JiraRequirementReaderConfig,
+    custom_fields,
 ) -> Issue:
     """
     Reconstructs the issue's fields to reflect their state at the specified version.
@@ -239,7 +243,6 @@ def get_issue_version(  # noqa: C901
             f"Invalid version format '{key.version}' for requirement key '{key.id}'. "
             "Expected format 'major.minor'."
         ) from e
-
     issue_copy = copy.deepcopy(issue)
 
     histories = sorted(getattr(issue_copy.changelog, "histories", []), key=lambda h: h.created)
@@ -256,12 +259,14 @@ def get_issue_version(  # noqa: C901
         if (major > target_major) or (major == target_major and minor >= target_minor):
             for item in getattr(history, "items", []):
                 if item.field in changed_fields and item.field not in updated_fields:
-                    set_issue_field(issue_copy, item.field, item.fromString)
+                    field_id = _get_field_id(custom_fields, item.field)
+                    set_issue_field(issue_copy, field_id, item.fromString, item.field)
                     updated_fields.add(item.field)
         else:
             for item in getattr(history, "items", []):
                 if item.field in changed_fields:
-                    set_issue_field(issue_copy, item.field, item.toString)
+                    field_id = _get_field_id(custom_fields, item.field)
+                    set_issue_field(issue_copy, field_id, item.toString, item.field)
                     updated_fields.add(item.field)
 
         if is_major:
@@ -274,6 +279,13 @@ def get_issue_version(  # noqa: C901
         return issue
 
     return issue_copy
+
+
+def _get_field_id(fields, field_name: str) -> str:
+    for field in fields:
+        if field["name"] == field_name:
+            return field["id"]
+    return field_name
 
 
 def classify_change_scope(

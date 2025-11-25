@@ -181,9 +181,8 @@ class JiraRequirementReader(AbstractRequirementReader):
         self, project: str, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
         fields = self._prepare_fields(
-            "summary,creator,assignee,status,priority,description,issuetype,attachment,",
-            project,
-            baseline,
+            project=project,
+            baseline=baseline,
         )
         expand = "renderedFields,changelog"
         issue = self.jira_client.fetch_issue(key.id, fields=fields, expand=expand)
@@ -192,7 +191,9 @@ class JiraRequirementReader(AbstractRequirementReader):
         self._validate_issue(
             issue
         )  # TODO: discuss whether project and baseline checks are needed here
-        issue = get_issue_version(project, issue, key, self.config)
+
+        custom_fields = self.jira_client.fetch_all_custom_fields()
+        issue = get_issue_version(project, issue, key, self.config, custom_fields)
         requirement_object = build_requirementobjectnode_from_issue(
             project=project,
             issue=issue,
