@@ -16,13 +16,6 @@ paths:
     get:
       summary: Retrieve user-defined attributes
       description: Returns an array of all user-defined attributes available on the requirements server.
-      parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
       responses:
         '200':
           description: List of user-defined attributes
@@ -53,13 +46,6 @@ paths:
     get:
       summary: Retrieve projects
       description: Returns an array of the names of all projects available on the requirements server.
-      parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
       responses:
         '200':
           description: List of project names
@@ -79,12 +65,6 @@ paths:
       summary: Retrieve baselines
       description: Returns an array of baselines for a given project.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -113,12 +93,6 @@ paths:
       summary: Retrieve requirements root node
       description: Returns the requirements of a given baseline as a tree structure.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -208,13 +182,6 @@ paths:
     get:
       summary: Retrieve server name and version
       description: Returns the name and version of the requirements server, separated by a dash.
-      parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
       responses:
         '200':
           description: Server name and version
@@ -229,12 +196,6 @@ paths:
       summary: Retrieve user-defined attributes for requirements
       description: Returns the values of user-defined fields for a list of requirements.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -321,12 +282,6 @@ paths:
       summary: Retrieve extended requirement
       description: Returns detailed information about a specific requirement.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -375,12 +330,6 @@ paths:
       summary: Retrieve requirement versions
       description: Returns the versions of a given requirement.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true

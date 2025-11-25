@@ -201,10 +201,11 @@ The service includes built-in requirement reader classes that handle different f
 
   #### `[jsonl]`
 
-  | Setting                     | Type         | Description                                                                | Required | Default               |
-  | --------------------------- | ------------ | -------------------------------------------------------------------------- | -------- | --------------------- |
-  | `requirements_path`         | String       | Path to the directory containing the requirement files.                    | Yes      | -                     |
+  | Setting               | Type   | Description                                             | Required | Default |
+  | --------------------- | ------ | ------------------------------------------------------- | -------- | ------- |
+  | `requirements_path` | String | Path to the directory containing the requirement files. | Yes      | -       |
 - **Required Schema**:
+
   - ***Projects*** are directories located at the top level inside `requirements_path`.
   - ***Baselines*** are `.jsonl` files stored within a project directory.
   - ***Requirements*** are JSON objects, each represented as a separate line in a baseline `.jsonl` file.
@@ -257,6 +258,7 @@ The service includes built-in requirement reader classes that handle different f
     ```
 - **Example Configuration**:
   Here's an example of how to configure the `JsonlRequirementReader` in the `.toml` configuration file:
+
   ```python
   # reader_config.toml
   [jsonl]
@@ -387,25 +389,27 @@ The service includes built-in requirement reader classes that handle different f
 
   #### `[jira]`
 
-  | Setting                     | Type         | Description                                                                | Required | Default               |
-  | --------------------------- | ------------ | -------------------------------------------------------------------------- | -------- | --------------------- |
-  | `server_url`              | String       | Base URL of the Jira REST API Server                                       | Yes      | -                     |
-  | `auth_type`               | String       | Authentication method to use. Valid values:`basic`, `token`, `oauth` | Yes      | `"basic"`           |
-  | `baseline_field`          | String       | Field used to identify baselines in Jira                                   | No       | `fixVersions`       |
-  | `baseline_jql`          | String | JQL query template used to select issues that belong to a specific baseline.<br />Use the `{baseline}` placeholder which will be replaced with the baseline value when executing the query. | No | `fixVersion = "{baseline}"` |
-  | `current_baseline_jql`  | String | JQL query template used to resolve the active/current baseline.<br />Use the `{baseline}` placeholder if needed. Leave empty to disable automatic current-baseline resolution. | No | `""` |
-  | `requirement_types`       | List[String] | List of Jira issue types considered as requirements                        | No       | `["Story", "Task"]` |
-  | `requirement_group_types` | List[String] | List of Jira issue types considered as requirement groups                  | No       | `["Epic"]`          |
+  | Setting                     | Type         | Description                                                                                                                                                                                                                     | Required | Default                                                                                                                 |
+  | --------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+  | `server_url`              | String       | Base URL of the Jira REST API Server                                                                                                                                                                                            | Yes      | -                                                                                                                       |
+  | `auth_type`               | String       | Authentication method to use. Valid values:`basic`, `token`, `oauth`                                                                                                                                                      | Yes      | `basic`                                                                                                             |
+  | `baseline_field`          | String       | Field used to identify baselines in Jira                                                                                                                                                                                        | No       | `fixVersions`                                                                                                         |
+  | `baseline_jql`            | String       | JQL query template used to select issues that belong to a specific baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name | No       | `project = "{project}" AND fixVersion = "{baseline}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")` |
+  | `current_baseline_jql`    | String       | JQL query template used to resolve the active/current baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name | No       | `project = "{project}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")`                               |
+  | `requirement_group_types` | List[String] | List of Jira issue types considered as requirement groups | No       | `["Epic"]` |
+  | `owner`                   | String  | Field used for the owner |  No        | `assignee`    |
+  | `rendered_fields`         | List[String] | List of UDF fields that should be shown as rendered fields in the TestBench Client.<br />*Note*: Field has to be of type multiline text in order to be shown rendered | No |  `[]`   |
 
   #### `[jira.projects.<project>]`
 
-  | Setting                     | Type         | Description                                                                | Required | Default                  |
-  | --------------------------- | ------------ | -------------------------------------------------------------------------- | -------- | --------------------- |
-  | `baseline_field`         | String | Project-specific field used to identify baselines in Jira                                                                 | No | Inherits from `[jira]` |
-  | `baseline_jql`           | String | Project-specific JQL query template used to select issues that belong to a specific baseline.<br />Use the `{baseline}` placeholder which will be replaced with the baseline value when executing the query. | No | Inherits from `[jira]` |
-  | `current_baseline_jql`   | String | Project-specific JQL query template used to resolve the active/current baseline.<br />Use the `{baseline}` placeholder if needed. Leave empty to disable automatic current-baseline resolution. | No | Inherits from `[jira]` |
-  | `requirement_types`       | List[String] | Project-specific list of Jira issue types considered as requirements       | No       | Inherits from `[jira]` |
-  | `requirement_group_types` | List[String] | Project-specific list of Jira issue types considered as requirement groups | No       | Inherits from `[jira]` |
+  | Setting                     | Type         | Description                                                                                                                                                                                                    | Required | Default                  |
+  | --------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------ |
+  | `baseline_field`          | String       | Project-specific field used to identify baselines in Jira                                                                                                                                                      | No       | Inherits from `[jira]` |
+  | `baseline_jql`            | String       | Project-specific JQL query template used to select issues that belong to a specific baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name | No       | Inherits from `[jira]` |
+  | `current_baseline_jql`    | String       | Project-specific JQL query template used to resolve the active/current baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name | No       | Inherits from `[jira]` |
+  | `requirement_group_types` | List[String] | Project-specific list of Jira issue types considered as requirement groups | No | Inherits from `[jira]` |
+  | `owner`                   | String  | Project-specific field used for the owner |  No | Inherits from `[jira]` |
+  | `rendered_fields`         | List[String] | Project-specific list of UDF fields that should be shown as rendered fields in the TestBench Client.<br />*Note*: Field has to be of type multiline text in order to be shown rendered | No | Inherits from `[jira]` |
 - **Environment variables**:
   Depending on the configured `auth_type` in the `[jira]` table of your `.toml` configuration, certain environment variables must be set to provide authentication credentials.
 
