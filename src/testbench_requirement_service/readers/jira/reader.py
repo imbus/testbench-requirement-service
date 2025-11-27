@@ -411,7 +411,9 @@ class JiraRequirementReader(AbstractRequirementReader):
                             issue=parent_issue,
                             owner_field_name=self._get_config_value("owner", project),
                             config=self.config,
-                            is_requirement=True,  # TODO: is_requirement?
+                            is_requirement=not self._is_requirement_group_issue(
+                                parent_issue, project
+                            ),
                         )
                         parent = requirement_nodes[parent_key]
                         requirement_tree[parent_key] = parent
