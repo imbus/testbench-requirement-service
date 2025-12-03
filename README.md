@@ -33,23 +33,23 @@ If you need additional readers, you can install optional dependency groups.
 
 #### Excel support (optional)
 
-If you need support for reading requirements from Excel or text files (`ExcelRequirementReader`), install the Excel/text-file extras:
+If you need support for reading requirements from Excel or text files ([ExcelRequirementReader](#excelrequirementreader)), install the Excel/text-file extras:
 
 ```powershell
 pip install testbench-requirement-service[excel]
 ```
 
-This installs the dependencies required by the `ExcelRequirementReader` (for reading `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` files).
+This installs the dependencies required by the [ExcelRequirementReader](#excelrequirementreader) (for reading `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` files).
 
 #### Jira support (optional)
 
-If you need support for reading requirements from Jira (`JiraRequirementReader`), install the Jira extras:
+If you need support for reading requirements from Jira ([JiraRequirementReader](#jirarequirementreader)), install the Jira extras:
 
 ```powershell
 pip install testbench-requirement-service[jira]
 ```
 
-This installs the Python Jira client and HTML parsing library required by the Jira reader (packages: `jira`, `beautifulsoup4`).
+This installs the Python Jira client and HTML parsing library required by the [JiraRequirementReader](#jirarequirementreader) (packages: `jira`, `beautifulsoup4`).
 
 You can install both extras at once:
 
@@ -101,9 +101,9 @@ Create a `reader_config.toml` file in your current working directory and define 
 
 The requirement reader will receive the path to this configuration file as a parameter in its constructor, allowing it to load and work with your settings.
 
-For the default requirement reader, `JsonlRequirementReader`, add the `requirements_path` setting in the main `[jsonl]` section of your `reader_config.toml`. This should point to the directory containing the requirement files used by the service.
+For the default requirement reader, [JsonlRequirementReader](#jsonlrequirementreader-default), add the `requirements_path` setting in the main `[jsonl]` section of your `reader_config.toml`. This should point to the directory containing the requirement files used by the service.
 
-Here’s an example of the minimum configuration for `JsonlRequirementReader`:
+Here’s an example of the minimum configuration for [JsonlRequirementReader](#jsonlrequirementreader-default):
 
 ```python
 # reader_config.toml
@@ -112,7 +112,12 @@ Here’s an example of the minimum configuration for `JsonlRequirementReader`:
 requirements_path = "requirements/"
 ```
 
-Once the configuration is complete, you're ready to start the service.
+Once the configuration is complete, you're ready to start the service. 
+
+If you switch to another built-in reader:
+
+- **[ExcelRequirementReader](#excelrequirementreader)** loads settings from a `.properties` file. Install the [Excel extras](#excel-support-optional) first, then follow the schema in the [Excel section](#excelrequirementreader).
+- **[JiraRequirementReader](#jirarequirementreader)** consumes a `.toml` config and Jira credentials. Install the [Jira extras](#jira-support-optional) and review the configuration and authentication methods in the [Jira section](#jirarequirementreader).
 
 ## Usage
 
@@ -191,277 +196,289 @@ For the raw OpenAPI JSON schema, use the built-in endpoint `/docs/openapi.json`:
 
 ## Built-in RequirementReader
 
-The service includes built-in requirement reader classes that handle different file formats. Below is a list of the currently available readers:
+The service includes built-in requirement reader classes that handle different file formats. Jump directly to a reader:
 
-### [JsonlRequirementReader](src/testbench_requirement_service/readers/jsonl/reader.py) *(Default)*
+- [JsonlRequirementReader (default)](#jsonlrequirementreader-default)
+- [ExcelRequirementReader](#excelrequirementreader)
+- [JiraRequirementReader](#jirarequirementreader)
 
-- **Description**: Reads requirement data from `.jsonl` (JSON Lines) files.
-- **Configuration**:
-  The configuration for the reader is read from a `.toml` file with a `[jsonl]` table as the main section.
+Below is a detailed description of each reader:
 
-  #### `[jsonl]`
+### JsonlRequirementReader *(Default)*
 
-  | Setting               | Type   | Description                                             | Required | Default |
-  | --------------------- | ------ | ------------------------------------------------------- | -------- | ------- |
-  | `requirements_path` | String | Path to the directory containing the requirement files. | Yes      | -       |
-- **Required Schema**:
+Reads requirement data from `.jsonl` (JSON Lines) files.
+#### Configuration:
+The configuration for the reader is read from a `.toml` file with a `[jsonl]` table as the main section.
 
-  - ***Projects*** are directories located at the top level inside `requirements_path`.
-  - ***Baselines*** are `.jsonl` files stored within a project directory.
-  - ***Requirements*** are JSON objects, each represented as a separate line in a baseline `.jsonl` file.
-    A requirement follows this Schema:
+##### `[jsonl]`
 
-    ```json
-    {
-        "name": "string",
-        "extendedID": "string",
-        "key": {
-            "id": "string",
-            "version": {
-                "name": "string",
-                "date": "string <date-time>",
-                "author": "string",
-                "comment": "string"
-            }
-        },
-        "owner": "string",
-        "status": "string",
-        "priority": "string",
-        "requirement": boolean,
-        "description": "string",
-        "documents": ["string"],
-        "parent": "string" | null,
-        "userDefinedAttributes": [
-            {
-                "name": "string",
-                "valueType": "STRING" | "ARRAY" | "BOOLEAN",
-                "stringValue": "string",
-                "stringValues": ["string"],
-                "booleanValue": boolean
-            }
-        ]
-    }
-    ```
+| Setting               | Type   | Description                                             | Required | Default |
+| --------------------- | ------ | ------------------------------------------------------- | -------- | ------- |
+| `requirements_path` | String | Path to the directory containing the requirement files. | Yes      | -       |
 
-    If the `"requirement"` attribute is set to `true`, the object represents an actual requirement. Otherwise, it serves only as a node in the requirements tree structure.
-    Root requirement objects have their `"parent"` attribute set to `null`.
-  - ***UserDefinedAttributes*** are specified in the `UserDefinedAttributes.json` file, located at the top level in `requirements_path`.
-    This file follows the Schema below:
+#### Required Schema:
 
-    ```json
-    [
-        {
-            "name": "string", 
-            "valueType": "STRING" | "ARRAY" | "BOOLEAN"
-        }
-    ]
-    ```
-- **Example Configuration**:
-  Here's an example of how to configure the `JsonlRequirementReader` in the `.toml` configuration file:
+- ***Projects*** are directories located at the top level inside `requirements_path`.
+- ***Baselines*** are `.jsonl` files stored within a project directory.
+- ***Requirements*** are JSON objects, each represented as a separate line in a baseline `.jsonl` file.
+  A requirement follows this Schema:
 
-  ```python
-  # reader_config.toml
-  [jsonl]
-  requirements_path = "requirements/"
+  ```json
+  {
+      "name": "string",
+      "extendedID": "string",
+      "key": {
+          "id": "string",
+          "version": {
+              "name": "string",
+              "date": "string <date-time>",
+              "author": "string",
+              "comment": "string"
+          }
+      },
+      "owner": "string",
+      "status": "string",
+      "priority": "string",
+      "requirement": boolean,
+      "description": "string",
+      "documents": ["string"],
+      "parent": "string" | null,
+      "userDefinedAttributes": [
+          {
+              "name": "string",
+              "valueType": "STRING" | "ARRAY" | "BOOLEAN",
+              "stringValue": "string",
+              "stringValues": ["string"],
+              "booleanValue": boolean
+          }
+      ]
+  }
   ```
 
-### [ExcelRequirementReader](src/testbench_requirement_service/readers/excel/reader.py)
+  If the `"requirement"` attribute is set to `true`, the object represents an actual requirement. Otherwise, it serves only as a node in the requirements tree structure.
+  Root requirement objects have their `"parent"` attribute set to `null`.
+- ***UserDefinedAttributes*** are specified in the `UserDefinedAttributes.json` file, located at the top level in `requirements_path`.
+  This file follows the Schema below:
 
-- **Description**: Reads requirement data from various file formats, including `.xlsx`, `.xls`, `.csv`, `.tsv`, and `.txt` files. The reader allows for flexible configuration to handle either Microsoft Excel formats (`.xlsx` or `.xls`) or CSV/Text files (`.csv`, `.tsv` or `.txt`).
-- **Configuration**:
-  The configuration for the reader is read from a Java Properties `.properties` file. By default, the reader uses a global `.properties` file, but if a project-specific `.properties` file is found, it can override the global configuration.
-  - **Global Settings**:
-    The global settings are mandatory. They can only be configured in the global configuration file.
-
-    | Global Setting           | Description                                     | Example                                     |
-    | ------------------------ | ----------------------------------------------- | ------------------------------------------- |
-    | `requirementsDataPath` | Path to the root directory for requirement data | `requirementsDataPath=requirements/excel` |
-  - **Mandatory Settings**:
-    All mandatory settings should be configured in the global configuration file. They can be overwritten by values in project-specific configuration files.
-
-    | Mandatory Setting          | Description                                                        | Example                                   |
-    | -------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
-    | `columnSeparator`        | Column separator in text files                                     | `columnSeparator=;`                     |
-    | `arrayValueSeparator`    | Separator within a list of values                                  | `arrayValueSeparator=,`                 |
-    | `baselineFileExtensions` | Comma-separated list of allowed file extensions preceded by a dot. | `baselineFileExtensions=.tsv,.csv,.txt` |
-  - **Optional Settings**:
-    Optional settings can be specified in the global configuration file and can be overwritten by values in project-specific configuration files.
-
-    | Optional Setting            | Description                                                                                                               | Example                            |
-    | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-    | `useExcelDirectly`        | `true`: Use Microsoft Excel files `<br>false`: Use text files like specified in `baselineFileExtensions`            | `useExcelDirectly=false`         |
-    | `baselinesFromSubfolders` | `true`: Searches for baseline files in all subfolders `<br>false`: Does not search for baseline files in subfolders   | `baselinesFromSubfolders=true`   |
-    | `worksheetName`           | Name of the worksheet to be used in the Excel files. If there is no corresponding worksheet, the first worksheet is used. | `worksheetName=Tabelle1`         |
-    | `dateFormat`              | Date format in documents as Javas SimpleDateFormat                                                                        | `dateFormat=yyyy-MM-dd HH:mm:ss` |
-    | `header.rowIdx`           | Line number of the header line in the requirement documents. Numbering starts at 1.                                       | `header.rowIdx=1`                |
-    | `data.rowIdx`             | Line number of the first requirement line. Numbering starts at 1.                                                         | `data.rowIdx=2`                  |
-  - **Column Mapping: Attributes**:
-    The column mapping of attributes configured in the global configuration file can be overwritten by values in project-specific configuration files. The column mapping for the attributes `íd`, `version` and `name` is mandatory. Column numbering starts at 1.
-
-    | Column Mapping                       | Description                                                                                                                                                                                                                        | Example                                                          |
-    | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-    | `requirement.hierarchyID`          | Column containing the hierarchy ID of the requirement                                                                                                                                                                              | `requirement.hierarchyID=2`                                    |
-    | `requirement.id`                   | Column containing the requirement id                                                                                                                                                                                               | `requirement.id=1`                                             |
-    | `requirement.version`              | Column containing the version of the requirement                                                                                                                                                                                   | `requirement.version=6`                                        |
-    | `requirement.name`                 | Column containing the name of the requirement                                                                                                                                                                                      | `requirement.name=3`                                           |
-    | `requirement.owner`                | Column containing the name of the person responsible for the requirement                                                                                                                                                           | `requirement.owner=4`                                          |
-    | `requirement.status`               | Column containing the status of the requirement                                                                                                                                                                                    | `requirement.status=5`                                         |
-    | `requirement.priority`             | Column containing the priority of the requirement                                                                                                                                                                                  | `requirement.priority=15`                                      |
-    | `requirement.comment`              | Column containing the comment of the requirement                                                                                                                                                                                   | `requirement.comment=14`                                       |
-    | `requirement.date`                 | Column containing the version date of the requirement                                                                                                                                                                              | `requirement.date=7`                                           |
-    | `requirement.description.<number>` | List of all columns that contain (parts of the) requirement description                                                                                                                                                            | `requirement.description.1=8<br>``requirement.description.2=9` |
-    | `requirement.references`           | Column containing the file references of the requirement.`<br>` File references are separated from each other with the `arrayValueSeparator`                                                                                   | `requirement.references=13`                                    |
-    | `requirement.type`                 | Column containing the information if entry is a folder or a requirement                                                                                                                                                            | `requirement.type=10`                                          |
-    | `requirement.folderPattern`        | Defines the regular expression pattern used to identify folders in the data.`<br>`Any value in the specified column (`requirement.type`) that matches this pattern will be considered a folder.`<br>`Default: `.*folder.*` | `requirement.folderPattern=.*folder.*`                         |
-  - **Settings for User defined fields**:
-    The settings for user defined fields (UDF) can only be configured in the global configuration file.
-
-    | UDF Setting             | Description                                                                                   | Example                    |
-    | ----------------------- | --------------------------------------------------------------------------------------------- | -------------------------- |
-    | `udf.count`           | Number of user defined fields to be used                                                      | `udf.count=2`            |
-    | `udf.attr#.name`      | Name of the user defined field used in the TestBench                                          | `udf.attr1.name=Risiko`  |
-    | `udf.attr#.column`    | Column containing the user defined field                                                      | `udf.attr1.column=11`    |
-    | `udf.attr#.type`      | Type of the user defined field. Can be `string`, `array` or `boolean`, case-insensitive | `udf.attr1.type=String`  |
-    | `udf.attr#.trueValue` | Attribute value that corresponds to TRUE. All other attribute values are interpreted as FALSE | `udf.attr2.trueValue=ja` |
-  - **Example Configuration**:
-
-    ```properties
-    # reader_config.properties
-
-    # Global Settings
-    requirementsDataPath=requirements/excel/
-
-    # Mandatory Settings
-    columnSeparator=;
-    arrayValueSeparator=,
-    baselineFileExtensions=.tsv,.csv,.txt
-
-    # Optional Settings
-    useExcelDirectly=false
-    baselinesFromSubfolders=false
-    worksheetName=Tabelle1
-    dateFormat=yyyy-MM-dd HH:mm:ss
-    header.rowIdx=1
-    data.rowIdx=2
-
-    # Column Mapping: Attributes
-    requirement.hierarchyID=2
-    requirement.id=1
-    requirement.version=6
-    requirement.name=3
-    requirement.owner=4
-    requirement.status=5
-    requirement.priority=15
-    requirement.comment=14
-    requirement.date=7
-    requirement.description.1=8
-    requirement.description.2=9
-    requirement.type=10
-    requirement.folderPattern=.*folder.*
-
-    # Settings for User defined fields
-    udf.count=3
-
-    udf.attr1.name=Risiko
-    udf.attr1.type=string
-    udf.attr1.column=11
-
-    udf.attr2.name=Project Groups
-    udf.attr2.type=boolean
-    udf.attr2.trueValue=true
-    udf.attr2.column=16
-
-    udf.attr3.name=Units
-    udf.attr3.type=array
-    udf.attr3.column=17
-    ```
-- **Required Schema**:
-  - ***Projects*** are directories located at the top level inside `requirementsDataPath`.
-  - ***Baselines*** are excel files (`.xlsx` or `.xls`) or text files (`.tsv`, `.csv` or `.txt`) stored within a project directory. If the `baselinesFromSubfolders` setting is set to `true`, subfolders within the project directory are also searched for baseline files.
-  - ***Requirements*** are represented as separate lines within a baseline file.
-  - To use a ***project-specific configuration***, place a `.properties` file inside the project directory, named after the project. For example, if the project is named `Project1`, the configuration file must be named `Project1.properties`.
-
-### [JiraRequirementReader](src/testbench_requirement_service/readers/jira/reader.py)
-
-- **Description**: Reads requirement data from a Jira instance using the Jira REST API. The connection is configured via a `.toml` file.
-- **Configuration**:
-  The configuration for the reader is read from a `.toml` file with a `[jira]` table as the main section.
-
-  #### `[jira]`
-
-  | Setting                     | Type         | Description                                                                                                                                                                         | Required | Default                                                                                                                 |
-  | --------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
-  | `server_url`              | String       | Base URL of the Jira REST API Server                                                                                                                                                | Yes      | -                                                                                                                       |
-  | `auth_type`               | String       | Authentication method to use. Valid values:`basic`, `token`, `oauth`                                                                                                          | Yes      | `basic`                                                                                                               |
-  | `username`                | String       | Username for Jira authentication (only for `basic` auth when not using environment variables)                                                                                     | No       | -                                                                                                                       |
-  | `api_token`               | String       | API token or password for Jira authentication (only for `basic` auth when not using environment variables)                                                                        | No       | -                                                                                                                       |
-  | `baseline_field`          | String       | Field used to identify baselines in Jira                                                                                                                                            | No       | `fixVersions`                                                                                                         |
-  | `baseline_jql`            | String       | JQL query template used to select issues that belong to a specific baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name | No       | `project = "{project}" AND fixVersion = "{baseline}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")` |
-  | `current_baseline_jql`    | String       | JQL query template used to resolve the active/current baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name              | No       | `project = "{project}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")`                               |
-  | `requirement_group_types` | List[String] | List of Jira issue types considered as requirement groups                                                                                                                           | No       | `["Epic"]`                                                                                                            |
-  | `major_change_fields`     | List[String] | List of Jira fields where changes are treated as major changes (e.g. used for highlighting or reporting)                                                                   | No       | `["fixVersions"]`                                                                                                     |
-  | `minor_change_fields`     | List[String] | List of Jira fields where changes are treated as minor changes                                                                                                             | No       | `["summary", "description", "affectsVersions", "status"]`                                                             |
-  | `owner`                   | String       | Field used for the owner                                                                                                                                                            | No       | `assignee`                                                                                                            |
-  | `rendered_fields`         | List[String] | List of UDF fields that should be shown as rendered fields in the TestBench Client.<br />*Note*: Field has to be of type multiline text in order to be shown rendered             | No       | `[]`                                                                                                                  |
-
-  #### `[jira.projects.<project>]`
-
-  | Setting                     | Type         | Description                                                                                                                                                                                          | Required | Default                  |
-  | --------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------ |
-  | `baseline_field`          | String       | Project-specific field used to identify baselines in Jira                                                                                                                                            | No       | Inherits from `[jira]` |
-  | `baseline_jql`            | String       | Project-specific JQL query template used to select issues that belong to a specific baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name | No       | Inherits from `[jira]` |
-  | `current_baseline_jql`    | String       | Project-specific JQL query template used to resolve the active/current baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name              | No       | Inherits from `[jira]` |
-  | `requirement_group_types` | List[String] | Project-specific list of Jira issue types considered as requirement groups                                                                                                                           | No       | Inherits from `[jira]` |
-  | `major_change_fields`     | List[String] | List of Jira fields where changes are treated as major changes (e.g. used for highlighting or reporting)                                                                                    | No       | Inherits from `[jira]` |
-  | `minor_change_fields`     | List[String] | List of Jira fields where changes are treated as minor changes                                                                                                                            | No       | Inherits from `[jira]` |
-  | `owner`                   | String       | Project-specific field used for the owner                                                                                                                                                            | No       | Inherits from `[jira]` |
-  | `rendered_fields`         | List[String] | Project-specific list of UDF fields that should be shown as rendered fields in the TestBench Client.<br />*Note*: Field has to be of type multiline text in order to be shown rendered             | No       | Inherits from `[jira]` |
-- **Environment variables**:
-  Depending on the configured `auth_type` in the `[jira]` table of your `.toml` configuration, certain environment variables must be set to provide authentication credentials.
-
-  | auth_type | Required Environment Variables                                                                | Description                                                        |
-  | --------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-  | `basic` | `JIRA_USERNAME`, `JIRA_API_TOKEN`                                                         | Used for Basic Authentication with username and API token          |
-  | `token` | `JIRA_BEARER_TOKEN`                                                                         | Used for token-based authentication (e.g., personal access tokens) |
-  | `oauth` | `JIRA_ACCESS_TOKEN`, `JIRA_ACCESS_TOKEN_SECRET`, `JIRA_CONSUMER_KEY`, `JIRA_KEY_CERT` | Used for OAuth 1.0a authentication                                 |
-- **Example Configuration**:
-
-  ```toml
-  # reader_config.toml
-
-  [jira]
-  server_url = "https://example.atlassian.net/"
-  auth_type = "basic"          # or "token" / "oauth"
-
-  # Optional authentication directly in config (alternative to env vars)
-  # username = "my-user@example.com"
-  # api_token = "my-apitoken"
-
-  # Optional: global JQL / field configuration
-  baseline_field = "fixVersions"
-  baseline_jql = "project = '{project}' AND fixVersion = '{baseline}' AND issuetype in (\"Epic\", \"Story\", \"User Story\", \"Task\", \"Bug\")"
-  current_baseline_jql = "project = '{project}' AND issuetype in (\"Epic\", \"Story\", \"User Story\", \"Task\", \"Bug\")"
-  requirement_group_types = ["Epic"]
-  major_change_fields = ["fixVersions"]
-  minor_change_fields = ["summary", "description", "affectsVersions", "status"]
-  owner = "assignee"
-  rendered_fields = ["Support Ticket", "Technical criteria", "Acceptance criteria"]
-
-  [jira.projects."Project A"]
-  # Project specific overrides (all optional)
-  baseline_field = "fixVersions"
-  baseline_jql = "fixVersion = '{baseline}'"
-  current_baseline_jql = "project = '{project}' AND fixVersion = '{baseline}'"
-  requirement_group_types = ["Initiative"]
-  owner = "creator"
+  ```json
+  [
+      {
+          "name": "string", 
+          "valueType": "STRING" | "ARRAY" | "BOOLEAN"
+      }
+  ]
   ```
 
-  Example `.env` file for basic authentication:
+#### Example Configuration:
+Here's an example of how to configure the `JsonlRequirementReader` in the `.toml` configuration file:
 
-  ```text
-  JIRA_USERNAME=my-user@example.com
-  JIRA_API_TOKEN=my-apitoken
-  ```
+```python
+# reader_config.toml
+[jsonl]
+requirements_path = "requirements/"
+```
+
+### ExcelRequirementReader
+
+Reads requirement data from various file formats, including `.xlsx`, `.xls`, `.csv`, `.tsv`, and `.txt` files. The reader allows for flexible configuration to handle either Microsoft Excel formats (`.xlsx` or `.xls`) or CSV/Text files (`.csv`, `.tsv` or `.txt`).
+
+#### Configuration:
+The configuration for the reader is read from a Java Properties `.properties` file. By default, the reader uses a global `.properties` file, but if a project-specific `.properties` file is found, it can override the global configuration.
+- **Global Settings**:
+  The global settings are mandatory. They can only be configured in the global configuration file.
+
+  | Global Setting           | Description                                     | Example                                     |
+  | ------------------------ | ----------------------------------------------- | ------------------------------------------- |
+  | `requirementsDataPath` | Path to the root directory for requirement data | `requirementsDataPath=requirements/excel` |
+- **Mandatory Settings**:
+  All mandatory settings should be configured in the global configuration file. They can be overwritten by values in project-specific configuration files.
+
+  | Mandatory Setting          | Description                                                        | Example                                   |
+  | -------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
+  | `columnSeparator`        | Column separator in text files                                     | `columnSeparator=;`                     |
+  | `arrayValueSeparator`    | Separator within a list of values                                  | `arrayValueSeparator=,`                 |
+  | `baselineFileExtensions` | Comma-separated list of allowed file extensions preceded by a dot. | `baselineFileExtensions=.tsv,.csv,.txt` |
+- **Optional Settings**:
+  Optional settings can be specified in the global configuration file and can be overwritten by values in project-specific configuration files.
+
+  | Optional Setting            | Description                                                                                                               | Example                            |
+  | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+  | `useExcelDirectly`        | `true`: Use Microsoft Excel files `<br>false`: Use text files like specified in `baselineFileExtensions`            | `useExcelDirectly=false`         |
+  | `baselinesFromSubfolders` | `true`: Searches for baseline files in all subfolders `<br>false`: Does not search for baseline files in subfolders   | `baselinesFromSubfolders=true`   |
+  | `worksheetName`           | Name of the worksheet to be used in the Excel files. If there is no corresponding worksheet, the first worksheet is used. | `worksheetName=Tabelle1`         |
+  | `dateFormat`              | Date format in documents as Javas SimpleDateFormat                                                                        | `dateFormat=yyyy-MM-dd HH:mm:ss` |
+  | `header.rowIdx`           | Line number of the header line in the requirement documents. Numbering starts at 1.                                       | `header.rowIdx=1`                |
+  | `data.rowIdx`             | Line number of the first requirement line. Numbering starts at 1.                                                         | `data.rowIdx=2`                  |
+- **Column Mapping: Attributes**:
+  The column mapping of attributes configured in the global configuration file can be overwritten by values in project-specific configuration files. The column mapping for the attributes `íd`, `version` and `name` is mandatory. Column numbering starts at 1.
+
+  | Column Mapping                       | Description                                                                                                                                                                                                                        | Example                                                          |
+  | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+  | `requirement.hierarchyID`          | Column containing the hierarchy ID of the requirement                                                                                                                                                                              | `requirement.hierarchyID=2`                                    |
+  | `requirement.id`                   | Column containing the requirement id                                                                                                                                                                                               | `requirement.id=1`                                             |
+  | `requirement.version`              | Column containing the version of the requirement                                                                                                                                                                                   | `requirement.version=6`                                        |
+  | `requirement.name`                 | Column containing the name of the requirement                                                                                                                                                                                      | `requirement.name=3`                                           |
+  | `requirement.owner`                | Column containing the name of the person responsible for the requirement                                                                                                                                                           | `requirement.owner=4`                                          |
+  | `requirement.status`               | Column containing the status of the requirement                                                                                                                                                                                    | `requirement.status=5`                                         |
+  | `requirement.priority`             | Column containing the priority of the requirement                                                                                                                                                                                  | `requirement.priority=15`                                      |
+  | `requirement.comment`              | Column containing the comment of the requirement                                                                                                                                                                                   | `requirement.comment=14`                                       |
+  | `requirement.date`                 | Column containing the version date of the requirement                                                                                                                                                                              | `requirement.date=7`                                           |
+  | `requirement.description.<number>` | List of all columns that contain (parts of the) requirement description                                                                                                                                                            | `requirement.description.1=8<br>``requirement.description.2=9` |
+  | `requirement.references`           | Column containing the file references of the requirement.`<br>` File references are separated from each other with the `arrayValueSeparator`                                                                                   | `requirement.references=13`                                    |
+  | `requirement.type`                 | Column containing the information if entry is a folder or a requirement                                                                                                                                                            | `requirement.type=10`                                          |
+  | `requirement.folderPattern`        | Defines the regular expression pattern used to identify folders in the data.`<br>`Any value in the specified column (`requirement.type`) that matches this pattern will be considered a folder.`<br>`Default: `.*folder.*` | `requirement.folderPattern=.*folder.*`                         |
+- **Settings for User defined fields**:
+  The settings for user defined fields (UDF) can only be configured in the global configuration file.
+
+  | UDF Setting             | Description                                                                                   | Example                    |
+  | ----------------------- | --------------------------------------------------------------------------------------------- | -------------------------- |
+  | `udf.count`           | Number of user defined fields to be used                                                      | `udf.count=2`            |
+  | `udf.attr#.name`      | Name of the user defined field used in the TestBench                                          | `udf.attr1.name=Risiko`  |
+  | `udf.attr#.column`    | Column containing the user defined field                                                      | `udf.attr1.column=11`    |
+  | `udf.attr#.type`      | Type of the user defined field. Can be `string`, `array` or `boolean`, case-insensitive | `udf.attr1.type=String`  |
+  | `udf.attr#.trueValue` | Attribute value that corresponds to TRUE. All other attribute values are interpreted as FALSE | `udf.attr2.trueValue=ja` |
+
+#### Example Configuration:
+
+```properties
+# reader_config.properties
+
+# Global Settings
+requirementsDataPath=requirements/excel/
+
+# Mandatory Settings
+columnSeparator=;
+arrayValueSeparator=,
+baselineFileExtensions=.tsv,.csv,.txt
+
+# Optional Settings
+useExcelDirectly=false
+baselinesFromSubfolders=false
+worksheetName=Tabelle1
+dateFormat=yyyy-MM-dd HH:mm:ss
+header.rowIdx=1
+data.rowIdx=2
+
+# Column Mapping: Attributes
+requirement.hierarchyID=2
+requirement.id=1
+requirement.version=6
+requirement.name=3
+requirement.owner=4
+requirement.status=5
+requirement.priority=15
+requirement.comment=14
+requirement.date=7
+requirement.description.1=8
+requirement.description.2=9
+requirement.type=10
+requirement.folderPattern=.*folder.*
+
+# Settings for User defined fields
+udf.count=3
+
+udf.attr1.name=Risiko
+udf.attr1.type=string
+udf.attr1.column=11
+
+udf.attr2.name=Project Groups
+udf.attr2.type=boolean
+udf.attr2.trueValue=true
+udf.attr2.column=16
+
+udf.attr3.name=Units
+udf.attr3.type=array
+udf.attr3.column=17
+```
+
+#### Required Schema:
+- ***Projects*** are directories located at the top level inside `requirementsDataPath`.
+- ***Baselines*** are excel files (`.xlsx` or `.xls`) or text files (`.tsv`, `.csv` or `.txt`) stored within a project directory. If the `baselinesFromSubfolders` setting is set to `true`, subfolders within the project directory are also searched for baseline files.
+- ***Requirements*** are represented as separate lines within a baseline file.
+- To use a ***project-specific configuration***, place a `.properties` file inside the project directory, named after the project. For example, if the project is named `Project1`, the configuration file must be named `Project1.properties`.
+
+### JiraRequirementReader
+Reads requirement data from a Jira instance using the Jira REST API. The connection is configured via a `.toml` file.
+
+#### Configuration:
+The configuration for the reader is read from a `.toml` file with a `[jira]` table as the main section.
+
+##### `[jira]`
+
+| Setting                     | Type         | Description                                                                                                                                                                         | Required | Default                                                                                                                 |
+| --------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `server_url`              | String       | Base URL of the Jira REST API Server                                                                                                                                                | Yes      | -                                                                                                                       |
+| `auth_type`               | String       | Authentication method to use (`basic`, `token`, `oauth`). See [Authentication methods](#authentication-methods) to pick the right flow.                                   | Yes      | `basic`                                                                                                               |
+| `username`                | String       | Username for Jira authentication (only for `basic` auth when not using environment variables)                                                                                     | No       | -                                                                                                                       |
+| `api_token`               | String       | API token or password for Jira authentication (only for `basic` auth when not using environment variables)                                                                        | No       | -                                                                                                                       |
+| `baseline_field`          | String       | Field used to identify baselines in Jira                                                                                                                                            | No       | `fixVersions`                                                                                                         |
+| `baseline_jql`            | String       | JQL query template used to select issues that belong to a specific baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name | No       | `project = "{project}" AND fixVersion = "{baseline}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")` |
+| `current_baseline_jql`    | String       | JQL query template used to resolve the active/current baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name              | No       | `project = "{project}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")`                               |
+| `requirement_group_types` | List[String] | List of Jira issue types considered as requirement groups                                                                                                                           | No       | `["Epic"]`                                                                                                            |
+| `major_change_fields`     | List[String] | List of Jira fields where changes are treated as major changes (e.g. used for highlighting or reporting)                                                                   | No       | `["fixVersions"]`                                                                                                     |
+| `minor_change_fields`     | List[String] | List of Jira fields where changes are treated as minor changes                                                                                                             | No       | `["summary", "description", "affectsVersions", "status"]`                                                             |
+| `owner`                   | String       | Field used for the owner                                                                                                                                                            | No       | `assignee`                                                                                                            |
+| `rendered_fields`         | List[String] | List of UDF fields that should be shown as rendered fields in the TestBench Client.<br />*Note*: Field has to be of type multiline text in order to be shown rendered             | No       | `[]`                                                                                                                  |
+
+##### `[jira.projects.<project>]`
+
+| Setting                     | Type         | Description                                                                                                                                                                                          | Required | Default                  |
+| --------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------ |
+| `baseline_field`          | String       | Project-specific field used to identify baselines in Jira                                                                                                                                            | No       | Inherits from `[jira]` |
+| `baseline_jql`            | String       | Project-specific JQL query template used to select issues that belong to a specific baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name | No       | Inherits from `[jira]` |
+| `current_baseline_jql`    | String       | Project-specific JQL query template used to resolve the active/current baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name              | No       | Inherits from `[jira]` |
+| `requirement_group_types` | List[String] | Project-specific list of Jira issue types considered as requirement groups                                                                                                                           | No       | Inherits from `[jira]` |
+| `major_change_fields`     | List[String] | List of Jira fields where changes are treated as major changes (e.g. used for highlighting or reporting)                                                                                    | No       | Inherits from `[jira]` |
+| `minor_change_fields`     | List[String] | List of Jira fields where changes are treated as minor changes                                                                                                                            | No       | Inherits from `[jira]` |
+| `owner`                   | String       | Project-specific field used for the owner                                                                                                                                                            | No       | Inherits from `[jira]` |
+| `rendered_fields`         | List[String] | Project-specific list of UDF fields that should be shown as rendered fields in the TestBench Client.<br />*Note*: Field has to be of type multiline text in order to be shown rendered             | No       | Inherits from `[jira]` |
+
+#### Authentication methods:
+Pick the auth flow that matches your Jira deployment; the reader enforces the required secrets at startup using the same conventions as the [`jira` Python package](https://jira.readthedocs.io/examples.html#authentication). You can either place credentials in `[jira]` directly or provide the matching environment variables shown below.
+
+| auth_type | When to use it | Required values |
+| --- | --- | --- |
+| `basic` | Atlassian Cloud and most Jira Data Center instances that still allow username + API token (or password). This is typically the simplest option. | Set `username` and `api_token` in the `[jira]` section or export `JIRA_USERNAME` and `JIRA_API_TOKEN`. |
+| `token` | Jira Server/Data Center that issues Personal Access Tokens and disallows basic auth. | Set `token` in the `[jira]` section or export `JIRA_BEARER_TOKEN`.|
+| `oauth` | Locked-down enterprise instances that require OAuth 1.0a with consumer keys and certificates. | Set `access_token`, `access_token_secret`, `consumer_key`, `key_cert` in the `[jira]` section or export `JIRA_ACCESS_TOKEN`, `JIRA_ACCESS_TOKEN_SECRET`, `JIRA_CONSUMER_KEY`, `JIRA_KEY_CERT`. |
+
+#### Example Configuration:
+```toml
+# reader_config.toml
+
+[jira]
+server_url = "https://example.atlassian.net/"
+auth_type = "basic"          # or "token" / "oauth"
+
+# Optional authentication directly in config (alternative to env vars)
+# username = "my-user@example.com"
+# api_token = "my-apitoken"
+
+# Optional: global JQL / field configuration
+baseline_field = "fixVersions"
+baseline_jql = "project = '{project}' AND fixVersion = '{baseline}' AND issuetype in (\"Epic\", \"Story\", \"User Story\", \"Task\", \"Bug\")"
+current_baseline_jql = "project = '{project}' AND issuetype in (\"Epic\", \"Story\", \"User Story\", \"Task\", \"Bug\")"
+requirement_group_types = ["Epic"]
+major_change_fields = ["fixVersions"]
+minor_change_fields = ["summary", "description", "affectsVersions", "status"]
+owner = "assignee"
+rendered_fields = ["Support Ticket", "Technical criteria", "Acceptance criteria"]
+
+[jira.projects."Project A"]
+# Project specific overrides (all optional)
+baseline_field = "fixVersions"
+baseline_jql = "fixVersion = '{baseline}'"
+current_baseline_jql = "project = '{project}' AND fixVersion = '{baseline}'"
+requirement_group_types = ["Initiative"]
+owner = "creator"
+```
+
+#### Example `.env` file for basic authentication:
+
+```text
+JIRA_USERNAME=my-user@example.com
+JIRA_API_TOKEN=my-apitoken
+```
 
 ## Custom RequirementReader Classes
 
