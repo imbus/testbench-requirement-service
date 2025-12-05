@@ -1,17 +1,13 @@
-import base64
 import copy
-import re
 from datetime import datetime
 from typing import Any, Literal
 
-from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
-
-try:
-    from bs4 import BeautifulSoup
-    from jira.resources import Field, Issue
-except ImportError:
-    pass
 from sanic.log import logger
+
+try:  # noqa: SIM105
+    from jira.resources import Field, Issue
+except ImportError:  # pragma: no cover
+    pass
 
 from testbench_requirement_service.models.requirement import (
     ExtendedRequirementObject,
@@ -20,11 +16,15 @@ from testbench_requirement_service.models.requirement import (
     RequirementVersionObject,
     UserDefinedAttribute,
 )
+from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
+from testbench_requirement_service.readers.jira.render_utils import build_rendered_field_html
 
 
 def build_requirementobjectnode_from_sprint(
-    sprint, key: RequirementKey | None = None, is_requirement: bool = False
-):
+    sprint,
+    key: RequirementKey | None = None,
+    is_requirement: bool = False,
+) -> RequirementObjectNode:
     sprint_id = str(getattr(sprint, "id", ""))
     return RequirementObjectNode(
         name=getattr(sprint, "name", ""),
@@ -55,6 +55,7 @@ def build_userdefinedattribute_object(  # noqa: RET503
             stringValue=string_value,
         )
     if value_type == "ARRAY":
+        string_values: list[str] | None = None
         if isinstance(field_value, list):
             string_values = []
             for item in field_value:
@@ -64,8 +65,6 @@ def build_userdefinedattribute_object(  # noqa: RET503
                     string_values.append(item.name)
                 else:
                     string_values.append(str(item))
-        else:
-            string_values = None
         return UserDefinedAttribute(
             name=field["name"],
             valueType="ARRAY",
@@ -106,16 +105,20 @@ def is_version_type_field(field: Field) -> bool:
 
 
 def get_current_requirement_version(
-    project: str, issue: Issue, config: JiraRequirementReaderConfig
+    project: str,
+    issue: Issue,
+    config: JiraRequirementReaderConfig,
 ) -> RequirementVersionObject:
     requirement_versions = generate_requirement_versions(project, issue, config)
     return requirement_versions[-1]
 
 
 def generate_requirement_versions(
-    project: str, issue: Issue, config: JiraRequirementReaderConfig
+    project: str,
+    issue: Issue,
+    config: JiraRequirementReaderConfig,
 ) -> list[RequirementVersionObject]:
-    versions = []
+    versions: list[RequirementVersionObject] = []
     minor = 0
     major = 1
 
@@ -135,9 +138,7 @@ def generate_requirement_versions(
     histories = sorted(getattr(issue.changelog, "histories", []), key=lambda h: h.created)
     for history in histories:
         changed_fields = {item.field for item in getattr(history, "items", [])}
-
         is_major, is_minor = classify_change_scope(project, changed_fields, config)
-
         if not is_major and not is_minor:
             continue
 
@@ -159,7 +160,6 @@ def generate_requirement_versions(
     return versions
 
 
-# TODO: Maybe different languages?
 def get_change_comment(history) -> str:
     changes = []
     for item in getattr(history, "items", []):
@@ -175,13 +175,13 @@ def extract_baselines_from_issue(issue: Issue, baseline_field: str) -> list[str]
         return []
     if isinstance(value, list):
         result = []
-        for v in value:
-            if hasattr(v, "name"):
-                result.append(str(v.name))
-            elif hasattr(v, "value"):
-                result.append(str(v.value))
+        for entry in value:
+            if hasattr(entry, "name"):
+                result.append(str(entry.name))
+            elif hasattr(entry, "value"):
+                result.append(str(entry.value))
             else:
-                result.append(str(v))
+                result.append(str(entry))
         return result
     if hasattr(value, "name"):
         return [str(value.name)]
@@ -244,11 +244,10 @@ def get_issue_version(  # noqa: C901
             "Expected format 'major.minor'."
         ) from e
     issue_copy = copy.deepcopy(issue)
-
     histories = sorted(getattr(issue_copy.changelog, "histories", []), key=lambda h: h.created)
     major = 1
     minor = 0
-    updated_fields = set()
+    updated_fields: set[str] = set()
 
     for history in histories:
         changed_fields = {item.field for item in getattr(history, "items", [])}
@@ -284,20 +283,18 @@ def get_issue_version(  # noqa: C901
 def _get_field_id(fields, field_name: str) -> str:
     for field in fields:
         if field["name"] == field_name:
-            return field["id"]
+            return str(field["id"])
     return field_name
 
 
 def classify_change_scope(
-    project: str, changed_fields: set[str], config: JiraRequirementReaderConfig
+    project: str,
+    changed_fields: set[str],
+    config: JiraRequirementReaderConfig,
 ) -> tuple[bool, bool]:
     major_fields = set(get_config_value(config, "major_change_fields", project))
     minor_fields = set(get_config_value(config, "minor_change_fields", project))
-
-    return (
-        bool(major_fields & changed_fields),
-        bool(minor_fields & changed_fields),
-    )
+    return bool(major_fields & changed_fields), bool(minor_fields & changed_fields)
 
 
 def build_requirementobjectnode_from_issue(
@@ -350,112 +347,12 @@ def build_extendedrequirementobject_from_issue(
 
     return ExtendedRequirementObject(
         **requirement_object.model_dump(),
-        description=build_rich_description(issue, jira_server_url),
+        description=build_rendered_field_html(
+            issue, field_id="description", jira_server_url=jira_server_url
+        ),
         documents=[issue.permalink(), *attachments],
         baseline=baseline,
     )
-
-
-def build_rich_description(issue: Issue, jira_server_url: str) -> str:
-    """
-    Render Jira issue description with embedded images inside a full HTML body.
-    """
-    description_html = embed_jira_images(issue, jira_server_url=jira_server_url)
-    return f"<html><body>{description_html}</body></html>"
-
-
-def embed_jira_images(issue: Issue, jira_server_url: str, field_id: str = "description") -> str:  # noqa: C901
-    """
-    Embed Jira images referenced in an issue's rendered description by converting relative URLs
-    and Jira attachment URLs into absolute URLs or inline base64-encoded data URIs.
-
-    Processes <img> tags with 'src' attributes pointing to:
-    - Jira's relative image paths (starting with '/images/'), prepending the Jira server URL.
-    - Jira's REST API attachment URLs, embedding images as base64 after verifying MIME types and size limits.
-
-    Ensures safety by validating URLs, whitelisting trusted MIME types (PNG, JPEG, GIF), limiting image size,
-    and removing unsupported or unsafe image sources. Logs warnings on issues encountered.
-
-    Args:
-        issue (Issue): Jira issue object containing renderedFields.description and fields.attachment.
-
-    Returns:
-        str: HTML string with images embedded as absolute URLs or data URIs.
-    """  # noqa: E501
-    allowed_image_mime_types = {"image/png", "image/jpeg", "image/gif"}
-    max_embedded_image_size = 5 * 1024 * 1024  # 5 MB limit for embedded images
-    jira_attachment_url_pattern = re.compile(r"^/rest/api/\d+/attachment/content/(\d+)$")
-
-    description = getattr(issue.renderedFields, field_id, "")
-    if not description:
-        logger.warning(f"Issue {issue.key} missing renderedFields.{field_id}")
-        return ""
-
-    # Build attachment dictionary mapping attachment ID to tuple (mime type, encoded data)
-    attachment_dict: dict[str, tuple[str, str]] = {}
-    attachments = getattr(issue.fields, "attachment", [])
-    for attachment in attachments:
-        try:
-            mime_type = getattr(attachment, "mimeType", None)
-            if not mime_type:
-                logger.warning(f"Attachment {attachment.id} missing mimeType metadata")
-                continue
-            if mime_type not in allowed_image_mime_types:
-                logger.warning(f"Attachment {attachment.id} has disallowed mimeType: {mime_type}")
-                continue
-
-            size = getattr(attachment, "size", None)
-            if size and size > max_embedded_image_size:
-                logger.warning(
-                    f"Attachment {attachment.id} size ({size} bytes) exceeds "
-                    f"maximum allowed size ({max_embedded_image_size} bytes)"
-                )
-                continue
-
-            image_bytes = attachment.get()
-
-            actual_size = len(image_bytes)
-            if actual_size > max_embedded_image_size:
-                logger.warning(
-                    f"Attachment {attachment.id} size ({size} bytes) exceeds "
-                    f"maximum allowed size ({max_embedded_image_size} bytes)"
-                )
-                continue
-
-            encoded = base64.b64encode(image_bytes).decode("utf-8")
-            attachment_dict[attachment.id] = (mime_type, encoded)
-            logger.debug(
-                f"Successfully processed attachment {attachment.id} ({len(image_bytes)} bytes)"
-            )
-        except Exception as e:
-            logger.debug(f"Could not process attachment {attachment.id}: {e}")
-            continue
-
-    # Embed images in the issue description
-    soup = BeautifulSoup(description, "html.parser")
-    img_tags = soup.find_all("img")
-    for img in img_tags:
-        src = str(img.get("src", ""))
-        if src.startswith("/images/"):
-            img["src"] = f"{jira_server_url}{src}"
-            continue
-
-        match = jira_attachment_url_pattern.fullmatch(src)
-        if not match:
-            img.attrs.pop("src", None)
-            logger.warning(f"Removed image with unsupported src: {src}")
-            continue
-
-        attachment_id = match.group(1)
-        if attachment_id not in attachment_dict:
-            img.attrs.pop("src", None)
-            logger.warning(f"Attachment {attachment_id} not found in validated attachments")
-            continue
-
-        mime_type, encoded = attachment_dict[attachment_id]
-        img["src"] = f"data:{mime_type};base64,{encoded}"
-
-    return str(soup)
 
 
 def get_config_value(

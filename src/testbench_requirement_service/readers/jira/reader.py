@@ -23,11 +23,11 @@ from testbench_requirement_service.models.requirement import (
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 from testbench_requirement_service.readers.jira.client import JiraClient
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
+from testbench_requirement_service.readers.jira.render_utils import build_rendered_field_html
 from testbench_requirement_service.readers.jira.utils import (
     build_extendedrequirementobject_from_issue,
     build_requirementobjectnode_from_issue,
     build_userdefinedattribute_object,
-    embed_jira_images,
     extract_baselines_from_issue,
     extract_valuetype_from_issue_field,
     generate_requirement_versions,
@@ -146,7 +146,10 @@ class JiraRequirementReader(AbstractRequirementReader):
         issue_keys = [req_key.id for req_key in requirement_keys]
         base_jql = self._build_issues_jql(project, baseline)
         issues = self.jira_client.fetch_issues(
-            issue_keys, base_jql, fields=",".join(["key", *field_ids]), expand="renderedFields"
+            issue_keys,
+            base_jql,
+            fields=",".join(["key", "attachment", *field_ids]),
+            expand="renderedFields",
         )
         issue_map = {issue.key: issue for issue in issues}
 
@@ -163,10 +166,12 @@ class JiraRequirementReader(AbstractRequirementReader):
                 if hasattr(issue.renderedFields, field["id"]) and field[
                     "name"
                 ] in self._get_config_value("rendered_fields", project):
-                    text = embed_jira_images(
-                        issue, jira_server_url=self.config.server_url, field_id=field["id"]
+                    field_value = build_rendered_field_html(
+                        issue,
+                        field_id=field["id"],
+                        jira_server_url=self.config.server_url,
+                        include_head=True,
                     )
-                    field_value = f"<html><head></head><body>{text}</body></html>"
                 else:
                     field_value = getattr(issue.fields, field["id"])
                 udas.append(build_userdefinedattribute_object(field, field_value))
