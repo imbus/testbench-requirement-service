@@ -178,10 +178,31 @@ temp/
 tmp/
 *.tmp
 
-# Configuration files 
-*config.py
-*config.toml
-*.properties
+# Configuration files with sensitive data
+# Block all config files by default to prevent accidental commits of credentials
+config.py
+*_config.toml
+*_config.properties
+reader_config.toml
+reader_config.properties
+excel_config.properties
+jira_config.toml
+jsonl_config.toml
+
+# Allow example configs (safe templates without credentials)
+!examples/*_config.toml
+!examples/*_config.properties
+!examples/excel_config.properties
+!examples/jira_config.toml
+!examples/jsonl_config.toml
+
+# Allow internal reader config.py files (not user configs)
+!src/testbench_requirement_service/readers/**/config.py
+
+# Environment files (contain Jira credentials, etc.)
+.env
+.env.local
+.env.*.local
 
 # VS Code settings
 .vscode/
@@ -191,6 +212,3 @@ results/
 
 # Requirement files
 requirements
-
-# Do not ignore config.py in the readers directory
-!src/testbench_requirement_service/readers/**/config.py
