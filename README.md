@@ -69,55 +69,118 @@ If the installation was successful, this will output the installed version of th
 
 ## Setup
 
-Before starting the service, you need to configure it.
+Before starting the service, you need to configure authentication and choose a requirement reader.
 
 ### Step 1: Set up your service credentials
 
-First, you need to set the credentials for your service in a configuration file. Use the integrated command `set-credentials`, which will automatically create a `config.py` in your current working directory. This file stores your credentials as a hashed password with a salt.
-
-The server will verify requests using *Basic Auth*, comparing the username and password in incoming requests with the hash and salt stored in the `config.py` file.
-
-If you'd like to store the configuration file elsewhere, you can specify the path with the `--config` option. However, remember that this config file is required for your service, and you will need to provide this path when starting the service if you change the default location.
-
-You can run the following command without options, which will prompt you to enter your username and password:
+Generate a `config.py` file with hashed credentials for Basic Auth:
 
 ```powershell
 testbench-requirement-service set-credentials
 ```
 
-Alternatively, you can specify the username and password directly in the command:
+This prompts for username and password. Alternatively, specify them directly:
 
 ```powershell
 testbench-requirement-service set-credentials --username USERNAME --password PASSWORD
 ```
 
-If successful, a `config.py` file will be created with `PASSWORD_HASH` and `SALT` as the content.
+The generated `config.py` contains `PASSWORD_HASH` and `SALT` for request authentication.
 
-### Step 2: Set up the requirement reader configuration
+### Step 2: Choose and configure your requirement reader
 
-You will also need to configure the requirement reader that the service will use.
+The service supports three built-in readers. Choose one based on your data source:
 
-Create a `reader_config.toml` file in your current working directory and define the necessary settings for the requirement reader. If you prefer to store the configuration file elsewhere, you can specify a custom path, but remember to provide this path when starting the service.
+| Reader | Data Source | Config File Format | Install Command |
+|--------|-------------|-------------------|-----------------|
+| **[JsonlRequirementReader](#jsonlrequirementreader-default)** *(default)* | `.jsonl` files | `.toml` | Included in base install |
+| **[ExcelRequirementReader](#excelrequirementreader)** | `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` files | `.properties` | `pip install testbench-requirement-service[excel]` |
+| **[JiraRequirementReader](#jirarequirementreader)** | Jira REST API | `.toml` + credentials | `pip install testbench-requirement-service[jira]` |
 
-The requirement reader will receive the path to this configuration file as a parameter in its constructor, allowing it to load and work with your settings.
+#### Option A: Configure in `config.py` (Recommended)
 
-For the default requirement reader, [JsonlRequirementReader](#jsonlrequirementreader-default), add the `requirements_path` setting in the main `[jsonl]` section of your `reader_config.toml`. This should point to the directory containing the requirement files used by the service.
-
-Here’s an example of the minimum configuration for [JsonlRequirementReader](#jsonlrequirementreader-default):
+Edit your `config.py` file to specify which reader to use. **Uncomment** the reader you want and **comment out** the others:
 
 ```python
-# reader_config.toml
+# config.py
+PASSWORD_HASH = "your_generated_hash"
+SALT = "your_generated_salt"
 
-[jsonl]
-requirements_path = "requirements/"
+# Option 1: JsonlRequirementReader (default)
+READER_CLASS = "JsonlRequirementReader"
+READER_CONFIG_PATH = "reader_config.toml"
+
+# Option 2: ExcelRequirementReader (install [excel] extras first)
+# READER_CLASS = "ExcelRequirementReader"
+# READER_CONFIG_PATH = "excel_config.properties"
+
+# Option 3: JiraRequirementReader (install [jira] extras first)
+# READER_CLASS = "JiraRequirementReader"
+# READER_CONFIG_PATH = "jira_config.toml"
 ```
 
-Once the configuration is complete, you're ready to start the service. 
+#### Option B: Use command-line flags
 
-If you switch to another built-in reader:
+Override the reader at startup with `--reader-class` and `--reader-config`:
 
-- **[ExcelRequirementReader](#excelrequirementreader)** loads settings from a `.properties` file. Install the [Excel extras](#excel-support-optional) first, then follow the schema in the [Excel section](#excelrequirementreader).
-- **[JiraRequirementReader](#jirarequirementreader)** consumes a `.toml` config and Jira credentials. Install the [Jira extras](#jira-support-optional) and review the configuration and authentication methods in the [Jira section](#jirarequirementreader).
+```powershell
+testbench-requirement-service start --reader-class JiraRequirementReader --reader-config jira_config.toml
+```
+
+**Note:** Command-line flags override settings in `config.py`.
+
+### Step 3: Create your reader configuration file
+
+Create the configuration file specified in `READER_CONFIG_PATH` (or via `--reader-config`).
+
+#### For JsonlRequirementReader (default):
+
+Create `reader_config.toml`:
+
+```toml
+[jsonl]
+requirements_path = "requirements/jsonl/"
+```
+
+See [JsonlRequirementReader](#jsonlrequirementreader-default) for full schema and requirements.
+
+#### For ExcelRequirementReader:
+
+Create `excel_config.properties`:
+
+```properties
+requirementsDataPath=requirements/excel/
+columnSeparator=;
+arrayValueSeparator=,
+baselineFileExtensions=.tsv,.csv,.txt
+# ... additional settings
+```
+
+See [ExcelRequirementReader](#excelrequirementreader) for complete configuration options.
+
+#### For JiraRequirementReader:
+
+Create `jira_config.toml`:
+
+```toml
+[jira]
+server_url = "https://your-jira.atlassian.net/"
+auth_type = "basic"
+# ... additional settings
+```
+
+Create a `.env` file with credentials:
+
+```text
+JIRA_USERNAME=your-email@example.com
+JIRA_API_TOKEN=your-api-token
+```
+
+See [JiraRequirementReader](#jirarequirementreader) for authentication methods and full configuration.
+
+---
+
+**You're now ready to start the service!** See the [Usage](#usage) section below.
 
 ## Usage
 
@@ -207,6 +270,29 @@ Below is a detailed description of each reader:
 ### JsonlRequirementReader *(Default)*
 
 Reads requirement data from `.jsonl` (JSON Lines) files.
+
+#### Prerequisites:
+
+1. **Install the base package:**
+   ```powershell
+   pip install testbench-requirement-service
+   ```
+   The JsonlRequirementReader is included in the base installation.
+
+2. **Set up credentials** (if not already done):
+   ```powershell
+   testbench-requirement-service set-credentials
+   ```
+
+3. **Configure in `config.py`:**
+   ```python
+   READER_CLASS = "JsonlRequirementReader"
+   READER_CONFIG_PATH = "reader_config.toml"
+   ```
+   See [Setup](#setup) for detailed configuration instructions.
+
+4. **Create reader configuration file** (see [Configuration](#configuration) below)
+
 #### Configuration:
 The configuration for the reader is read from a `.toml` file with a `[jsonl]` table as the main section.
 
@@ -281,6 +367,28 @@ requirements_path = "requirements/"
 ### ExcelRequirementReader
 
 Reads requirement data from various file formats, including `.xlsx`, `.xls`, `.csv`, `.tsv`, and `.txt` files. The reader allows for flexible configuration to handle either Microsoft Excel formats (`.xlsx` or `.xls`) or CSV/Text files (`.csv`, `.tsv` or `.txt`).
+
+#### Prerequisites:
+
+1. **Install Excel extras:**
+   ```powershell
+   pip install testbench-requirement-service[excel]
+   ```
+   This installs dependencies for reading `.xlsx`, `.xls`, `.csv`, `.tsv`, and `.txt` files.
+
+2. **Set up credentials** (if not already done):
+   ```powershell
+   testbench-requirement-service set-credentials
+   ```
+
+3. **Configure in `config.py`:**
+   ```python
+   READER_CLASS = "ExcelRequirementReader"
+   READER_CONFIG_PATH = "excel_config.properties"
+   ```
+   See [Setup](#setup) for detailed configuration instructions.
+
+4. **Create reader configuration file** (see [Configuration](#configuration-1) below)
 
 #### Configuration:
 The configuration for the reader is read from a Java Properties `.properties` file. By default, the reader uses a global `.properties` file, but if a project-specific `.properties` file is found, it can override the global configuration.
@@ -398,7 +506,34 @@ udf.attr3.column=17
 - To use a ***project-specific configuration***, place a `.properties` file inside the project directory, named after the project. For example, if the project is named `Project1`, the configuration file must be named `Project1.properties`.
 
 ### JiraRequirementReader
+
 Reads requirement data from a Jira instance using the Jira REST API. The connection is configured via a `.toml` file.
+
+#### Prerequisites:
+
+1. **Install Jira extras:**
+   ```powershell
+   pip install testbench-requirement-service[jira]
+   ```
+   This installs the Jira Python client and HTML parsing libraries (`jira`, `beautifulsoup4`).
+
+2. **Set up credentials** (if not already done):
+   ```powershell
+   testbench-requirement-service set-credentials
+   ```
+
+3. **Configure in `config.py`:**
+   ```python
+   READER_CLASS = "JiraRequirementReader"
+   READER_CONFIG_PATH = "jira_config.toml"
+   ```
+   See [Setup](#setup) for detailed configuration instructions.
+
+4. **Set up Jira authentication:**
+   - Create a `.env` file with your Jira credentials (see [Authentication methods](#authentication-methods) below)
+   - Or configure credentials directly in the `.toml` file
+
+5. **Create reader configuration file** (see [Configuration](#configuration-2) below)
 
 #### Configuration:
 The configuration for the reader is read from a `.toml` file with a `[jira]` table as the main section.
