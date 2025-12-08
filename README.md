@@ -1,6 +1,6 @@
 # TestBench Requirement Service - Python
 
-A simple CLI tool to start and configure a TestBench Requirement Service.
+A REST API service for imbus TestBench that provides unified access to requirements from multiple sources (Jira, Excel, JSONL).
 
 ## Table of contents
 
@@ -655,4 +655,4 @@ We welcome contributions! See [CONTRIBUTING](CONTRIBUTING.md) for details.
 
 ## License
 
-This project is licensed under the ... License – see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
