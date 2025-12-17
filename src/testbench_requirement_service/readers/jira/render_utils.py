@@ -69,25 +69,83 @@ def enrich_rendered_html(
     if not rendered_html:
         return ""
     soup = BeautifulSoup(rendered_html, "html.parser")
+    process_task_items(soup)
+    process_ins_tags(soup)
+    process_del_tags(soup)
     process_image_tags(soup, issue, jira_server_url)
     process_anchor_tags(soup, jira_server_url)
     return str(soup)
 
 
-def build_attachment_catalog(issue: Issue) -> dict[str, dict[str, Any]]:
+def process_task_items(soup: BeautifulSoup):
+    """Normalize wiki task markup (-content-) in <li> to strikethrough spans."""
+    for li in soup.find_all("li"):
+        text_parts = [str(c).strip() for c in li.contents if isinstance(c, str)]
+        full_text = "".join(text_parts).strip()
+
+        if full_text.startswith("-") and full_text.endswith("-"):
+            # Strip leading/trailing text nodes with markers
+            for content in li.contents[:]:
+                if isinstance(content, str):
+                    cleaned = str(content)
+                    if cleaned.lstrip().startswith("-"):
+                        cleaned = cleaned.lstrip()[1:]
+                    if cleaned.rstrip().endswith("-"):
+                        cleaned = cleaned.rstrip()[:-1]
+                    content.replace_with(cleaned)
+
+            li["style"] = "text-decoration: line-through;"
+
+            # checkmark_span = soup.new_tag("span", style="color: #1868DB; font-size: 12px;")
+            # checkmark_span.string = "☑ "
+            # li.insert(0, checkmark_span)
+
+
+def process_ins_tags(soup: BeautifulSoup) -> None:
+    """Normalize <ins> tags for consistent underline rendering."""
+    for ins_tag in soup.find_all("ins"):
+        contents = ins_tag.contents
+        if contents:
+            span = soup.new_tag("span")
+            span["style"] = "text-decoration: underline;"
+            span.extend(contents)
+            ins_tag.replace_with(span)
+        else:
+            ins_tag.decompose()
+
+
+def process_del_tags(soup: BeautifulSoup):
+    """Normalize <del> tags for consistent strikethrough rendering."""
+    for del_tag in soup.find_all("del"):
+        contents = del_tag.contents
+        if contents:
+            span = soup.new_tag("span")
+            span["style"] = "text-decoration: line-through;"
+            span.extend(del_tag.contents)
+            del_tag.replace_with(span)
+        else:
+            del_tag.decompose()
+
+
+def fetch_attachment_info(
+    issue: Issue, attachment_id: str, attachment_cache: dict[str, dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Fetch and encode a specific attachment by ID, with caching for duplicate references."""
+    if attachment_id in attachment_cache:
+        return attachment_cache[attachment_id]
+
     attachments = getattr(issue.fields, "attachment", []) or []
-    catalog: dict[str, dict[str, Any]] = {}
+
     for attachment in attachments:
-        attachment_id = getattr(attachment, "id", None)
-        if not attachment_id:
+        if getattr(attachment, "id", None) != attachment_id:
             continue
 
         mime_type = getattr(attachment, "mimeType", None)
         if not mime_type:
             logger.warning(f"Attachment {attachment_id} missing mimeType metadata")
-            continue
+            return None
 
-        entry: dict[str, Any] = {
+        info: dict[str, Any] = {
             "mime_type": mime_type,
             "content_url": getattr(attachment, "content", ""),
             "encoded": None,
@@ -100,15 +158,15 @@ def build_attachment_catalog(issue: Issue) -> dict[str, dict[str, Any]]:
                     f"Attachment {attachment_id} size ({size} bytes) exceeds "
                     f"maximum allowed size ({MAX_EMBEDDED_IMAGE_SIZE} bytes)"
                 )
-                catalog[attachment_id] = entry
-                continue
+                attachment_cache[attachment_id] = info
+                return info
 
             try:
                 image_bytes = attachment.get()
             except Exception as e:
                 logger.debug(f"Could not fetch attachment {attachment_id}: {e}")
-                catalog[attachment_id] = entry
-                continue
+                attachment_cache[attachment_id] = info
+                return info
 
             if len(image_bytes) > MAX_EMBEDDED_IMAGE_SIZE:
                 logger.warning(
@@ -116,13 +174,16 @@ def build_attachment_catalog(issue: Issue) -> dict[str, dict[str, Any]]:
                     f"maximum allowed size ({MAX_EMBEDDED_IMAGE_SIZE} bytes)"
                 )
             else:
-                entry["encoded"] = base64.b64encode(image_bytes).decode("utf-8")
+                info["encoded"] = base64.b64encode(image_bytes).decode("utf-8")
                 logger.debug(
                     f"Successfully processed attachment {attachment_id} ({len(image_bytes)} bytes)"
                 )
 
-        catalog[attachment_id] = entry
-    return catalog
+        attachment_cache[attachment_id] = info
+        return info
+
+    logger.warning(f"Attachment {attachment_id} not found in issue attachments")
+    return None
 
 
 def process_image_tags(
@@ -130,10 +191,16 @@ def process_image_tags(
     issue: Issue,
     jira_server_url: str,
 ) -> None:
-    attachment_catalog = build_attachment_catalog(issue)
+    attachment_cache: dict[str, dict[str, Any]] = {}
     image_cache: dict[str, str | None] = {}
 
     for img in soup.find_all("img"):
+        # Check next sibling and strip existing whitespace
+        next_sib = img.next_sibling
+        if next_sib and isinstance(next_sib, str):
+            cleaned_text = "\xa0" + next_sib.lstrip()
+            next_sib.replace_with(cleaned_text)
+
         src = str(img.get("src", "")).strip()
 
         if not src:
@@ -147,7 +214,7 @@ def process_image_tags(
             img.attrs.pop("src", None)
             continue
 
-        if handle_attachment_image(img, src, attachment_catalog, jira_server_url):
+        if handle_attachment_image(img, src, issue, attachment_cache, jira_server_url):
             continue
 
         if handle_remote_image(img, src, image_cache, issue, jira_server_url):
@@ -159,30 +226,29 @@ def process_image_tags(
 
 
 def handle_attachment_image(
-    img, src: str, attachment_catalog: dict[str, dict[str, Any]], jira_server_url: str
+    img,
+    src: str,
+    issue: Issue,
+    attachment_cache: dict[str, dict[str, Any]],
+    jira_server_url: str,
 ) -> bool:
     attachment_match = JIRA_ATTACHMENT_URL_PATTERN.fullmatch(src)
     if attachment_match:
-        apply_attachment_image(
-            img,
-            attachment_catalog,
-            attachment_match.group(1),
-            jira_server_url,
-        )
+        attachment_id = attachment_match.group(1)
+        attachment_info = fetch_attachment_info(issue, attachment_id, attachment_cache)
+        apply_attachment_image(img, attachment_info, attachment_id, jira_server_url)
         return True
     return False
 
 
 def apply_attachment_image(
     img,
-    attachment_catalog: dict[str, dict[str, Any]],
+    attachment_info: dict[str, Any] | None,
     attachment_id: str,
     jira_server_url: str,
 ) -> None:
-    attachment_info = attachment_catalog.get(attachment_id)
     if not attachment_info:
         img.attrs.pop("src", None)
-        logger.warning(f"Attachment {attachment_id} not found in validated attachments")
         return
 
     encoded = attachment_info.get("encoded")

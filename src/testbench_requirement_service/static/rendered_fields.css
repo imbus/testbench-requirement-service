@@ -1,15 +1,13 @@
-body {
-    line-height: 24px;
+p, ul, ol, dl, h1, h2, h3, h4, h5, h6, blockquote, pre, form, table {
+    margin: 0 0 12px 0;
 }
 
-p, ul, ol, dl, h1, h2, h3, h4, h5, h6, blockquote, pre, form, table {
-    margin: 12px 0 0 0;
+h4 {
+    font-size: 9px;
 }
 
 ul, ol {
-    padding-left: 24px;
-    list-style-type: disc;
-    list-style-position: inside;
+    padding-left: 12px;
 }
 
 li {
@@ -19,10 +17,6 @@ li {
 tt {
     background-color: #ececef;
     color: #18171d;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    padding-left: 4px;
-    padding-right: 4px;
 }
 
 a {
@@ -34,36 +28,8 @@ a {
     background-color: #f4f5f7;
 }
 
-img.emoticon {
-    margin-right: 6px;
-    border-style: none;
-}
-
 .resolved {
     background-color: #eef7ec;
     border-color: #d7eed6;
     color: #1b5e20;
-}
-
-.issue-link {
-    text-decoration: none;
-    color: inherit;
-    font-weight: bold;
-}
-
-.icon {
-    margin-right: 4px;
-    border-style: none;
-}
-
-.aui-lozenge,
-.aui-lozenge-subtle {
-    background-color: #e6f4ea;
-    color: #0f6b2e;
-    padding: 2px 6px;
-    border-style: outset;
-    border-color: #cfe8d6;
-    font-size: 12px;
-    font-weight: bold;
-    margin-left: 6px;
 }
