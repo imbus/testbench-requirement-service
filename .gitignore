@@ -181,20 +181,18 @@ tmp/
 # Configuration files with sensitive data
 # Block all config files by default to prevent accidental commits of credentials
 config.py
-*_config.toml
-*_config.properties
-reader_config.toml
-reader_config.properties
-excel_config.properties
-jira_config.toml
-jsonl_config.toml
+*.toml
+*.properties
 
-# Allow example configs (safe templates without credentials)
-!examples/*_config.toml
-!examples/*_config.properties
-!examples/excel_config.properties
-!examples/jira_config.toml
-!examples/jsonl_config.toml
+# Allow example configs
+!examples/config.py
+!examples/*.toml
+!examples/*.properties
+
+# Allow config files in tests
+!tests/**/config.py
+!tests/**/*.toml
+!tests/**/*.properties
 
 # Allow internal reader config.py files (not user configs)
 !src/testbench_requirement_service/readers/**/config.py
