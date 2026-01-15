@@ -9,7 +9,11 @@ from testbench_requirement_service.utils.auth import check_auth_for_request
 
 
 async def check_request_auth(req: Request):
-    if req.path.startswith("/docs") or req.path.startswith("/static"):
+    if (
+        req.path in {"/", "/favicon.ico", "/openapi.yaml"}
+        or req.path.startswith("/docs")
+        or req.path.startswith("/static")
+    ):
         return None
 
     response = check_auth_for_request(req)

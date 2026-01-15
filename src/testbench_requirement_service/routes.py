@@ -16,6 +16,11 @@ from testbench_requirement_service.utils.auth import protected
 router = Blueprint("requirement")
 
 
+@router.route("/", methods=["GET"])
+async def redirect_to_docs(req: Request):
+    return response.redirect("/docs")
+
+
 @router.route("/server-name-and-version", methods=["GET"])
 @protected
 async def get_server_name_and_version(req: Request):
