@@ -9,7 +9,8 @@ from sanic.worker.loader import AppLoader
 
 from testbench_requirement_service import __version__
 from testbench_requirement_service.app import AppConfig, create_app
-from testbench_requirement_service.utils.auth import hash_password, save_credentials_in_config_file
+from testbench_requirement_service.config import resolve_config_file_path
+from testbench_requirement_service.utils.auth import hash_password, save_credentials
 
 
 @click.group()
@@ -23,7 +24,12 @@ def cli(ctx):
 
 @click.command()
 @click.option(
-    "--config", type=str, metavar="PATH", help="Path to the app config file  [default: config.py]"
+    "--config",
+    type=str,
+    metavar="PATH",
+    help=(
+        "Path to the app config file  [default: config.toml, automatically falls back to config.py]"
+    ),
 )
 @click.option(
     "--reader-class",
@@ -53,6 +59,12 @@ def cli(ctx):
 )
 def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR0913
     """Start the TestBench Requirement Service."""
+    load_dotenv()
+
+    app_name = "TestBenchRequirementService"
+    log_level = "DEBUG" if dev else None
+    app_config = AppConfig(config, reader_class, reader_config, log_level)
+
     print(r"""  ______          __  ____                  __       ____  __  ___   _____                 _         
  /_  __/__  _____/ /_/ __ )___  ____  _____/ /_     / __ \/  |/  /  / ___/___  ______   __(_)_______ 
   / / / _ \/ ___/ __/ __  / _ \/ __ \/ ___/ __ \   / /_/ / /|_/ /   \__ \/ _ \/ ___/ | / / / ___/ _ \
@@ -60,10 +72,6 @@ def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR091
 /_/  \___/____/\__/_____/\___/_/ /_/\___/_/ /_/  /_/ |_/_/  /_/   /____/\___/_/    |___/_/\___/\___/ 
                                                                                                      """)  # noqa: W291, E501
 
-    load_dotenv()
-    app_name = "TestBenchRequirementService"
-    loglevel = "DEBUG" if dev else None
-    app_config = AppConfig(config, reader_class, reader_config, loglevel)
     factory = partial(create_app, app_name, app_config)
     loader = AppLoader(factory=factory)
     app = loader.load()
@@ -80,7 +88,14 @@ def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR091
 
 @click.command()
 @click.option(
-    "--config", type=str, default="config.py", show_default=True, help="Path to the app config file"
+    "--config",
+    type=str,
+    default="config.toml",
+    show_default=True,
+    help="Path to the app config file",
+)
+@click.option(
+    "--env-file", type=str, default=".env", show_default=True, help="Path to the .env file"
 )
 @click.option("--username", type=str, prompt="Enter your username", help="Your username")
 @click.option(
@@ -91,13 +106,13 @@ def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR091
     hide_input=True,
     confirmation_prompt="Confirm your password",
 )
-def set_credentials(config, username, password):
+def set_credentials(config, env_file, username, password):
     """Set credentials for the TestBench Requirement Service."""
-    config_path = Path(config)
+    config_path = resolve_config_file_path(config)
     salt = os.urandom(16)
     password_hash = hash_password(username + password, salt)
-    save_credentials_in_config_file(password_hash, salt, config_path)
-    click.echo(f"Credentials saved to '{config_path}'.")
+    save_credentials(password_hash, salt, config_path, Path(env_file))
+    click.echo("Credentials saved.")
 
 
 cli.add_command(start)

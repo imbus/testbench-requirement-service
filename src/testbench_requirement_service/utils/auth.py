@@ -1,11 +1,21 @@
 import base64
 import hashlib
+import sys
 from functools import wraps
 from pathlib import Path
 
+from dotenv import set_key
 from sanic import response
 from sanic.request import Request
 from sanic.response import BaseHTTPResponse
+from tomli_w import dump as toml_dump
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
+from testbench_requirement_service.config import CONFIG_PREFIX
 
 
 def hash_password(password: str, salt: bytes) -> str:
@@ -14,28 +24,56 @@ def hash_password(password: str, salt: bytes) -> str:
     return hashlib.pbkdf2_hmac("sha256", password.encode() + pepper, salt, 100000).hex()
 
 
-def save_credentials_in_config_file(password_hash: str, salt: bytes, config_path: Path):
+def save_credentials(password_hash: str, salt: bytes, config_path: Path, env_path: Path):
+    """Save credentials to both config file and .env file."""
+    save_credentials_in_config_file(password_hash, salt, config_path)
+    save_credentials_to_env(password_hash, salt, env_path)
+
+
+def save_credentials_to_env(password_hash: str, salt: bytes, env_path: Path):
     """
-    Save user credentials and salt to a config file.
-    If the config file exists, PASSWORD_HASH and SALT will be updated in place.
+    Save user credentials and salt to .env file using python-dotenv.
+    If the .env file exists, PASSWORD_HASH and SALT will be updated in place.
     If the file does not exist, it will be created with these values.
+    All other existing environment variables are preserved.
     """
+    salt_encoded = base64.b64encode(salt).decode()
+    env_file = str(env_path)
+    set_key(env_file, "PASSWORD_HASH", password_hash)
+    set_key(env_file, "SALT", salt_encoded)
+
+
+def save_credentials_in_config_file(password_hash: str, salt: bytes, config_path: Path) -> None:
+    """Save credentials to a config file, supporting both legacy .py and TOML formats."""
+
+    suffix = config_path.suffix.lower()
+    if suffix == ".toml":
+        save_credentials_in_toml_config(password_hash, salt, config_path)
+    else:
+        save_credentials_in_python_config(password_hash, salt, config_path)
+
+
+def save_credentials_in_python_config(password_hash: str, salt: bytes, config_path: Path) -> None:
+    """Persist credentials inside the legacy Python config format."""
+
     salt_encoded = repr(base64.b64encode(salt).decode())
 
     if config_path.exists():
-        with config_path.open("r") as f:
-            lines = f.readlines()
+        with config_path.open("r") as file:
+            lines = file.readlines()
     else:
         lines = []
 
-    updated_lines = []
-    updated_password, updated_salt = False, False
+    updated_lines: list[str] = []
+    updated_password = False
+    updated_salt = False
 
     for line in lines:
-        if line.lstrip().startswith("PASSWORD_HASH"):
+        stripped = line.lstrip()
+        if stripped.startswith("PASSWORD_HASH"):
             updated_lines.append(f"PASSWORD_HASH = {password_hash!r}\n")
             updated_password = True
-        elif line.lstrip().startswith("SALT"):
+        elif stripped.startswith("SALT"):
             updated_lines.append(f"SALT = {salt_encoded}\n")
             updated_salt = True
         else:
@@ -46,8 +84,29 @@ def save_credentials_in_config_file(password_hash: str, salt: bytes, config_path
     if not updated_salt:
         updated_lines.append(f"SALT = {salt_encoded}\n")
 
-    with config_path.open("w") as f:
-        f.writelines(updated_lines)
+    with config_path.open("w") as file:
+        file.writelines(updated_lines)
+
+
+def save_credentials_in_toml_config(password_hash: str, salt: bytes, config_path: Path) -> None:
+    """Persist credentials inside the TOML config structure."""
+
+    if config_path.exists():
+        try:
+            with config_path.open("rb") as file:
+                config_data = tomllib.load(file)
+        except Exception as exc:
+            raise ValueError(f"Failed to parse TOML config at '{config_path}'.") from exc
+    else:
+        config_data = {}
+
+    section = config_data.setdefault(CONFIG_PREFIX, {})
+    section["password_hash"] = password_hash
+    section["salt"] = base64.b64encode(salt).decode()
+    config_data[CONFIG_PREFIX] = section
+
+    with config_path.open("wb") as file:
+        toml_dump(config_data, file)
 
 
 def check_credentials(request: Request, username: str, password: str) -> bool:
