@@ -8,44 +8,53 @@ from sanic.request import Request
 from testbench_requirement_service import __version__
 from testbench_requirement_service.models.requirement import (
     RequirementKey,
-    UserDefinedAttributesQuery,
+    UserDefinedAttributeRequest,
 )
-from testbench_requirement_service.readers.utils import get_file_reader
+from testbench_requirement_service.readers.utils import get_requirement_reader
 from testbench_requirement_service.utils.auth import protected
 
 router = Blueprint("requirement")
 
 
+@router.route("/", methods=["GET"])
+async def redirect_to_docs(req: Request):
+    return response.redirect("/docs")
+
+
 @router.route("/server-name-and-version", methods=["GET"])
 @protected
-async def _get_server_name_and_version(req: Request):
+async def get_server_name_and_version(req: Request):
     return response.json(f"{req.app.name}-{__version__}")
 
 
 @router.route("/user-defined-attributes", methods=["GET"])
 @protected
-async def _get_user_defined_attributes(req: Request):
-    file_reader = get_file_reader(req.app)
-    return response.json([uda.model_dump() for uda in file_reader.get_user_defined_attributes()])
+async def get_user_defined_attributes(request: Request):
+    requirement_reader = get_requirement_reader(request.app)
+    return response.json(
+        [uda.model_dump() for uda in requirement_reader.get_user_defined_attributes()]
+    )
 
 
 @router.route("/projects", methods=["GET"])
 @protected
-async def _get_projects(req: Request):
-    file_reader = get_file_reader(req.app)
-    return response.json(file_reader.get_projects())
+async def get_projects(request: Request):
+    requirement_reader = get_requirement_reader(request.app)
+    return response.json(requirement_reader.get_projects())
 
 
 @router.route("/projects/<project:str>/baselines", methods=["GET"], unquote=True)
 @protected
-async def _get_baselines(req: Request, project: str):
+async def get_baselines(request: Request, project: str):
     project = unquote(project)
-    file_reader = get_file_reader(req.app)
+    requirement_reader = get_requirement_reader(request.app)
 
-    if not file_reader.project_exists(project):
+    if not requirement_reader.project_exists(project):
         raise NotFound("Project not found")
 
-    return response.json(file_reader.get_baselines(project))
+    return response.json(
+        [baseline.model_dump() for baseline in requirement_reader.get_baselines(project)]
+    )
 
 
 @router.route(
@@ -54,17 +63,19 @@ async def _get_baselines(req: Request, project: str):
     unquote=True,
 )
 @protected
-async def _get_requirements_root(req: Request, project: str, baseline: str):
+async def get_requirements_root(request: Request, project: str, baseline: str):
     project = unquote(project)
     baseline = unquote(baseline)
-    file_reader = get_file_reader(req.app)
+    requirement_reader = get_requirement_reader(request.app)
 
-    if not file_reader.project_exists(project):
+    if not requirement_reader.project_exists(project):
         raise NotFound("Project not found")
-    if not file_reader.baseline_exists(project, baseline):
+    if not requirement_reader.baseline_exists(project, baseline):
         raise NotFound("Baseline not found")
 
-    return response.json(file_reader.get_requirements_root_node(project, baseline).model_dump())
+    return response.json(
+        requirement_reader.get_requirements_root_node(project, baseline).model_dump()
+    )
 
 
 @router.route(
@@ -73,28 +84,28 @@ async def _get_requirements_root(req: Request, project: str, baseline: str):
     unquote=True,
 )
 @protected
-async def _post_all_user_defined_attributes(req: Request, project: str, baseline: str):
+async def post_all_user_defined_attributes(request: Request, project: str, baseline: str):
     project = unquote(project)
     baseline = unquote(baseline)
-    file_reader = get_file_reader(req.app)
+    requirement_reader = get_requirement_reader(request.app)
 
-    if not file_reader.project_exists(project):
+    if not requirement_reader.project_exists(project):
         raise NotFound("Project not found")
-    if not file_reader.baseline_exists(project, baseline):
+    if not requirement_reader.baseline_exists(project, baseline):
         raise NotFound("Baseline not found")
 
-    if req.json is None:
+    if request.json is None:
         raise BadRequest("Missing request body")
     try:
-        req_body = UserDefinedAttributesQuery.model_validate(req.json)
+        request_body = UserDefinedAttributeRequest.model_validate(request.json)
     except ValidationError as e:
         raise BadRequest("Invalid request body") from e
 
     return response.json(
         [
             udas.model_dump()
-            for udas in file_reader.get_all_user_defined_attributes(
-                project, baseline, req_body.keys, req_body.attributeNames
+            for udas in requirement_reader.get_all_user_defined_attributes(
+                project, baseline, request_body.keys, request_body.attributeNames
             )
         ]
     )
@@ -106,24 +117,26 @@ async def _post_all_user_defined_attributes(req: Request, project: str, baseline
     unquote=True,
 )
 @protected
-async def _post_extended_requirement(req: Request, project: str, baseline: str):
+async def post_extended_requirement(request: Request, project: str, baseline: str):
     project = unquote(project)
     baseline = unquote(baseline)
-    file_reader = get_file_reader(req.app)
+    requirement_reader = get_requirement_reader(request.app)
 
-    if not file_reader.project_exists(project):
+    if not requirement_reader.project_exists(project):
         raise NotFound("Project not found")
-    if not file_reader.baseline_exists(project, baseline):
+    if not requirement_reader.baseline_exists(project, baseline):
         raise NotFound("Baseline not found")
 
-    if req.json is None:
+    if request.json is None:
         raise BadRequest("Missing request body")
     try:
-        key = RequirementKey(**req.json.get("key", {}))
+        key = RequirementKey(**request.json)
     except ValidationError as e:
         raise BadRequest("Invalid request body") from e
 
-    return response.json(file_reader.get_extended_requirement(project, baseline, key).model_dump())
+    return response.json(
+        requirement_reader.get_extended_requirement(project, baseline, key).model_dump()
+    )
 
 
 @router.route(
@@ -132,26 +145,26 @@ async def _post_extended_requirement(req: Request, project: str, baseline: str):
     unquote=True,
 )
 @protected
-async def _post_requirement_versions(req: Request, project: str, baseline: str):
+async def post_requirement_versions(request: Request, project: str, baseline: str):
     project = unquote(project)
     baseline = unquote(baseline)
-    file_reader = get_file_reader(req.app)
+    requirement_reader = get_requirement_reader(request.app)
 
-    if not file_reader.project_exists(project):
+    if not requirement_reader.project_exists(project):
         raise NotFound("Project not found")
-    if not file_reader.baseline_exists(project, baseline):
+    if not requirement_reader.baseline_exists(project, baseline):
         raise NotFound("Baseline not found")
 
-    if req.json is None:
+    if request.json is None:
         raise BadRequest("Missing request body")
     try:
-        key = RequirementKey(**req.json.get("key", {}))
+        key = RequirementKey(**request.json)
     except ValidationError as e:
         raise BadRequest("Invalid request body") from e
 
     return response.json(
         [
             version.model_dump()
-            for version in file_reader.get_requirement_versions(project, baseline, key)
+            for version in requirement_reader.get_requirement_versions(project, baseline, key)
         ]
     )

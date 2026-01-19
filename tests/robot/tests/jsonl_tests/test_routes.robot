@@ -18,7 +18,10 @@ Get Baselines Should Return 200 And List Of Baselines If Project Exists
     Should Be Equal As Numbers    ${response.status_code}    200
     Should Be True    isinstance(${response.json()}, list)
     Length Should Be    ${response.json()}    2
-    Should Contain    ${response.json()}    Baseline2
+    Should Contain    ${response.json()[1]}    name
+    Should Contain    ${response.json()[1]}    date
+    Should Contain    ${response.json()[1]}    type
+    Should Be Equal As Strings    ${response.json()[1]["name"]}    Baseline2
 
 Get Baselines Should Return 404 If Project Does Not Exist
     Get Baselines    !?.    validate    value.status_code == 404
@@ -29,10 +32,8 @@ Get Requirements Root Should Return 200 And A BaselineObjectNode If Project And 
     Should Contain    ${response.json()}    name
     Should Contain    ${response.json()}    date
     Should Contain    ${response.json()}    type
-    Should Contain    ${response.json()}    repositoryID
     Should Contain    ${response.json()}    children
     Should Be Equal As Strings    ${response.json()["name"]}    Baseline1
-    Should Be Equal As Strings    ${response.json()["repositoryID"]}    Demo/Baseline1
     Should Not Be Empty    ${response.json()["children"]}
     Should Contain    ${response.json()["children"][0]["name"]}    Requirement1
 
@@ -69,7 +70,7 @@ Post All User Defined Attributes Should Return 200 And List Of UserDefinedAttrib
     Should Be Equal As Strings    ${response.json()[2]["key"]["version"]}    1.0
     Should Contain    ${response.json()[2]}    userDefinedAttributes
     Should Be True    isinstance(${response.json()[2]["userDefinedAttributes"]}, list)
-    Length Should Be    ${response.json()[2]["userDefinedAttributes"]}    1
+    Length Should Be    ${response.json()[2]["userDefinedAttributes"]}    2
     Should Contain    ${response.json()[2]["userDefinedAttributes"][0]}    name
     Should Contain    ${response.json()[2]["userDefinedAttributes"][0]}    valueType
     Should Contain    ${response.json()[2]["userDefinedAttributes"][0]}    stringValue
@@ -107,7 +108,7 @@ Post All User Defined Attributes Should Return 404 If Baseline Does Not Exist
     ...    value.status_code == 404
 
 Post Extended Requirement Should Return 200 And A ExtendedRequirementObject If Project And Baseline Exist
-    ${response}=    Post Extended Requirement    Demo    Baseline1    {"key": {"id": "req1", "version": "1.0"}}
+    ${response}=    Post Extended Requirement    Demo    Baseline1    {"id": "req1", "version": "1.0"}
     Should Be True    isinstance(${response.json()}, dict)
     Should Contain    ${response.json()}    name
     Should Contain    ${response.json()}    extendedID
@@ -142,7 +143,7 @@ Post Extended Requirement Should Return 404 If Project Does Not Exist
     Post Extended Requirement
     ...    ${Empty}
     ...    Baseline1
-    ...    {"key": {"id": "req1", "version": "1.0"}}
+    ...    {"id": "req1", "version": "1.0"}
     ...    validate
     ...    value.status_code == 404
 
@@ -150,12 +151,12 @@ Post Extended Requirement Should Return 404 If Baseline Does Not Exist
     Post Extended Requirement
     ...    Demo
     ...    ${EMPTY}
-    ...    {"key": {"id": "req1", "version": "1.0"}}
+    ...    {"id": "req1", "version": "1.0"}
     ...    validate
     ...    value.status_code == 404
 
 Post Requirement Versions Should Return 200 And List Of RequirementVersionObjects If Project And Baseline Exist
-    ${response}=    Post Requirement Versions    Demo    Baseline1    {"key": {"id": "req8", "version": "1.0"}}
+    ${response}=    Post Requirement Versions    Demo    Baseline1    {"id": "req8", "version": "1.0"}
     Should Be True    isinstance(${response.json()}, list)
     Length Should Be    ${response.json()}    2
     Should Contain    ${response.json()[1]}    name
@@ -172,7 +173,7 @@ Post Requirement Versions Should Return 400 If Request Body Is Invalid
     Post Requirement Versions
     ...    Demo
     ...    Baseline1
-    ...    {"key": {"version": "1.0"}}
+    ...    {"version": "1.0"}
     ...    validate
     ...    value.status_code == 400
 
@@ -180,7 +181,7 @@ Post Requirement Versions Should Return 404 If Project Does Not Exist
     Post Requirement Versions
     ...    abc
     ...    Baseline1
-    ...    {"key": {"id": "req1", "version": "1.0"}}
+    ...    {"id": "req1", "version": "1.0"}
     ...    validate
     ...    value.status_code == 404
 
@@ -188,6 +189,6 @@ Post Requirement Versions Should Return 404 If Baseline Does Not Exist
     Post Requirement Versions
     ...    Demo
     ...    öäü
-    ...    {"key": {"id": "req1", "version": "1.0"}}
+    ...    {"id": "req1", "version": "1.0"}
     ...    validate
     ...    value.status_code == 404

@@ -1,7 +1,10 @@
 import warnings
 from datetime import datetime, timezone
 
-import pandas as pd
+try:  # noqa: SIM105
+    import pandas as pd
+except ImportError:
+    pass
 
 
 def java_to_python_date_format(java_format: str) -> str:

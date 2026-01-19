@@ -1,0 +1,36 @@
+# Example configuration file for JsonlRequirementReader
+# This file demonstrates the configuration for reading requirements 
+# from JSONL (JSON Lines) files.
+
+[jsonl]
+# Path to the directory containing requirement project folders (REQUIRED)
+# This directory should contain:
+# - Project folders (each folder represents a project)
+# - UserDefinedAttributes.json (defines custom fields structure)
+#
+# Directory structure example:
+# requirements/jsonl/
+# ├── UserDefinedAttributes.json
+# ├── Project1/
+# │   ├── Baseline1.jsonl
+# │   └── Baseline2.jsonl
+# └── Project2/
+#     └── Baseline1.jsonl
+#
+# As separator in the path, use "/" or "\\", but not "\"
+requirements_path = "requirements/jsonl/"
+
+# Notes on JSONL file structure:
+# - Each line in a .jsonl file is a complete JSON object representing one requirement
+# - Requirements must include: name, extendedID, key (with id and version), owner, 
+#   status, priority, requirement (boolean), description, parent (null for root items)
+# - Root requirements have parent = null
+# - Child requirements reference their parent by the parent's extendedID
+# - The "requirement" field set to true indicates an actual requirement vs. a folder node
+#
+# UserDefinedAttributes.json structure:
+# [
+#   {"name": "Risk Level", "valueType": "STRING"},
+#   {"name": "Categories", "valueType": "ARRAY"},
+#   {"name": "Approved", "valueType": "BOOLEAN"}
+# ]

@@ -58,6 +58,7 @@ if not venv_dir.exists():
 
 subprocess.run([venv_python, "-m", "pip", "install", "-U", "pip"], check=False)
 subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[excel]"], check=False)
+subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[jira]"], check=False)
 subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[dev]"], check=False)
 subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[test]"], check=False)
 subprocess.run([venv_pre_commit, "install"], check=False)

@@ -1,0 +1,79 @@
+# Example configuration file for JiraRequirementReader
+# This file demonstrates all available configuration options for reading 
+# requirements from Jira using the REST API.
+
+[jira]
+# Base URL of your Jira instance (REQUIRED)
+server_url = "https://your-company.atlassian.net/"
+
+# Authentication method (REQUIRED)
+# Options: "basic", "token", "oauth"
+# - "basic": Username + API token (most common for Atlassian Cloud)
+# - "token": Personal Access Token (for Jira Server/Data Center)
+# - "oauth": OAuth 1.0a (for enterprise instances)
+auth_type = "basic"
+
+# Authentication credentials (OPTIONAL - prefer using .env file)
+# For basic auth, you can set these directly in config or use environment variables:
+# JIRA_USERNAME and JIRA_API_TOKEN
+# username = "user@example.com"
+# api_token = "your-api-token-here"
+
+# Field used to identify baselines/versions in Jira (OPTIONAL)
+# Default: "fixVersions"
+baseline_field = "fixVersions"
+
+# JQL query template to fetch issues for a specific baseline (OPTIONAL)
+# Placeholders: {project} = project name, {baseline} = baseline name
+# Default shown below:
+baseline_jql = "project = '{project}' AND fixVersion = '{baseline}' AND issuetype in (\"Epic\", \"Story\", \"User Story\", \"Task\", \"Bug\")"
+
+# JQL query template to fetch current/active baseline issues (OPTIONAL)
+# Default shown below:
+current_baseline_jql = "project = '{project}' AND issuetype in (\"Epic\", \"Story\", \"User Story\", \"Task\", \"Bug\")"
+
+# Issue types that should be treated as requirement groups/folders (OPTIONAL)
+# Default: ["Epic"]
+requirement_group_types = ["Epic"]
+
+# Fields where changes are considered major (OPTIONAL)
+# Changes to these fields will be highlighted in TestBench
+# Default: ["fixVersions"]
+major_change_fields = ["fixVersions"]
+
+# Fields where changes are considered minor (OPTIONAL)
+# Default shown below:
+minor_change_fields = ["summary", "description", "affectsVersions", "status"]
+
+# Field to use as requirement owner (OPTIONAL)
+# Default: "assignee"
+# Other common values: "creator", "reporter"
+owner = "assignee"
+
+# List of custom fields that should be rendered as HTML in TestBench (OPTIONAL)
+# Note: Field must be of type multiline text in Jira
+# Default: []
+rendered_fields = ["Acceptance Criteria", "Technical Specification", "Test Scenarios"]
+
+# Project-specific configuration overrides (OPTIONAL)
+# You can override global settings for specific projects
+[jira.projects."PROJECT-KEY"]
+# Override baseline field for this project
+baseline_field = "customfield_10100"
+
+# Override JQL queries for this project
+baseline_jql = "project = 'PROJECT-KEY' AND fixVersion = '{baseline}'"
+current_baseline_jql = "project = 'PROJECT-KEY'"
+
+# Override requirement group types
+requirement_group_types = ["Initiative", "Epic"]
+
+# Override change tracking fields
+major_change_fields = ["fixVersions", "customfield_10200"]
+minor_change_fields = ["summary", "description", "status", "priority"]
+
+# Override owner field
+owner = "creator"
+
+# Override rendered fields
+rendered_fields = ["Acceptance Criteria", "Definition of Done"]
