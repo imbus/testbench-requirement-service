@@ -3,6 +3,7 @@ from functools import partial
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
@@ -29,13 +30,13 @@ def cli(ctx):
     type=str,
     metavar="PATH",
     help="""Path or module string to the reader class  \b
-    [default: testbench_requirement_service.readers.JsonlFileReader]""",
+    [default: testbench_requirement_service.readers.JsonlRequirementReader]""",
 )
 @click.option(
     "--reader-config",
     type=str,
     metavar="PATH",
-    help="Path to the reader config file  [default: reader_config.py]",
+    help="Path to the reader config file  [default: reader_config.toml]",
 )
 @click.option(
     "--host", type=str, metavar="HOST", help="Host to run the service on  [default: 127.0.0.1]"
@@ -52,7 +53,15 @@ def cli(ctx):
 )
 def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR0913
     """Start the TestBench Requirement Service."""
-    app_name = "RequirementWrapperAPI"
+    print(r"""  ______          __  ____                  __       ____  __  ___   _____                 _         
+ /_  __/__  _____/ /_/ __ )___  ____  _____/ /_     / __ \/  |/  /  / ___/___  ______   __(_)_______ 
+  / / / _ \/ ___/ __/ __  / _ \/ __ \/ ___/ __ \   / /_/ / /|_/ /   \__ \/ _ \/ ___/ | / / / ___/ _ \
+ / / /  __(__  ) /_/ /_/ /  __/ / / / /__/ / / /  / _, _/ /  / /   ___/ /  __/ /   | |/ / / /__/  __/
+/_/  \___/____/\__/_____/\___/_/ /_/\___/_/ /_/  /_/ |_/_/  /_/   /____/\___/_/    |___/_/\___/\___/ 
+                                                                                                     """)  # noqa: W291, E501
+
+    load_dotenv()
+    app_name = "TestBenchRequirementService"
     loglevel = "DEBUG" if dev else None
     app_config = AppConfig(config, reader_class, reader_config, loglevel)
     factory = partial(create_app, app_name, app_config)
@@ -62,7 +71,7 @@ def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR091
         host = getattr(app.config, "HOST", None)
     if not port:
         port = getattr(app.config, "PORT", None)
-    app.prepare(host=host, port=port, dev=dev)
+    app.prepare(host=host, port=port, dev=dev, access_log=True)
     try:
         Sanic.serve(primary=app, app_loader=loader)
     except Exception as e:

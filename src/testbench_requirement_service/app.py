@@ -3,9 +3,13 @@ from pathlib import Path
 from sanic import Sanic
 from sanic.config import Config
 
-from testbench_requirement_service.middleware import check_request_auth, log_request, log_response
+from testbench_requirement_service.exceptions import handle_jira_error
+from testbench_requirement_service.middlewares import check_request_auth, log_request, log_response
 from testbench_requirement_service.routes import router
-from testbench_requirement_service.utils.dependencies import check_excel_dependencies
+from testbench_requirement_service.utils.dependencies import (
+    check_excel_dependencies,
+    check_jira_dependencies,
+)
 
 
 class AppConfig(Config):
@@ -21,8 +25,8 @@ class AppConfig(Config):
         super().__init__(*args, **kwargs)
 
         self.CONFIG_PATH = "config.py"
-        self.READER_CLASS = "testbench_requirement_service.readers.JsonlFileReader"
-        self.READER_CONFIG_PATH = "reader_config.py"
+        self.READER_CLASS = "testbench_requirement_service.readers.JsonlRequirementReader"
+        self.READER_CONFIG_PATH = "reader_config.toml"
         self.LOGLEVEL = "INFO"
         self.OAS_UI_DEFAULT = "swagger"
         self.OAS_UI_REDOC = False
@@ -53,13 +57,25 @@ def create_app(name: str, config: AppConfig | None = None) -> Sanic:
         config = AppConfig()
     app.update_config(config)
 
-    if "ExcelFileReader" in app.config.READER_CLASS:
-        check_excel_dependencies()
+    # Check optional dependencies and raise ImportError if missing
+    if "ExcelRequirementReader" in app.config.READER_CLASS:
+        check_excel_dependencies(raise_on_missing=True)
+
+    if "JiraRequirementReader" in app.config.READER_CLASS:
+        check_jira_dependencies(raise_on_missing=True)
 
     # Register middlewares
     app.register_middleware(check_request_auth, "request")
     app.register_middleware(log_request, "request")
     app.register_middleware(log_response, "response")  # type: ignore
+
+    # Register exception handlers
+    try:
+        from jira import JIRAError  # noqa: PLC0415
+
+        app.exception(JIRAError)(handle_jira_error)
+    except ImportError:
+        pass
 
     # Register blueprints
     app.blueprint(router)

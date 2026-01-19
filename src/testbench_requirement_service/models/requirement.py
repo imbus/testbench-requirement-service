@@ -4,14 +4,6 @@ from typing import Literal
 from pydantic import BaseModel, field_serializer
 
 
-class UserDefinedAttribute(BaseModel):
-    name: str
-    valueType: Literal["STRING", "ARRAY", "BOOLEAN"]
-    stringValue: str | None = None
-    stringValues: list[str] | None = None
-    booleanValue: bool | None = None
-
-
 class RequirementKey(BaseModel):
     id: str
     version: str
@@ -41,11 +33,11 @@ class RequirementVersionObject(BaseModel):
     name: str
     date: datetime
     author: str
-    comment: str
+    comment: str | None = None
 
     @field_serializer("date")
     def serialize_date(self, date: datetime):
-        return date.isoformat()
+        return date.isoformat(timespec="seconds")
 
 
 class BaselineObject(BaseModel):
@@ -55,21 +47,29 @@ class BaselineObject(BaseModel):
 
     @field_serializer("date")
     def serialize_date(self, date: datetime):
-        return date.isoformat()
+        return date.isoformat(timespec="seconds")
 
 
 class BaselineObjectNode(BaselineObject):
     children: list[RequirementObjectNode] | None = []
 
 
-class UserDefinedAttributes(BaseModel):
-    key: RequirementKey
-    userDefinedAttributes: list[UserDefinedAttribute]
+class UserDefinedAttribute(BaseModel):
+    name: str
+    valueType: Literal["STRING", "ARRAY", "BOOLEAN"]
+    stringValue: str | None = None
+    stringValues: list[str] | None = None
+    booleanValue: bool | None = None
 
 
-class UserDefinedAttributesQuery(BaseModel):
+class UserDefinedAttributeRequest(BaseModel):
     keys: list[RequirementKey]
     attributeNames: list[str]
+
+
+class UserDefinedAttributeResponse(BaseModel):
+    key: RequirementKey
+    userDefinedAttributes: list[UserDefinedAttribute] | None = []
 
 
 RequirementObjectNode.model_rebuild()

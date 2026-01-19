@@ -35,7 +35,7 @@ repos:
       - id: robocop
         name: robocop
         description: "Robot Framework linter"
-        entry: robocop check --force-exclude
+        entry: robocop check --force-exclude --include *.robot --include *.resource
         language: python
         files: '.*\.(robot|resource)$'
         minimum_pre_commit_version: "2.9.2"
@@ -43,7 +43,7 @@ repos:
       - id: robocop-format
         name: robocop-format
         description: "Robot Framework formatter"
-        entry: robocop format --force-exclude
+        entry: robocop format --force-exclude --include *.robot --include *.resource
         language: python
         files: '.*\.(robot|resource)$'
         minimum_pre_commit_version: "2.9.2"

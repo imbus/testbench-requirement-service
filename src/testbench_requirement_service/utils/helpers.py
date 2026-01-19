@@ -39,21 +39,8 @@ def import_class_from_file_path(
     Raises:
         ImportError: If the class cannot be found or loaded.
     """
-    module = None
     try:
         module = import_module_from_file_path(file_path)
-
-        if subclass_from:
-            subclasses = [
-                cls
-                for _, cls in inspect.getmembers(module, inspect.isclass)
-                if subclass_from in cls.__bases__ and cls is not subclass_from
-            ]
-            if not subclasses:
-                raise ImportError(
-                    f"No direct subclass of '{subclass_from.__name__}' found in '{file_path}'."
-                )
-            return subclasses[0]
 
         if class_name is None:
             class_name = module.__name__
@@ -62,8 +49,16 @@ def import_class_from_file_path(
             raise ImportError(f"Class '{class_name}' not found in file '{file_path}'.")
 
         imported_class = getattr(module, class_name)
+
         if not inspect.isclass(imported_class):
             raise ImportError(f"'{class_name}' in '{file_path}' is not a valid class.")
+
+        if subclass_from and (
+            subclass_from not in imported_class.__bases__ or imported_class is subclass_from
+        ):
+            raise ImportError(
+                f"No direct subclass of '{subclass_from.__name__}' found in file '{file_path}'."
+            )
 
         return imported_class
 
@@ -87,31 +82,37 @@ def import_class_from_module_str(
     Raises:
         ImportError: If the class cannot be found or loaded.
     """
-    module = None
     try:
-        module = importlib.import_module(module_str)
-
-        if subclass_from:
-            subclasses = [
-                cls
-                for _, cls in inspect.getmembers(module, inspect.isclass)
-                if subclass_from in cls.__bases__ and cls is not subclass_from
-            ]
-            if not subclasses:
-                raise ImportError(
-                    f"No direct subclass of '{subclass_from.__name__}' found in '{module_str}'."
-                )
-            return subclasses[0]
+        try:
+            # Try importing module assuming class name is not included in module_str
+            module = importlib.import_module(module_str)
+        except ModuleNotFoundError:
+            # Fallback: assume class name is included in module_str
+            module_str, class_name = module_str.rsplit(".", 1)
+            module = importlib.import_module(module_str)
 
         if class_name is None:
-            _, class_name = module_str.rsplit(".", 1)
+            parts = module_str.rsplit(".", 1)
+            if len(parts) < 2:  # noqa: PLR2004
+                raise ValueError(
+                    f"Cannot infer class name from module string '{module_str}' without dots."
+                )
+            class_name = parts[1]
 
         if not hasattr(module, class_name):
-            raise ImportError(f"Class '{class_name}' not found in '{module_str}'.")
+            raise ImportError(f"Class '{class_name}' not found in module '{module_str}'.")
 
         imported_class = getattr(module, class_name)
+
         if not inspect.isclass(imported_class):
-            raise ImportError(f"'{class_name}' in '{module_str}' is not a valid class.")
+            raise ImportError(f"'{class_name}' in module '{module_str}' is not a class.")
+
+        if subclass_from and (
+            subclass_from not in imported_class.__bases__ or imported_class is subclass_from
+        ):
+            raise ImportError(
+                f"No direct subclass of '{subclass_from.__name__}' found in module '{module_str}'."
+            )
 
         return imported_class
 

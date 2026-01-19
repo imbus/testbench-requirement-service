@@ -1,6 +1,6 @@
-openapi: "3.0.1"
+openapi: 3.0.1
 info:
-  title: RequirementWrapper API
+  title: RequirementWrapper2 API
   version: 1.0.0
   description: A REST API for managing requirements using the RequirementWrapper2.
 
@@ -9,20 +9,13 @@ servers:
     description: API base URL
 
 security:
-  - basicAuth: [] # <-- use the same name here
+  - basicAuth: []
 
 paths:
   /user-defined-attributes:
     get:
       summary: Retrieve user-defined attributes
       description: Returns an array of all user-defined attributes available on the requirements server.
-      parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
       responses:
         '200':
           description: List of user-defined attributes
@@ -32,34 +25,27 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/UserDefinedAttribute'
-                example:
-                  - name: Comment
-                    valueType: STRING
-                    stringValue: null
-                    stringValues: null
-                    booleanValue: null
-                  - name: Units
-                    valueType: ARRAY
-                    stringValue: null
-                    stringValues: null
-                    booleanValue: null
-                  - name: Customer Request
-                    valueType: BOOLEAN
-                    stringValue: null
-                    stringValues: null
-                    booleanValue: null
+              example:
+                - name: Comment
+                  valueType: STRING
+                  stringValue: null
+                  stringValues: null
+                  booleanValue: null
+                - name: Units
+                  valueType: ARRAY
+                  stringValue: null
+                  stringValues: null
+                  booleanValue: null
+                - name: Customer Request
+                  valueType: BOOLEAN
+                  stringValue: null
+                  stringValues: null
+                  booleanValue: null
 
   /projects:
     get:
       summary: Retrieve projects
       description: Returns an array of the names of all projects available on the requirements server.
-      parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
       responses:
         '200':
           description: List of project names
@@ -69,23 +55,16 @@ paths:
                 type: array
                 items:
                   type: string
-                  example: Project1
-                example:
-                  - Project1
-                  - Project2
-                  - Project3
+              example:
+                - Project1
+                - Project2
+                - Project3
 
   /projects/{project}/baselines:
     get:
       summary: Retrieve baselines
       description: Returns an array of baselines for a given project.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -101,18 +80,19 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/BaselineObject'
+              example:
+                - name: Current Baseline
+                  date: "2025-01-09:30:00.000Z"
+                  type: CURRENT
+                - name: Baseline1
+                  date: "2025-03-03T14:24:32.000Z"
+                  type: UNLOCKED
 
   /projects/{project}/baselines/{baseline}/requirements-root:
     get:
       summary: Retrieve requirements root node
       description: Returns the requirements of a given baseline as a tree structure.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -135,8 +115,7 @@ paths:
               example:
                 name: Baseline1
                 date: "2025-03-03T14:24:32.490Z"
-                type: CURRENT
-                repositoryID: Demo/Baseline1
+                type: UNLOCKED
                 children:
                   - name: Requirement1
                     extendedID: req1
@@ -203,13 +182,6 @@ paths:
     get:
       summary: Retrieve server name and version
       description: Returns the name and version of the requirements server, separated by a dash.
-      parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
       responses:
         '200':
           description: Server name and version
@@ -224,12 +196,6 @@ paths:
       summary: Retrieve user-defined attributes for requirements
       description: Returns the values of user-defined fields for a list of requirements.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -247,43 +213,26 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                keys:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/RequirementKey'
-                  example:
-                    - id: req1
-                      version: "1.0"
-                    - id: req2
-                      version: "1.0"
-                attributeNames:
-                  type: array
-                  items:
-                    type: string
-                    example: Comment
-                  example:
-                    - Comment
-                    - Units
-                    - Customer Request
+              $ref: '#/components/schemas/UserDefinedAttributeRequest'
+            example:
+              keys:
+                - id: req1
+                  version: "1.0"
+                - id: req2
+                  version: "1.0"
+              attributeNames:
+                - Comment
+                - Units
+                - Customer Request
       responses:
         '200':
           description: Map of requirement keys to user-defined attributes
           content:
             application/json:
               schema:
-              # TODO: Create rich object UserDefinedAttributeResponse
                 type: array
                 items:
-                  type: object
-                  properties:
-                    key:
-                      $ref: '#/components/schemas/RequirementKey'
-                    userDefinedAttributes:
-                      type: array
-                      items:
-                        $ref: '#/components/schemas/UserDefinedAttribute'
+                  $ref: '#/components/schemas/UserDefinedAttributeResponse'
               example:
                 - key:
                     id: "req1"
@@ -333,12 +282,6 @@ paths:
       summary: Retrieve extended requirement
       description: Returns detailed information about a specific requirement.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -356,14 +299,10 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                key:
-                  $ref: '#/components/schemas/RequirementKey'
-              example:
-                key:
-                  id: req1
-                  version: "1.0"
+              $ref: '#/components/schemas/RequirementKey'
+            example:
+              id: req1
+              version: "1.0"
       responses:
         '200':
           description: Extended requirement details
@@ -391,12 +330,6 @@ paths:
       summary: Retrieve requirement versions
       description: Returns the versions of a given requirement.
       parameters:
-        - name: login
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The login of the user that is calling this call.
         - name: project
           in: path
           required: true
@@ -414,14 +347,10 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                key:
-                  $ref: '#/components/schemas/RequirementKey'
-              example:
-                key:
-                  id: req1
-                  version: "1.0"
+              $ref: '#/components/schemas/RequirementKey'
+            example:
+              id: req1
+              version: "1.0"
       responses:
         '200':
           description: List of requirement versions
@@ -431,19 +360,19 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RequirementVersionObject'
-                example:
-                  - name: "1.0"
-                    date: "2025-03-01T12:48:10.340Z"
-                    author: John Doe
-                    comment: Initial version
-                  - name: "1.1"
-                    date: "2025-03-03T14:24:32.490Z"
-                    author: John Doe
-                    comment: Improved version
+              example:
+                - name: "1.0"
+                  date: "2025-03-01T12:48:10.340Z"
+                  author: John Doe
+                  comment: Initial version
+                - name: "1.1"
+                  date: "2025-03-03T14:24:32.490Z"
+                  author: John Doe
+                  comment: Improved version
 
 components:
   securitySchemes:
-    basicAuth: # <-- arbitrary name for the security scheme
+    basicAuth:
       type: http
       scheme: basic
   schemas:
@@ -476,6 +405,28 @@ components:
         - name
         - valueType
 
+    UserDefinedAttributeRequest:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequirementKey'
+        attributeNames:
+          type: array
+          items:
+            type: string
+
+    UserDefinedAttributeResponse:
+      type: object
+      properties:
+        key:
+          $ref: '#/components/schemas/RequirementKey'
+        userDefinedAttributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserDefinedAttribute'
+
     BaselineObject:
       type: object
       properties:
@@ -490,9 +441,6 @@ components:
           type: string
           enum: [CURRENT, UNLOCKED, LOCKED, DISABLED, INVALID]
           example: CURRENT
-        repositoryID:
-          type: string
-          example: Demo/Baseline1
 
     BaselineObjectNode:
       allOf:

@@ -1,30 +1,138 @@
+import sys
 from pathlib import Path
+from typing import Any, TypeVar
 
-from testbench_requirement_service.readers.abstract_file_reader import AbstractFileReader
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+try:  # noqa: SIM105
+    import javaproperties
+except ImportError:
+    pass
+
+from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 from testbench_requirement_service.utils.helpers import (
     get_project_root,
     import_class_from_file_path,
     import_class_from_module_str,
 )
 
+T = TypeVar("T")
 
-def get_reader_class_from_file_path(file_path: Path) -> AbstractFileReader:
+
+def load_toml_config_from_path(config_path: Path) -> dict[str, Any]:
+    """
+    Load reader config from a .toml file.
+
+    Args:
+        config_path: Path to the .toml config file.
+
+    Returns:
+        dict[str, Any]: Parsed TOML content.
+
+    Raises:
+        ImportError: If the file can't be read or parsing fails.
+    """
     try:
-        return import_class_from_file_path(file_path, subclass_from=AbstractFileReader)  # type: ignore
+        with config_path.open("rb") as config_file:
+            return tomllib.load(config_file)
     except Exception as e:
-        message = f"Failed to import custom FileReader class from '{file_path}'."
+        raise ImportError(f"Importing reader config from '{config_path}' failed.") from e
+
+
+def load_properties_config_from_path(config_path: Path) -> dict[str, str]:
+    """
+    Load reader config from a .properties file.
+
+    Args:
+        config_path: Path to the .properties config file.
+
+    Returns:
+        dict[str, str]: Mapping of property names to string values.
+
+    Raises:
+        ImportError: If the file can't be read or parsing fails.
+    """
+    try:
+        with config_path.open("r") as config_file:
+            return javaproperties.load(config_file)
+    except Exception as e:
+        raise ImportError(f"Importing reader config from '{config_path}' failed.") from e
+
+
+def load_reader_config_from_path(
+    config_path: Path, config_class: type[T], config_prefix: str | None = None
+) -> T:
+    """
+    Load reader config from a file path into an instance of config_class.
+
+    Args:
+        config_path: Path to the config file (.toml or .properties).
+        config_class: Pydantic or dataclass type to instantiate with loaded config.
+        config_prefix: Optional key in config dict whose value dict is the config to load.
+
+    Returns:
+        An instance of config_class populated with the config data.
+
+    Raises:
+        FileNotFoundError: If the config file doesn't exist.
+        ValueError: If file format unsupported, prefix missing, or validation fails.
+    """
+    if not config_path.exists():
+        raise FileNotFoundError(f"Reader config file not found at: '{config_path.resolve()}'")
+
+    suffix = config_path.suffix.lower()
+    if suffix == ".toml":
+        config_dict = load_toml_config_from_path(config_path)
+    elif suffix == ".properties":
+        config_dict = load_properties_config_from_path(config_path)
+    else:
+        raise ValueError(
+            f"Unsupported config file format: '{suffix}'. Supported formats: .toml and .properties"
+        )
+
+    if config_prefix is None:
+        config_section = config_dict
+    else:
+        if config_prefix not in config_dict:
+            raise ValueError(f"TOML section [{config_prefix}] not found in reader config file.")
+        config_section = config_dict[config_prefix]
+
+    try:
+        return config_class(**config_section)
+    except Exception as e:
+        raise ValueError(f"Invalid reader config: {e}") from e
+
+
+def get_reader_class_from_file_path(file_path: Path) -> AbstractRequirementReader:
+    try:
+        return import_class_from_file_path(file_path, subclass_from=AbstractRequirementReader)  # type: ignore
+    except Exception as e:
+        message = f"Failed to import custom RequirementReader class from '{file_path}'."
         raise ImportError(message) from e
 
 
-def get_reader_class_from_module_str(reader_name: str) -> AbstractFileReader:
+def get_reader_class_from_module_str(
+    reader_name: str, default_package: str = "testbench_requirement_service.readers"
+) -> AbstractRequirementReader:
     try:
-        return import_class_from_module_str(reader_name, subclass_from=AbstractFileReader)  # type: ignore
+        if "." in reader_name:
+            return import_class_from_module_str(  # type: ignore
+                reader_name, subclass_from=AbstractRequirementReader
+            )
+
+        return import_class_from_module_str(  # type: ignore
+            default_package,
+            class_name=reader_name,
+            subclass_from=AbstractRequirementReader,
+        )
     except Exception as e:
-        message = f"Failed to import custom FileReader class from '{reader_name}'."
+        message = f"Failed to import custom RequirementReader class from '{reader_name}'."
         raise ImportError(message) from e
 
 
-def get_file_reader_from_reader_class_str(reader_class: str) -> AbstractFileReader:
+def get_requirement_reader_from_reader_class_str(reader_class: str) -> AbstractRequirementReader:
     reader_path = Path(reader_class)
     if reader_path.is_file():
         return get_reader_class_from_file_path(reader_path)
@@ -39,13 +147,17 @@ def get_file_reader_from_reader_class_str(reader_class: str) -> AbstractFileRead
     return get_reader_class_from_module_str(reader_class)
 
 
-def get_file_reader(app) -> AbstractFileReader:
-    if not getattr(app.ctx, "file_reader", None):
-        file_reader_config = app.config.READER_CONFIG_PATH
-        file_reader_class_str = app.config.READER_CLASS
-        file_reader_class = get_file_reader_from_reader_class_str(file_reader_class_str)
-        file_reader = file_reader_class(file_reader_config)  # type: ignore
-        if not isinstance(file_reader, AbstractFileReader):
-            raise ImportError(f"{file_reader_class} is no instance of FileReader!")
-        app.ctx.file_reader = file_reader
-    return app.ctx.file_reader  # type: ignore
+def get_requirement_reader(app) -> AbstractRequirementReader:
+    if not getattr(app.ctx, "requirement_reader", None):
+        requirement_reader_config = app.config.READER_CONFIG_PATH
+        requirement_reader_class_str = app.config.READER_CLASS
+        requirement_reader_class = get_requirement_reader_from_reader_class_str(
+            requirement_reader_class_str
+        )
+        requirement_reader = requirement_reader_class(requirement_reader_config)  # type: ignore
+        if not isinstance(requirement_reader, AbstractRequirementReader):
+            raise ImportError(
+                f"{requirement_reader_class} is no instance of AbstractRequirementReader!"
+            )
+        app.ctx.requirement_reader = requirement_reader
+    return app.ctx.requirement_reader  # type: ignore
