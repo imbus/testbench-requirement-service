@@ -119,9 +119,8 @@ def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR091
 @click.option(
     "--config",
     type=str,
-    default="config.toml",
     show_default=True,
-    help="Path to the app config file",
+    help="Path to the app config file [default: config.toml]",
 )
 @click.option("--username", type=str, prompt="Enter your username", help="Your username")
 @click.option(
