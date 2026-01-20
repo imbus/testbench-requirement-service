@@ -6,6 +6,7 @@ A REST API service for imbus TestBench that provides unified access to requireme
 
 - [Installation](#installation)
 - [Setup](#setup)
+- [Configuration](#configuration)
 - [Usage](#usage)
 - [API Documentation](#api-documentation)
 - [Built-in RequirementReader](#built-in-requirementreader)
@@ -71,23 +72,35 @@ If the installation was successful, this will output the installed version of th
 
 Before starting the service, you need to configure authentication and choose a requirement reader.
 
-### Step 1: Set up your service credentials
+### Step 1: Create a configuration file
 
-Generate a `config.py` file with hashed credentials for Basic Auth:
+The service requires a configuration file in **TOML** format.
+
+You can generate a default configuration file by running:
+
+```powershell
+testbench-requirement-service init
+```
+
+This will create a default configuration file (`config.toml`) in your current working directory.
+
+**Note:** The legacy `config.py` (Python) format is still supported but will be deprecated in a future release. New projects should use TOML.
+
+### Step 2: Set up your service credentials
+
+Set credentials for Basic Auth by running:
 
 ```powershell
 testbench-requirement-service set-credentials
 ```
 
-This prompts for username and password. Alternatively, specify them directly:
+This prompts for username and password and updates your configuration file with hashed credentials. Alternatively, specify them directly:
 
 ```powershell
 testbench-requirement-service set-credentials --username USERNAME --password PASSWORD
 ```
 
-The generated `config.py` contains `PASSWORD_HASH` and `SALT` for request authentication.
-
-### Step 2: Choose and configure your requirement reader
+### Step 3: Choose and configure your requirement reader
 
 The service supports three built-in readers. Choose one based on your data source:
 
@@ -97,41 +110,26 @@ The service supports three built-in readers. Choose one based on your data sourc
 | **[ExcelRequirementReader](#excelrequirementreader)** | `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` files | `.properties` | `pip install testbench-requirement-service[excel]` |
 | **[JiraRequirementReader](#jirarequirementreader)** | Jira REST API | `.toml` + credentials | `pip install testbench-requirement-service[jira]` |
 
-#### Option A: Configure in `config.py` (Recommended)
+Edit your `config.toml` file to specify which reader to use:
 
-Edit your `config.py` file to specify which reader to use. **Uncomment** the reader you want and **comment out** the others:
-
-```python
-# config.py
-PASSWORD_HASH = "your_generated_hash"
-SALT = "your_generated_salt"
-
-# Option 1: JsonlRequirementReader (default)
-READER_CLASS = "JsonlRequirementReader"
-READER_CONFIG_PATH = "reader_config.toml"
-
-# Option 2: ExcelRequirementReader (install [excel] extras first)
-# READER_CLASS = "ExcelRequirementReader"
-# READER_CONFIG_PATH = "excel_config.properties"
-
-# Option 3: JiraRequirementReader (install [jira] extras first)
-# READER_CLASS = "JiraRequirementReader"
-# READER_CONFIG_PATH = "jira_config.toml"
+```toml
+[testbench-requirement-service]
+reader_class = "JsonlRequirementReader"
+reader_config_path = "reader_config.toml"
+# For other readers, change the values above accordingly
 ```
 
-#### Option B: Use command-line flags
+Refer to the [Configuration](#configuration) section for detailed configuration options and advanced settings.
 
-Override the reader at startup with `--reader-class` and `--reader-config`:
+**Note:** You can override configuration settings at startup using command-line flags:
 
 ```powershell
 testbench-requirement-service start --reader-class JiraRequirementReader --reader-config jira_config.toml
 ```
 
-**Note:** Command-line flags override settings in `config.py`.
+### Step 4: Create your reader configuration file
 
-### Step 3: Create your reader configuration file
-
-Create the configuration file specified in `READER_CONFIG_PATH` (or via `--reader-config`).
+Create the configuration file specified in `reader_config_path` (or via `--reader-config`).
 
 #### For JsonlRequirementReader (default):
 
@@ -182,6 +180,77 @@ See [JiraRequirementReader](#jirarequirementreader) for authentication methods a
 
 **You're now ready to start the service!** See the [Usage](#usage) section below.
 
+## Configuration
+
+Your service can be configured using a configuration file in **TOML** format. The configuration file allows you to control service settings, reader selection, authentication, and logging behavior.
+
+**Note:** The legacy `config.py` (Python) format is still supported but will be deprecated in a future release.
+
+### Configuration file format
+
+The configuration file uses TOML format with `[testbench-requirement-service]` as the main section. Here's an example configuration:
+
+```toml
+[testbench-requirement-service]
+reader_class = "JsonlRequirementReader"
+reader_config_path = "reader_config.toml"
+host = "127.0.0.1"
+port = 8000
+password_hash = "your_generated_hash"
+salt = "your_generated_salt"
+
+# Console logging configuration
+[testbench-requirement-service.logging.console]
+log_level = "INFO"
+log_format = "%(asctime)s %(levelname)8s: %(message)s"
+
+# File logging configuration
+[testbench-requirement-service.logging.file]
+log_level = "INFO"
+log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
+file_path = "testbench-requirement-service.log"
+```
+
+### Configuration sections
+
+#### `[testbench-requirement-service]`
+
+| Option                 | Type   | Description                                                                  | Required | Default                                                                      |
+| ---------------------- | ------ | ---------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
+| `reader_class`       | String | Reader class name or module path                                            | No       | `"testbench_requirement_service.readers.JsonlRequirementReader"`          |
+| `reader_config_path` | String | Path to the reader configuration file                                       | No      | -                                                                            |
+| `host`               | String | Host address to run the service on                                          | No       | `"127.0.0.1"`                                                              |
+| `port`               | Integer | Port number to run the service on                                           | No       | `8000`                                                                      |
+| `password_hash`      | String | Hashed password for Basic Auth (generated by `set-credentials` command)    | No       | -                                                                            |
+| `salt`               | String | Salt value for password hashing (generated by `set-credentials` command)   | No       | -                                                                            |
+
+**Note:** `password_hash` and `salt` are automatically generated when you run `testbench-requirement-service set-credentials`. You can also set these via environment variables `PASSWORD_HASH` and `SALT`.
+
+#### `[testbench-requirement-service.logging.console]`
+
+| Option         | Type   | Description                                                                                                  | Required | Default                                      |
+| -------------- | ------ | ------------------------------------------------------------------------------------------------------------ | -------- | -------------------------------------------- |
+| `log_level`  | String | Minimum severity level to log to console ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")           | No       | `"INFO"`                                   |
+| `log_format` | String | Format string for console log messages,<br />using Python's standard logging format syntax                  | No       | `"%(asctime)s %(levelname)8s: %(message)s"` |
+
+#### `[testbench-requirement-service.logging.file]`
+
+| Option         | Type   | Description                                                                                                  | Required | Default                                                              |
+| -------------- | ------ | ------------------------------------------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------- |
+| `log_level`  | String | Minimum severity level to log to file ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")             | No       | `"INFO"`                                                           |
+| `log_format` | String | Format string for file log messages,<br />using Python's standard logging format syntax                     | No       | `"%(asctime)s - %(levelname)8s - %(name)s - %(message)s"`          |
+| `file_path`  | String | Path to the log file where messages will be written                                                         | No       | `"testbench-requirement-service.log"`                              |
+
+### Command-line overrides
+
+Configuration values can be overridden at startup using command-line flags. Command-line arguments take precedence over configuration file settings:
+
+```powershell
+testbench-requirement-service start --config custom_config.toml --host 0.0.0.0 --port 9000 --reader-class JiraRequirementReader --reader-config jira_config.toml
+```
+
+See `testbench-requirement-service start --help` for all available options.
+
 ## Usage
 
 Now that your service is set up, you can start the service through the command-line interface.
@@ -210,7 +279,7 @@ testbench-requirement-service start --host 127.0.0.2 --port 8002
 
 | Option              | Description                                       | Default                                                          |
 | ------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
-| `--config`        | Path to the app configuration file                | `config.py`                                                    |
+| `--config`        | Path to the app configuration file                | `config.toml`                                                    |
 | `--reader-class`  | Path or module string to the reader class         | `testbench_requirement_service.readers.JsonlRequirementReader` |
 | `--reader-config` | Path to the reader configuration file             | `reader_config.toml`                                           |
 | `--host`          | Host to run the service on                        | `127.0.0.1`                                                    |
@@ -235,7 +304,7 @@ testbench-requirement-service start --help
   ```
 - **Use a custom config path**
   ```powershell
-  testbench-requirement-service start --config path/to/config.py
+  testbench-requirement-service start --config path/to/config.toml
   ```
 - **Use a custom reader class**
   ```powershell
@@ -284,10 +353,11 @@ Reads requirement data from `.jsonl` (JSON Lines) files.
    testbench-requirement-service set-credentials
    ```
 
-3. **Configure in `config.py`:**
-   ```python
-   READER_CLASS = "JsonlRequirementReader"
-   READER_CONFIG_PATH = "reader_config.toml"
+3. **Configure in your app configuration file** (`config.toml`):
+   ```toml
+   [testbench-requirement-service]
+   reader_class = "JsonlRequirementReader"
+   reader_config_path = "reader_config.toml"
    ```
    See [Setup](#setup) for detailed configuration instructions.
 
@@ -358,7 +428,7 @@ The configuration for the reader is read from a `.toml` file with a `[jsonl]` ta
 #### Example Configuration:
 Here's an example of how to configure the `JsonlRequirementReader` in the `.toml` configuration file:
 
-```python
+```toml
 # reader_config.toml
 [jsonl]
 requirements_path = "requirements/"
@@ -381,10 +451,11 @@ Reads requirement data from various file formats, including `.xlsx`, `.xls`, `.c
    testbench-requirement-service set-credentials
    ```
 
-3. **Configure in `config.py`:**
-   ```python
-   READER_CLASS = "ExcelRequirementReader"
-   READER_CONFIG_PATH = "excel_config.properties"
+3. **Configure in your app configuration file** (`config.toml`):
+   ```toml
+   [testbench-requirement-service]
+   reader_class = "ExcelRequirementReader"
+   reader_config_path = "excel_config.properties"
    ```
    See [Setup](#setup) for detailed configuration instructions.
 
@@ -522,10 +593,11 @@ Reads requirement data from a Jira instance using the Jira REST API. The connect
    testbench-requirement-service set-credentials
    ```
 
-3. **Configure in `config.py`:**
-   ```python
-   READER_CLASS = "JiraRequirementReader"
-   READER_CONFIG_PATH = "jira_config.toml"
+3. **Configure in your app configuration file** (`config.toml`):
+   ```toml
+   [testbench-requirement-service]
+   reader_class = "JiraRequirementReader"
+   reader_config_path = "jira_config.toml"
    ```
    See [Setup](#setup) for detailed configuration instructions.
 

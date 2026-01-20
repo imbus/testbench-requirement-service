@@ -10,7 +10,8 @@ try:
     from jira.resources import Issue
 except ImportError:  # pragma: no cover
     pass
-from sanic.log import logger
+
+from testbench_requirement_service.log import logger
 
 MAX_EMBEDDED_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB limit for embedded images
 JIRA_ATTACHMENT_URL_PATTERN = re.compile(r"^/rest/api/\d+/attachment/content/(\d+)$")

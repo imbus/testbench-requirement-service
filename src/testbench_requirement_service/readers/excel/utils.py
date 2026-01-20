@@ -92,7 +92,7 @@ def read_data_frame_from_file_path(
 
 
 def build_extendedrequirementobject_from_row_data(
-    row_data: dict[str, Any], config: ExcelRequirementReaderConfig, baseline: str
+    row_data: dict, config: ExcelRequirementReaderConfig, baseline: str
 ) -> ExtendedRequirementObject:
     row_data["extendedID"] = row_data["id"]
     row_data["key"] = {"id": row_data["id"], "version": row_data["version"]}
