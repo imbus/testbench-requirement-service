@@ -2,13 +2,12 @@ import copy
 from datetime import datetime
 from typing import Any, Literal
 
-from sanic.log import logger
-
 try:  # noqa: SIM105
     from jira.resources import Field, Issue
 except ImportError:  # pragma: no cover
     pass
 
+from testbench_requirement_service.log import logger
 from testbench_requirement_service.models.requirement import (
     ExtendedRequirementObject,
     RequirementKey,

@@ -7,7 +7,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 try:  # noqa: SIM105
-    import javaproperties
+    import javaproperties  # type: ignore[import-not-found]
 except ImportError:
     pass
 
@@ -56,7 +56,7 @@ def load_properties_config_from_path(config_path: Path) -> dict[str, str]:
     """
     try:
         with config_path.open("r") as config_file:
-            return javaproperties.load(config_file)
+            return javaproperties.load(config_file)  # type: ignore[no-any-return]
     except Exception as e:
         raise ImportError(f"Importing reader config from '{config_path}' failed.") from e
 

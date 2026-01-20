@@ -1,0 +1,15 @@
+[testbench-requirement-service]
+reader_class = "testbench_requirement_service.readers.JsonlRequirementReader"
+reader_config_path = "reader_config.toml"
+host = "127.0.0.1"
+port = 8000
+debug = false
+
+[testbench-requirement-service.logging.console]
+log_level = "INFO"
+log_format = "%(asctime)s %(levelname)8s: %(message)s"
+
+[testbench-requirement-service.logging.file]
+log_level = "INFO"
+log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
+file_path = "testbench-requirement-service.log"
