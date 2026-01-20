@@ -8,8 +8,8 @@ try:  # noqa: SIM105
 except ImportError:
     pass
 from sanic import NotFound
-from sanic.log import logger
 
+from testbench_requirement_service.log import logger
 from testbench_requirement_service.models.requirement import (
     BaselineObject,
     BaselineObjectNode,

@@ -4,7 +4,6 @@ import sys
 from functools import wraps
 from pathlib import Path
 
-from dotenv import set_key
 from sanic import response
 from sanic.request import Request
 from sanic.response import BaseHTTPResponse
@@ -15,7 +14,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from testbench_requirement_service.config import CONFIG_PREFIX
+from testbench_requirement_service.utils.config import CONFIG_PREFIX
 
 
 def hash_password(password: str, salt: bytes) -> str:
@@ -24,23 +23,9 @@ def hash_password(password: str, salt: bytes) -> str:
     return hashlib.pbkdf2_hmac("sha256", password.encode() + pepper, salt, 100000).hex()
 
 
-def save_credentials(password_hash: str, salt: bytes, config_path: Path, env_path: Path):
+def save_credentials(password_hash: str, salt: bytes, config_path: Path):
     """Save credentials to both config file and .env file."""
     save_credentials_in_config_file(password_hash, salt, config_path)
-    save_credentials_to_env(password_hash, salt, env_path)
-
-
-def save_credentials_to_env(password_hash: str, salt: bytes, env_path: Path):
-    """
-    Save user credentials and salt to .env file using python-dotenv.
-    If the .env file exists, PASSWORD_HASH and SALT will be updated in place.
-    If the file does not exist, it will be created with these values.
-    All other existing environment variables are preserved.
-    """
-    salt_encoded = base64.b64encode(salt).decode()
-    env_file = str(env_path)
-    set_key(env_file, "PASSWORD_HASH", password_hash)
-    set_key(env_file, "SALT", salt_encoded)
 
 
 def save_credentials_in_config_file(password_hash: str, salt: bytes, config_path: Path) -> None:

@@ -4,8 +4,10 @@ from sanic import Sanic
 
 from testbench_requirement_service.config import AppConfig
 from testbench_requirement_service.exceptions import handle_jira_error
+from testbench_requirement_service.log import get_logging_dict
 from testbench_requirement_service.middlewares import check_request_auth, log_request, log_response
 from testbench_requirement_service.routes import router
+from testbench_requirement_service.utils.config import load_settings
 from testbench_requirement_service.utils.dependencies import (
     check_excel_dependencies,
     check_jira_dependencies,
@@ -40,11 +42,20 @@ def check_dependencies(app: Sanic) -> None:
 
 def create_app(name: str, config: AppConfig | None = None) -> Sanic:
     """Create and configure the Sanic application."""
-    app = Sanic(name)
-
-    # Apply configuration
     if not config:
         config = AppConfig()
+
+    settings = getattr(config, "SETTINGS", None)
+    if settings is None:
+        settings = load_settings()
+
+    debug = getattr(config, "DEBUG", False)
+    log_config = get_logging_dict(settings.logging, debug=debug)
+
+    # Create Sanic app
+    app = Sanic(name, log_config=log_config)
+
+    # Apply configuration after Sanic initialization
     app.update_config(config)
 
     # Validate dependencies

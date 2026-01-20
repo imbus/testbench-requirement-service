@@ -1,10 +1,10 @@
 from math import ceil
 from time import monotonic
 
-from sanic.log import logger
 from sanic.request import Request
 from sanic.response import BaseHTTPResponse, HTTPResponse
 
+from testbench_requirement_service.log import logger
 from testbench_requirement_service.utils.auth import check_auth_for_request
 
 

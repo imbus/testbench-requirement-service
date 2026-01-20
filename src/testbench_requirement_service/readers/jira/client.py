@@ -5,8 +5,8 @@ try:
     from jira.resources import Board, Field, Issue, Project, Sprint, dict2resource
 except ImportError:
     pass
-from sanic.log import logger
 
+from testbench_requirement_service.log import logger
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
 
 DEFAULT_MAX_RESULTS = 100
