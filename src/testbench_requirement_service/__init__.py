@@ -4,4 +4,4 @@
 Service to serve requirements for TestBench RequirementServiceWrapper interface.
 """
 
-__version__ = "1.0.0a3"
+__version__ = "1.0.0a4"

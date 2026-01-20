@@ -178,11 +178,18 @@ temp/
 tmp/
 *.tmp
 
+# Application log files
+*.log
+*.log.*
+
 # Configuration files with sensitive data
 # Block all config files by default to prevent accidental commits of credentials
 config.py
 *.toml
 *.properties
+
+# Allow project configuration files
+!pyproject.toml
 
 # Allow example configs
 !examples/config.py
@@ -194,7 +201,8 @@ config.py
 !tests/**/*.toml
 !tests/**/*.properties
 
-# Allow internal reader config.py files (not user configs)
+# Allow internal config.py files (not user configs)
+!src/testbench_requirement_service/**/config.py
 !src/testbench_requirement_service/readers/**/config.py
 
 # Environment files (contain Jira credentials, etc.)

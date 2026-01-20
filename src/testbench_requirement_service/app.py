@@ -1,75 +1,28 @@
 from pathlib import Path
 
 from sanic import Sanic
-from sanic.config import Config
 
+from testbench_requirement_service.config import AppConfig
 from testbench_requirement_service.exceptions import handle_jira_error
+from testbench_requirement_service.log import get_logging_dict
 from testbench_requirement_service.middlewares import check_request_auth, log_request, log_response
 from testbench_requirement_service.routes import router
+from testbench_requirement_service.utils.config import load_settings
 from testbench_requirement_service.utils.dependencies import (
     check_excel_dependencies,
     check_jira_dependencies,
 )
 
 
-class AppConfig(Config):
-    def __init__(
-        self,
-        config_path: str | None = None,
-        reader_class: str | None = None,
-        reader_config_path: str | None = None,
-        loglevel: str | None = None,
-        *args,
-        **kwargs,
-    ):
-        super().__init__(*args, **kwargs)
-
-        self.CONFIG_PATH = "config.py"
-        self.READER_CLASS = "testbench_requirement_service.readers.JsonlRequirementReader"
-        self.READER_CONFIG_PATH = "reader_config.toml"
-        self.LOGLEVEL = "INFO"
-        self.OAS_UI_DEFAULT = "swagger"
-        self.OAS_UI_REDOC = False
-        self.OAS_CUSTOM_FILE = (Path(__file__).parent / "openapi.yaml").resolve().as_posix()
-        self.OAS_PATH_TO_SWAGGER_HTML = (
-            (Path(__file__).parent / "static/swagger-ui/index.html").resolve().as_posix()
-        )
-
-        if config_path:
-            self.CONFIG_PATH = config_path
-        if not Path(self.CONFIG_PATH).exists():
-            raise FileNotFoundError(f"App config file not found: '{self.CONFIG_PATH}'.")
-        self.update_config(Path(self.CONFIG_PATH))
-
-        if reader_class:
-            self.READER_CLASS = reader_class
-        if reader_config_path:
-            self.READER_CONFIG_PATH = reader_config_path
-        if loglevel:
-            self.LOGLEVEL = loglevel
-
-
-def create_app(name: str, config: AppConfig | None = None) -> Sanic:
-    app = Sanic(name)
-
-    # update app config with custom config
-    if not config:
-        config = AppConfig()
-    app.update_config(config)
-
-    # Check optional dependencies and raise ImportError if missing
-    if "ExcelRequirementReader" in app.config.READER_CLASS:
-        check_excel_dependencies(raise_on_missing=True)
-
-    if "JiraRequirementReader" in app.config.READER_CLASS:
-        check_jira_dependencies(raise_on_missing=True)
-
-    # Register middlewares
+def register_middlewares(app: Sanic) -> None:
+    """Register application middlewares."""
     app.register_middleware(check_request_auth, "request")
     app.register_middleware(log_request, "request")
     app.register_middleware(log_response, "response")  # type: ignore
 
-    # Register exception handlers
+
+def register_exception_handlers(app: Sanic) -> None:
+    """Register application exception handlers."""
     try:
         from jira import JIRAError  # noqa: PLC0415
 
@@ -77,10 +30,43 @@ def create_app(name: str, config: AppConfig | None = None) -> Sanic:
     except ImportError:
         pass
 
-    # Register blueprints
+
+def check_dependencies(app: Sanic) -> None:
+    """Check and validate optional dependencies based on reader type."""
+    if "ExcelRequirementReader" in app.config.READER_CLASS:
+        check_excel_dependencies(raise_on_missing=True)
+
+    if "JiraRequirementReader" in app.config.READER_CLASS:
+        check_jira_dependencies(raise_on_missing=True)
+
+
+def create_app(name: str, config: AppConfig | None = None) -> Sanic:
+    """Create and configure the Sanic application."""
+    if not config:
+        config = AppConfig()
+
+    settings = getattr(config, "SETTINGS", None)
+    if settings is None:
+        settings = load_settings()
+
+    debug = getattr(config, "DEBUG", False)
+    log_config = get_logging_dict(settings.logging, debug=debug)
+
+    # Create Sanic app
+    app = Sanic(name, log_config=log_config)
+
+    # Apply configuration after Sanic initialization
+    app.update_config(config)
+
+    # Validate dependencies
+    check_dependencies(app)
+
+    # Setup application
+    register_middlewares(app)
+    register_exception_handlers(app)
     app.blueprint(router)
 
-    # Serve Swagger UI files as static assets
+    # Serve static assets
     static_path = (Path(__file__).parent / "static/swagger-ui").resolve().as_posix()
     app.static("/static/swagger-ui", static_path)
 
