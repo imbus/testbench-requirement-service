@@ -35,7 +35,7 @@ def lint(c: Context) -> None:
 
 
 @task
-def test(c: Context, loglevel: str = "TRACE:INFO") -> None:  # noqa: PT028
+def test(c: Context, loglevel: str = "TRACE:INFO") -> None:
     """Runs the robot tests."""
     failed = robot.run(
         "tests/robot", loglevel=loglevel, variable=["HEADLESS:True"], outputdir="results"

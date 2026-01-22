@@ -52,10 +52,20 @@ pip install testbench-requirement-service[jira]
 
 This installs the Python Jira client and HTML parsing library required by the [JiraRequirementReader](#jirarequirementreader) (packages: `jira`, `beautifulsoup4`).
 
-You can install both extras at once:
+#### SQL support (optional)
+
+If you need support for reading requirements from SQL databases ([SqlRequirementReader](#sqlrequirementreader)), install the SQL extras:
 
 ```powershell
-pip install testbench-requirement-service[excel,jira]
+pip install testbench-requirement-service[sql]
+```
+
+This installs SQLAlchemy. You must also install the DB driver for your database (e.g., `pymysql` or `mariadb` for MariaDB/MySQL, `oracledb` for Oracle).
+
+You can install multiple extras at once:
+
+```powershell
+pip install testbench-requirement-service[excel,jira,sql]
 ```
 
 ### 3. Verify the installation
@@ -102,13 +112,14 @@ testbench-requirement-service set-credentials --username USERNAME --password PAS
 
 ### Step 3: Choose and configure your requirement reader
 
-The service supports three built-in readers. Choose one based on your data source:
+The service supports four built-in readers. Choose one based on your data source:
 
 | Reader | Data Source | Config File Format | Install Command |
 |--------|-------------|-------------------|-----------------|
 | **[JsonlRequirementReader](#jsonlrequirementreader-default)** *(default)* | `.jsonl` files | `.toml` | Included in base install |
 | **[ExcelRequirementReader](#excelrequirementreader)** | `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` files | `.properties` | `pip install testbench-requirement-service[excel]` |
 | **[JiraRequirementReader](#jirarequirementreader)** | Jira REST API | `.toml` + credentials | `pip install testbench-requirement-service[jira]` |
+| **[SqlRequirementReader](#sqlrequirementreader)** | SQL databases via SQLAlchemy | `.toml` | `pip install testbench-requirement-service[sql]` |
 
 Edit your `config.toml` file to specify which reader to use:
 
@@ -175,6 +186,25 @@ JIRA_API_TOKEN=your-api-token
 ```
 
 See [JiraRequirementReader](#jirarequirementreader) for authentication methods and full configuration.
+
+#### For SqlRequirementReader:
+
+Create `sql_config.toml`:
+
+```toml
+[sql]
+database_url = "mariadb+pymysql://USER:PASSWORD@HOST:3306/DBNAME"
+echo = false
+pool_pre_ping = true
+```
+
+Example database URLs:
+
+- MariaDB (PyMySQL): `mariadb+pymysql://user:pass@host:3306/dbname`
+- MariaDB (MariaDB Connector): `mariadb+mariadbconnector://user:pass@host:3306/dbname`
+- Oracle (python-oracledb): `oracle+oracledb://user:pass@host:1521/?service_name=ORCLCDB`
+
+See [SqlRequirementReader](#sqlrequirementreader) for configuration details.
 
 ---
 
@@ -333,6 +363,7 @@ The service includes built-in requirement reader classes that handle different f
 - [JsonlRequirementReader (default)](#jsonlrequirementreader-default)
 - [ExcelRequirementReader](#excelrequirementreader)
 - [JiraRequirementReader](#jirarequirementreader)
+- [SqlRequirementReader](#sqlrequirementreader)
 
 Below is a detailed description of each reader:
 
@@ -419,7 +450,7 @@ The configuration for the reader is read from a `.toml` file with a `[jsonl]` ta
   ```json
   [
       {
-          "name": "string", 
+          "name": "string",
           "valueType": "STRING" | "ARRAY" | "BOOLEAN"
       }
   ]
@@ -686,6 +717,60 @@ owner = "creator"
 JIRA_USERNAME=my-user@example.com
 JIRA_API_TOKEN=my-apitoken
 ```
+
+### SqlRequirementReader
+
+Reads requirement data from SQL databases using SQLAlchemy and the provided ORM.
+
+#### Prerequisites:
+
+1. **Install SQL extras:**
+  ```powershell
+  pip install testbench-requirement-service[sql]
+  ```
+  This installs SQLAlchemy.
+
+2. **Install a database driver** compatible with SQLAlchemy:
+  - MariaDB/MySQL: `pymysql` or `mariadb`
+  - Oracle: `oracledb`
+  - SQLite: no extra driver required (built into Python)
+
+3. **Configure in your app configuration file** (`config.toml`):
+  ```toml
+  [testbench-requirement-service]
+  reader_class = "SqlRequirementReader"
+  reader_config_path = "sql_config.toml"
+  ```
+  See [Setup](#setup) for detailed configuration instructions.
+
+#### Configuration:
+The configuration for the reader is read from a `.toml` file with a `[sql]` table as the main section.
+
+##### `[sql]`
+
+| Setting          | Type   | Description                                                                 | Required | Default |
+| ---------------- | ------ | --------------------------------------------------------------------------- | -------- | ------- |
+| `database_url` | String | SQLAlchemy database URL (includes user, password, host, port, and database) | Yes      | -       |
+| `echo`         | Boolean | Enable SQLAlchemy SQL logging                                              | No       | `false` |
+| `pool_pre_ping`| Boolean | Validate pooled connections before use                                     | No       | `true`  |
+
+#### Example Configuration:
+```toml
+# sql_config.toml
+
+[sql]
+database_url = "mariadb+pymysql://USER:PASSWORD@HOST:3306/DBNAME"
+echo = false
+pool_pre_ping = true
+```
+
+Example database URLs:
+
+- MariaDB (PyMySQL): `mariadb+pymysql://user:pass@host:3306/dbname`
+- MariaDB (MariaDB Connector): `mariadb+mariadbconnector://user:pass@host:3306/dbname`
+- Oracle (python-oracledb): `oracle+oracledb://user:pass@host:1521/?service_name=ORCLCDB`
+- SQLite (relative file path): `sqlite:///./data/requirements.db`
+- SQLite (absolute file path): `sqlite:////absolute/path/to/requirements.db`
 
 ## Custom RequirementReader Classes
 
