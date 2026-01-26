@@ -56,8 +56,17 @@ def parse_date_string(date_string: str, java_date_format: str) -> datetime:
     except (ValueError, TypeError):
         warnings.warn(
             f"Invalid value for 'dateFormat' in reader config: {java_date_format}. "
+            f"or could not parse date string: {date_string!r}. "
             f"Falling back to guessing the date format.",
             UserWarning,
             stacklevel=2,
         )
-        return pd.to_datetime(date_string, errors="raise", utc=True).to_pydatetime()
+        fallback_dt = pd.to_datetime(date_string, errors="raise", utc=True).to_pydatetime()
+        if pd.isnull(fallback_dt):
+            warnings.warn(  # type: ignore
+                f"Could not parse date string: {date_string!r}",
+                UserWarning,
+                stacklevel=2,
+            )
+            return datetime.now(timezone.utc)
+        return fallback_dt

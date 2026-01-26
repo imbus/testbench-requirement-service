@@ -225,10 +225,10 @@ class SqlRequirementReader(AbstractRequirementReader):
                 children=[],
             )
 
-        key = RequirementKey(id=node.external_id, version=node.external_version)
+        key = RequirementKey(id=node.internal_id, version=node.version_name)
         return RequirementObjectNode(
             name=node.name,
-            extendedID=node.external_id,
+            extendedID="",
             key=key,
             owner="",
             status="",

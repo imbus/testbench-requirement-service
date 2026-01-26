@@ -66,8 +66,8 @@ class RequirementNode(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     baseline_id: Mapped[int] = mapped_column(ForeignKey("baselines.id"), index=True)
     name: Mapped[str] = mapped_column(Text)
-    external_id: Mapped[str] = mapped_column(String(255))
-    external_version: Mapped[str] = mapped_column(String(64))
+    internal_id: Mapped[str] = mapped_column(String(255))
+    version_name: Mapped[str] = mapped_column(String(64))
 
     requirement_id: Mapped[int | None] = mapped_column(
         ForeignKey("requirements.id"), nullable=True, index=True
