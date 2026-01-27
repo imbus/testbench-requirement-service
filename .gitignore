@@ -178,6 +178,9 @@ temp/
 tmp/
 *.tmp
 
+# Backup files
+*.backup
+
 # Application log files
 *.log
 *.log.*

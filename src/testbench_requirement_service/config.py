@@ -6,7 +6,7 @@ from pathlib import Path
 from sanic.config import Config
 
 from testbench_requirement_service.models.config import Settings
-from testbench_requirement_service.utils.config import load_settings
+from testbench_requirement_service.utils.config import load_settings, resolve_config_file_path
 
 
 class AppConfig(Config):
@@ -14,9 +14,9 @@ class AppConfig(Config):
 
     def __init__(  # noqa: PLR0913
         self,
-        config_path: str | None = None,
+        config_path: Path | None = None,
         reader_class: str | None = None,
-        reader_config_path: str | None = None,
+        reader_config_path: Path | None = None,
         host: str | None = None,
         port: int | None = None,
         debug: bool | None = None,
@@ -34,12 +34,13 @@ class AppConfig(Config):
         )
 
         # Load settings from config file
-        settings: Settings = load_settings(config_path)
+        self.CONFIG_PATH = resolve_config_file_path(config_path)
+        settings: Settings = load_settings(self.CONFIG_PATH)
         self.SETTINGS = settings
 
         # Map validated settings to uppercase Sanic config
         self.READER_CLASS = settings.reader_class
-        self.READER_CONFIG_PATH = settings.reader_config_path
+        self.READER_CONFIG_PATH = settings.reader_config_path or self.CONFIG_PATH
         self.HOST = settings.host
         self.PORT = settings.port
 

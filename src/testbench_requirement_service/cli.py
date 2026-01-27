@@ -1,5 +1,5 @@
-import os
 from functools import partial
+from pathlib import Path
 
 import click
 from dotenv import load_dotenv
@@ -8,11 +8,21 @@ from sanic.worker.loader import AppLoader
 
 from testbench_requirement_service import __version__
 from testbench_requirement_service.app import AppConfig, create_app
-from testbench_requirement_service.utils.auth import hash_password, save_credentials
-from testbench_requirement_service.utils.config import (
-    create_default_config_file,
-    resolve_config_file_path,
+from testbench_requirement_service.utils.config_wizard import (
+    configure_credentials_only,
+    configure_reader_only,
+    configure_service_only,
+    run_full_wizard,
+    show_main_menu,
+    view_current_config,
 )
+
+
+def print_wizard_banner():
+    """Print the configuration wizard banner."""
+    click.echo("╔════════════════════════════════════════════════════════╗")
+    click.echo("║  TestBench Requirement Service - Configuration Wizard  ║")
+    click.echo("╚════════════════════════════════════════════════════════╝\n")
 
 
 @click.group()
@@ -27,32 +37,92 @@ def cli(ctx):
 @click.command()
 @click.option(
     "--path",
-    type=str,
+    "config_path",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
     metavar="PATH",
     default="config.toml",
-    help="Path to the configuration file to generate.",
+    help="Path to the configuration file.",
 )
+def init(config_path: Path):
+    """Initialize service configuration interactively."""
+    print_wizard_banner()
+    run_full_wizard(config_path)
+
+
+@click.command()
 @click.option(
-    "--force",
-    "-f",
-    is_flag=True,
-    default=False,
-    show_default=True,
-    help="Overwrite the configuration file if it exists.",
+    "--path",
+    "config_path",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+    default="config.toml",
+    help="Path to the app configuration file",
 )
-def init(path, force):
-    """Generate a default configuration file."""
-    create_default_config_file(output_path=path, force=force)
+@click.option("--full", is_flag=True, help="Run full configuration wizard (skip menu)")
+@click.option("--service-only", is_flag=True, help="Configure service settings only")
+@click.option("--credentials-only", is_flag=True, help="Configure service credentials only")
+@click.option("--reader-only", is_flag=True, help="Configure reader settings only")
+@click.option("--view", is_flag=True, help="View current configuration")
+def configure(  # noqa: PLR0911, PLR0913, C901
+    config_path: Path,
+    full: bool,
+    reader_only: bool,
+    service_only: bool,
+    credentials_only: bool,
+    view: bool,
+):
+    """Create or update configuration files interactively."""
+    print_wizard_banner()
+
+    # Handle command flags (direct modes)
+    if service_only:
+        configure_service_only(config_path)
+        return
+
+    if credentials_only:
+        configure_credentials_only(config_path)
+        return
+
+    if reader_only:
+        configure_reader_only(config_path)
+        return
+
+    if view:
+        view_current_config(config_path)
+        return
+
+    # Show menu if no flags specified
+    if not full:
+        mode = show_main_menu(config_path)
+        if mode is None or mode == "quit":
+            click.echo("\nConfiguration cancelled.")
+            return
+
+        if mode == "service":
+            configure_service_only(config_path)
+            return
+        if mode == "credentials":
+            configure_credentials_only(config_path)
+            return
+        if mode == "reader":
+            configure_reader_only(config_path)
+            return
+        if mode == "view":
+            view_current_config(config_path)
+            return
+
+        click.echo("\nConfiguration cancelled.")
+        return
+
+    run_full_wizard(config_path)
 
 
 @click.command()
 @click.option(
     "--config",
-    type=str,
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
     metavar="PATH",
-    help=(
-        "Path to the app config file  [default: config.toml, automatically falls back to config.py]"
-    ),
+    help=("Path to the app config file  [default: config.toml]"),
 )
 @click.option(
     "--reader-class",
@@ -63,9 +133,9 @@ def init(path, force):
 )
 @click.option(
     "--reader-config",
-    type=str,
+    type=click.Path(dir_okay=False, path_type=Path),
     metavar="PATH",
-    help="Path to the reader config file  [default: reader_config.toml]",
+    help=" Path to the reader config file  [default: reader_config.toml]",
 )
 @click.option(
     "--host", type=str, metavar="HOST", help="Host to run the service on  [default: 127.0.0.1]"
@@ -80,13 +150,20 @@ def init(path, force):
     show_default=True,
     help="Run the service in dev mode (debug + auto reload)",
 )
-def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR0913
+def start(  # noqa: PLR0913
+    config_path: Path | None = None,
+    reader_class: str | None = None,
+    reader_config: Path | None = None,
+    host: str | None = None,
+    port: int | None = None,
+    dev: bool = False,
+):
     """Start the TestBench Requirement Service."""
     load_dotenv()
 
     app_name = "TestBenchRequirementService"
     app_config = AppConfig(
-        config_path=config,
+        config_path=config_path,
         reader_class=reader_class,
         reader_config_path=reader_config,
         host=host,
@@ -94,7 +171,7 @@ def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR091
         debug=dev,
     )
 
-    print(r"""  ______          __  ____                  __       ____  __  ___   _____                 _         
+    click.echo(r"""  ______          __  ____                  __       ____  __  ___   _____                 _         
  /_  __/__  _____/ /_/ __ )___  ____  _____/ /_     / __ \/  |/  /  / ___/___  ______   __(_)_______ 
   / / / _ \/ ___/ __/ __  / _ \/ __ \/ ___/ __ \   / /_/ / /|_/ /   \__ \/ _ \/ ___/ | / / / ___/ _ \
  / / /  __(__  ) /_/ /_/ /  __/ / / / /__/ / / /  / _, _/ /  / /   ___/ /  __/ /   | |/ / / /__/  __/
@@ -117,32 +194,24 @@ def start(config, reader_class, reader_config, host, port, dev):  # noqa: PLR091
 
 @click.command()
 @click.option(
-    "--config",
-    type=str,
-    show_default=True,
-    help="Path to the app config file [default: config.toml]",
+    "--path",
+    "config_path",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+    metavar="PATH",
+    default="config.toml",
+    help="Path to the app config file",
 )
-@click.option("--username", type=str, prompt="Enter your username", help="Your username")
-@click.option(
-    "--password",
-    type=str,
-    prompt="Enter your password",
-    help="Your password",
-    hide_input=True,
-    confirmation_prompt="Confirm your password",
-)
-def set_credentials(config, username, password):
+@click.option("--username", type=str, help="Username (prompts if not provided)")
+@click.option("--password", type=str, help="Password (prompts if not provided)")
+def set_credentials(config_path, username, password):
     """Set credentials for the TestBench Requirement Service."""
-    config_path = resolve_config_file_path(config)
-    salt = os.urandom(16)
-    password_hash = hash_password(username + password, salt)
-    save_credentials(password_hash, salt, config_path)
-    click.echo("Credentials saved.")
+    configure_credentials_only(config_path, username=username, password=password)
 
 
 cli.add_command(init)
-cli.add_command(start)
+cli.add_command(configure)
 cli.add_command(set_credentials)
+cli.add_command(start)
 
 if __name__ == "__main__":
     cli()

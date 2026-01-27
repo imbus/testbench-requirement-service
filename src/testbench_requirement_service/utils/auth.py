@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import os
 import sys
 from functools import wraps
 from pathlib import Path
@@ -21,6 +22,13 @@ def hash_password(password: str, salt: bytes) -> str:
     """Hashes a password with a given salt using PBKDF2-HMAC with SHA256."""
     pepper = b"\xfb\x0e\xbb\x1cg\x15'\x8f6\x15\xcc\x14\x81\xd8\xfe\x93"
     return hashlib.pbkdf2_hmac("sha256", password.encode() + pepper, salt, 100000).hex()
+
+
+def create_credentials(username: str, password: str) -> tuple[str, bytes]:
+    """Create a password hash and salt for given username and password."""
+    salt = os.urandom(16)
+    password_hash = hash_password(username + password, salt)
+    return password_hash, salt
 
 
 def save_credentials(password_hash: str, salt: bytes, config_path: Path):

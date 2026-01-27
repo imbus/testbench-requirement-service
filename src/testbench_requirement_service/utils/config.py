@@ -149,7 +149,7 @@ def load_settings_from_toml_file(config_path: Path, config_prefix: str = CONFIG_
         sys.exit(1)
 
 
-def resolve_config_file_path(config_path: str | None) -> Path:
+def resolve_config_file_path(config_path: Path | str | None) -> Path:
     """Determine which config file to load, preferring TOML but supporting legacy Python."""
 
     if config_path:
@@ -166,7 +166,7 @@ def resolve_config_file_path(config_path: str | None) -> Path:
     return toml_path
 
 
-def load_settings(config_path: str | None = None) -> Settings:
+def load_settings(config_path: Path | str | None = None) -> Settings:
     if not config_path:
         config_file_path = resolve_config_file_path(config_path)
     else:
