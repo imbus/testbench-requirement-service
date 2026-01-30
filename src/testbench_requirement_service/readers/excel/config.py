@@ -31,6 +31,36 @@ class ExcelRequirementReaderConfigValidatorsMixin:
             )
         return v
 
+    @field_validator("bufferMaxAgeMinutes")
+    @classmethod
+    def validate_buffer_max_age_minutes(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError(
+                "Invalid value for 'bufferMaxAgeMinutes' in reader config: "
+                f"Expected a positive number of minutes, but got '{v}'."
+            )
+        return v
+
+    @field_validator("bufferMaxSizeMiB")
+    @classmethod
+    def validate_buffer_max_size_mib(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError(
+                "Invalid value for 'bufferMaxSizeMiB' in reader config: "
+                f"Expected a positive number of MiB, but got '{v}'."
+            )
+        return v
+
+    @field_validator("bufferCleanupIntervalMinutes")
+    @classmethod
+    def validate_buffer_cleanup_interval_minutes(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError(
+                "Invalid value for 'bufferCleanupIntervalMinutes' in reader config: "
+                f"Expected a positive number of minutes, but got '{v}'."
+            )
+        return v
+
     @model_validator(mode="after")
     def validate_config(self):
         validate_array_value_separator(self)
@@ -64,6 +94,10 @@ class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfi
     requirement_description: list[int] | None = Field(None)
     requirement_type: int | None = Field(None, alias="requirement.type")
     requirement_folderPattern: str | None = Field(None, alias="requirement.folderPattern")
+
+    bufferMaxAgeMinutes: float | None = Field(None, alias="bufferMaxAgeMinutes")
+    bufferMaxSizeMiB: float | None = Field(None, alias="bufferMaxSizeMiB")
+    bufferCleanupIntervalMinutes: float | None = Field(None, alias="bufferCleanupIntervalMinutes")
 
     @property
     def column_settings(self) -> dict[str, FieldInfo]:
@@ -105,9 +139,13 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
     requirement_comment: int | None = Field(None, alias="requirement.comment")
     requirement_date: int | None = Field(None, alias="requirement.date")
     requirement_references: int | None = Field(None, alias="requirement.references")
-    requirement_description: list[int] | None = Field(default_factory=list)
+    requirement_description: list[int] = Field(default_factory=list)
     requirement_type: int | None = Field(None, alias="requirement.type")
     requirement_folderPattern: str = Field(".*folder.*", alias="requirement.folderPattern")
+
+    bufferMaxAgeMinutes: float = Field(1440.0, alias="bufferMaxAgeMinutes")
+    bufferMaxSizeMiB: float = Field(1024.0, alias="bufferMaxSizeMiB")
+    bufferCleanupIntervalMinutes: float = Field(1.0, alias="bufferCleanupIntervalMinutes")
 
     udf_count: int = Field(0, alias="udf.count")
     udf_configs: list[UserDefinedAttributeConfig] = Field(default_factory=list)
