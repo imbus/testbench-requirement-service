@@ -6,42 +6,148 @@ from pydantic.fields import Field
 
 
 class JiraProjectConfig(BaseModel):
-    baseline_field: str | None = None
-    baseline_jql: str | None = None
-    current_baseline_jql: str | None = None
-    requirement_group_types: list[str] | None = None
-    major_change_fields: list[str] | None = None
-    minor_change_fields: list[str] | None = None
-    owner: str | None = None
-    rendered_fields: list[str] | None = None
+    baseline_field: str | None = Field(
+        None, description="Jira field used to identify baselines/versions for this project"
+    )
+    baseline_jql: str | None = Field(
+        None, description="JQL query template for fetching baseline requirements for this project"
+    )
+    current_baseline_jql: str | None = Field(
+        None,
+        description="JQL query template for fetching current baseline requirements "
+        "for this project",
+    )
+    requirement_group_types: list[str] | None = Field(
+        None, description="Issue types that represent requirement groups/folders for this project"
+    )
+    major_change_fields: list[str] | None = Field(
+        None, description="Fields that trigger major version changes for this project"
+    )
+    minor_change_fields: list[str] | None = Field(
+        None, description="Fields that trigger minor version changes for this project"
+    )
+    owner: str | None = Field(
+        None, description="Jira field used for requirement owner for this project"
+    )
+    rendered_fields: list[str] | None = Field(
+        None, description="Fields to render as HTML (e.g., description) for this project"
+    )
 
 
 class JiraRequirementReaderConfig(BaseModel):
-    server_url: str
-    auth_type: Literal["basic", "token", "oauth"] = "basic"
-
-    username: str | None = None
-    api_token: str | None = None  # for basic auth, paired with username
-
-    token: str | None = None  # for bearer/token-based auth, Jira Self Hosted
-
-    access_token: str | None = None
-    access_token_secret: str | None = None
-    consumer_key: str | None = None
-    key_cert: str | None = None
-
-    baseline_field: str = "fixVersions"
-    baseline_jql: str = 'project = "{project}" AND fixVersion = "{baseline}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")'  # noqa: E501
-    current_baseline_jql: str = (
-        'project = "{project}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")'
+    server_url: str = Field(
+        ..., description="Jira server URL (e.g., https://your-domain.atlassian.net)"
     )
-    requirement_group_types: list[str] = ["Epic"]
-    major_change_fields: list[str] = ["fixVersions"]
-    minor_change_fields: list[str] = ["summary", "description", "affectsVersions", "status"]
-    owner: str = "assignee"
-    rendered_fields: list[str] = Field(default_factory=list)
+    auth_type: Literal["basic", "token", "oauth"] = Field(
+        "basic", description="Authentication type: basic (Cloud), token (Self-Hosted), or oauth"
+    )
 
-    projects: dict[str, JiraProjectConfig] = Field(default_factory=dict)
+    username: str | None = Field(
+        None,
+        description="Username for basic authentication (Jira Cloud)",
+        json_schema_extra={
+            "env_var": "JIRA_USERNAME",
+            "depends_on": {"field": "auth_type", "value": "basic"},
+            "required": True,
+        },
+    )
+    api_token: str | None = Field(
+        None,
+        description="API token for basic authentication (Jira Cloud)",
+        json_schema_extra={
+            "sensitive": True,
+            "env_var": "JIRA_API_TOKEN",
+            "depends_on": {"field": "auth_type", "value": "basic"},
+            "required": True,
+        },
+    )
+
+    token: str | None = Field(
+        None,
+        description="Personal Access Token for token-based auth (Jira Self-Hosted)",
+        json_schema_extra={
+            "sensitive": True,
+            "env_var": "JIRA_BEARER_TOKEN",
+            "depends_on": {"field": "auth_type", "value": "token"},
+            "required": True,
+        },
+    )
+
+    access_token: str | None = Field(
+        None,
+        description="OAuth access token",
+        json_schema_extra={
+            "sensitive": True,
+            "env_var": "JIRA_ACCESS_TOKEN",
+            "depends_on": {"field": "auth_type", "value": "oauth"},
+            "required": True,
+        },
+    )
+    access_token_secret: str | None = Field(
+        None,
+        description="OAuth access token secret",
+        json_schema_extra={
+            "sensitive": True,
+            "env_var": "JIRA_ACCESS_TOKEN_SECRET",
+            "depends_on": {"field": "auth_type", "value": "oauth"},
+            "required": True,
+        },
+    )
+    consumer_key: str | None = Field(
+        None,
+        description="OAuth consumer key",
+        json_schema_extra={
+            "env_var": "JIRA_CONSUMER_KEY",
+            "depends_on": {"field": "auth_type", "value": "oauth"},
+            "required": True,
+        },
+    )
+    key_cert: str | None = Field(
+        None,
+        description="OAuth private key certificate",
+        json_schema_extra={
+            "sensitive": True,
+            "env_var": "JIRA_KEY_CERT",
+            "depends_on": {"field": "auth_type", "value": "oauth"},
+            "required": True,
+        },
+    )
+
+    baseline_field: str = Field(
+        "fixVersions", description="Jira field used to identify baselines/versions"
+    )
+    baseline_jql: str = Field(
+        'project = "{project}" AND fixVersion = "{baseline}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")',  # noqa: E501
+        description="JQL query template for fetching baseline requirements",
+    )
+    current_baseline_jql: str = Field(
+        'project = "{project}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")',
+        description="JQL query template for fetching current baseline requirements",
+    )
+    requirement_group_types: list[str] = Field(
+        ["Epic"], description="Issue types that represent requirement groups/folders"
+    )
+    major_change_fields: list[str] = Field(
+        ["fixVersions"], description="Fields that trigger major version changes"
+    )
+    minor_change_fields: list[str] = Field(
+        ["summary", "description", "affectsVersions", "status"],
+        description="Fields that trigger minor version changes",
+    )
+    owner: str = Field("assignee", description="Jira field used for requirement owner")
+    rendered_fields: list[str] = Field(
+        default_factory=list, description="Fields to render as HTML (e.g., description)"
+    )
+
+    projects: dict[str, JiraProjectConfig] = Field(
+        default_factory=dict,
+        description="Project-specific configuration overrides",
+        json_schema_extra={
+            "prompt_as_dict": True,
+            "item_label": "Project Configuration",
+            "key_label": "Project Key",
+        },
+    )
 
     @model_validator(mode="after")
     def validate_config(self):  # noqa: C901
