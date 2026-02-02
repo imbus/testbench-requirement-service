@@ -10,7 +10,5 @@ class JsonlRequirementReaderConfig(BaseModel):
     @classmethod
     def validate_requirements_path(cls, requirements_path: Path) -> Path:
         if not requirements_path.exists():
-            raise FileNotFoundError(
-                f"requirements_path not found: '{requirements_path.resolve()}'."
-            )
+            raise ValueError(f"requirements_path not found: '{requirements_path}'.")
         return requirements_path

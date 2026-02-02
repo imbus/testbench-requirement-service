@@ -104,7 +104,7 @@ def load_config_from_python_file(config_path: Path) -> RequirementServiceConfig:
         sys.exit(1)
 
     try:
-        config_dict = runpy.run_path(config_path.as_posix())
+        config_dict = runpy.run_path(str(config_path))
     except Exception as e:
         print(f"Configuration Error: Failed to read config file.\nDetails: {e}")
         sys.exit(1)

@@ -566,6 +566,28 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
 
 When using a `.properties` file, the reader uses a global `.properties` file, but if a project-specific `.properties` file is found, it can override the global configuration.
 
+> **⚠️ IMPORTANT: Windows Paths in .properties Files**
+> 
+> Java `.properties` files treat backslashes (`\`) as escape characters, which causes **critical issues with Windows paths**:
+> 
+> - `C:\folder\file` → Parsed as `C:` + FORM-FEED + `older` + FORM-FEED + `ile` ❌
+> - `\\server\temp\data` → Parsed as `\server` + TAB + `emp` + TAB + `ata` ❌
+> 
+> **Solutions** (choose one):
+> 
+> 1. **Use forward slashes** (recommended - simplest):
+>    ```properties
+>    requirementsDataPath = C:/path/to/folder
+>    requirementsDataPath = //server/share/folder
+>    ```
+>    Windows accepts forward slashes in paths.
+> 
+> 2. **Double-escape backslashes** (4 backslashes = 1 actual backslash):
+>    ```properties
+>    requirementsDataPath = C:\\\\path\\\\to\\\\folder
+>    requirementsDataPath = \\\\\\\\server\\\\share\\\\folder
+>    ```
+> 
 
 **Dataframe buffering:** The Excel reader keeps a catalog of dataframes keyed by file path. A cached dataframe is reused if the source file modification time matches, and each access refreshes the entry age. Entries expire after `bufferMaxAgeMinutes`, and a background cleanup task runs every `bufferCleanupIntervalMinutes`. If the total buffer size exceeds `bufferMaxSizeMiB`, the reader evicts the least-recently accessed entries until the buffer is back to $80\%$ of the limit. Set `bufferMaxSizeMiB=0` to disable buffering entirely.
 - **Global Settings**:
@@ -573,7 +595,7 @@ When using a `.properties` file, the reader uses a global `.properties` file, bu
 
   | Global Setting           | Description                                     | Example                                     |
   | ------------------------ | ----------------------------------------------- | ------------------------------------------- |
-  | `requirementsDataPath` | Path to the root directory for requirement data | `requirementsDataPath=requirements/excel` |
+  | `requirementsDataPath` | Path to the root directory for requirement data. **For .properties files:** Use forward slashes (`/`) or double-escape backslashes (`\\\\`) | `requirementsDataPath=C:/requirements/excel` or `requirementsDataPath=//server/share` |
 - **Mandatory Settings**:
   All mandatory settings should be configured in the global configuration file. They can be overwritten by values in project-specific configuration files.
 
@@ -631,7 +653,9 @@ When using a `.properties` file, the reader uses a global `.properties` file, bu
 # reader_config.properties
 
 # Global Settings
-requirementsDataPath=requirements/excel/
+# IMPORTANT: Use forward slashes for Windows paths!
+requirementsDataPath=C:/requirements/excel/
+# Or for UNC paths: requirementsDataPath=//server/share/requirements/
 
 # Mandatory Settings
 columnSeparator=;
