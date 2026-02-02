@@ -1,12 +1,19 @@
 """Configuration management for TestBench Requirement Service."""
 
 import os
+import sys
 from pathlib import Path
 
+from pydantic import ValidationError
 from sanic.config import Config
 
-from testbench_requirement_service.models.config import Settings
-from testbench_requirement_service.utils.config import load_settings, resolve_config_file_path
+from testbench_requirement_service.readers.utils import get_reader_config_class
+from testbench_requirement_service.utils.config import (
+    get_reader_config,
+    load_config,
+    print_config_errors,
+    resolve_config_file_path,
+)
 
 
 class AppConfig(Config):
@@ -33,16 +40,16 @@ class AppConfig(Config):
             (Path(__file__).parent / "static/swagger-ui/index.html").resolve().as_posix()
         )
 
-        # Load settings from config file
+        # Load config from config file
         self.CONFIG_PATH = resolve_config_file_path(config_path)
-        settings: Settings = load_settings(self.CONFIG_PATH)
-        self.SETTINGS = settings
+        service_config = load_config(self.CONFIG_PATH)
+        self.SERVICE_CONFIG = service_config
 
         # Map validated settings to uppercase Sanic config
-        self.READER_CLASS = settings.reader_class
-        self.READER_CONFIG_PATH = settings.reader_config_path or self.CONFIG_PATH
-        self.HOST = settings.host
-        self.PORT = settings.port
+        self.READER_CLASS = service_config.reader_class
+        self.READER_CONFIG_PATH = service_config.reader_config_path or self.CONFIG_PATH
+        self.HOST = service_config.host
+        self.PORT = service_config.port
 
         # Override with CLI parameters (highest priority)
         if reader_class:
@@ -53,8 +60,35 @@ class AppConfig(Config):
             self.HOST = host
         if port:
             self.PORT = port
-        self.DEBUG = debug or settings.debug
+        self.DEBUG = debug or service_config.debug
+
+        # Validate and store reader config
+        self.READER_CONFIG = self._validate_reader_config()
 
         # Load credentials
-        self.PASSWORD_HASH = settings.password_hash or os.getenv("PASSWORD_HASH") or ""
-        self.SALT = settings.salt or os.getenv("SALT") or ""
+        self.PASSWORD_HASH = service_config.password_hash or os.getenv("PASSWORD_HASH") or ""
+        self.SALT = service_config.salt or os.getenv("SALT") or ""
+
+    def _validate_reader_config(self):
+        """Validate reader_config dict against the reader's CONFIG_CLASS.
+
+        Priority:
+        1. If reader_config_path points to a separate file, load from there
+        2. Otherwise, use reader_config from the main service config
+        """
+        try:
+            config_class = get_reader_config_class(self.READER_CLASS)
+            if config_class is None:
+                return {}
+            reader_config = get_reader_config(self.SERVICE_CONFIG)
+            return config_class.model_validate(reader_config)
+        except ValidationError as e:
+            config_path = Path(self.CONFIG_PATH) if self.CONFIG_PATH else None
+            reader_config_path = Path(self.READER_CONFIG_PATH) if self.READER_CONFIG_PATH else None
+            if reader_config_path and reader_config_path != config_path:
+                print_config_errors(e, config_path=reader_config_path, config_prefix=None)
+            else:
+                print_config_errors(e, config_path=reader_config_path)
+            sys.exit(1)
+        except Exception as e:
+            raise ValueError(f"Failed to validate reader configuration: {e}") from e

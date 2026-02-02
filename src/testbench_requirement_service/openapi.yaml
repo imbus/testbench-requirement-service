@@ -1,8 +1,8 @@
 openapi: 3.0.1
 info:
-  title: RequirementWrapper2 API
+  title: TestBench Requirement Service API
   version: 1.0.0
-  description: A REST API for managing requirements using the RequirementWrapper2.
+  description: A REST API for managing requirements using the TestBench Requirement Service.
 
 servers:
   - url: /

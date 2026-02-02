@@ -37,8 +37,10 @@ from testbench_requirement_service.readers.utils import load_reader_config_from_
 
 
 class ExcelRequirementReader(AbstractRequirementReader):
-    def __init__(self, config_path: str):
-        self.config = load_reader_config_from_path(Path(config_path), ExcelRequirementReaderConfig)
+    CONFIG_CLASS = ExcelRequirementReaderConfig
+
+    def __init__(self, config: ExcelRequirementReaderConfig):
+        self.config = config
 
     def project_exists(self, project: str) -> bool:
         return self._get_project_path(project).exists()

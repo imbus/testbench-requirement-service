@@ -122,7 +122,7 @@ By default, all configuration is stored in `config.toml`. For example, to config
 reader_class = "JsonlRequirementReader"
 ...
 
-[jsonl]
+[testbench-requirement-service.reader_config]
 requirements_path = "requirements/jsonl/"
 ```
 
@@ -134,6 +134,8 @@ reader_class = "JsonlRequirementReader"
 reader_config_path = "reader_config.toml"  # Optional: use separate file
 ...
 ```
+
+Note: When using a separate file, reader configuration goes directly in the file without a section prefix.
 
 Refer to the [Configuration](#configuration) section for detailed configuration options and advanced settings.
 
@@ -156,7 +158,7 @@ Add to your `config.toml`:
 reader_class = "JsonlRequirementReader"
 ...
 
-[jsonl]
+[testbench-requirement-service.reader_config]
 requirements_path = "requirements/jsonl/"
 ```
 
@@ -171,7 +173,7 @@ Option 1: Add inline to `config.toml`:
 reader_class = "ExcelRequirementReader"
 ...
 
-[excel]
+[testbench-requirement-service.reader_config]
 requirementsDataPath = "requirements/excel/"
 columnSeparator = ";"
 arrayValueSeparator = ","
@@ -198,7 +200,7 @@ Add to your `config.toml`:
 reader_class = "JiraRequirementReader"
 ...
 
-[jira]
+[testbench-requirement-service.reader_config]
 server_url = "https://your-jira.atlassian.net/"
 auth_type = "basic"
 # ... additional settings
@@ -374,8 +376,8 @@ log_level = "INFO"
 log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 file_path = "testbench-requirement-service.log"
 
-# Reader configuration (inline)
-[jsonl]
+# Reader configuration (inline - recommended)
+[testbench-requirement-service.reader_config]
 requirements_path = "requirements/jsonl/"
 ```
 
@@ -394,7 +396,8 @@ requirements_path = "requirements/jsonl/"
 
 **Notes:** 
 - `password_hash` and `salt` are automatically generated when you run `testbench-requirement-service set-credentials`. You can also set these via environment variables `PASSWORD_HASH` and `SALT`.
-- By default, reader configuration is read from inline sections (e.g., `[jsonl]`, `[excel]`, `[jira]`) in the same `config.toml` file. Use `reader_config_path` only if you want to keep reader settings in a separate file.
+- By default, reader configuration is stored inline under `[testbench-requirement-service.reader_config]` in the same `config.toml` file (recommended). Use `reader_config_path` only if you want to keep reader settings in a separate file.
+- When using `reader_config_path`, the separate file contains reader configuration directly without any section prefix.
 
 #### `[testbench-requirement-service.logging.console]`
 
@@ -538,7 +541,7 @@ Reads requirement data from `.jsonl` (JSON Lines) files.
    [testbench-requirement-service]
    reader_class = "JsonlRequirementReader"
    
-   [jsonl]
+   [testbench-requirement-service.reader_config]
    requirements_path = "requirements/jsonl/"
    ```
    
@@ -549,12 +552,14 @@ Reads requirement data from `.jsonl` (JSON Lines) files.
    reader_config_path = "reader_config.toml"  # Optional
    ```
    
+   Note: Separate files contain config directly without section prefix.
+   
    See [Setup](#setup) for detailed configuration instructions.
 
 #### Configuration:
-The configuration can be added directly to `config.toml` (recommended) or in a separate `.toml` file with a `[jsonl]` table as the main section.
+The configuration can be added directly to `config.toml` under `[testbench-requirement-service.reader_config]` (recommended) or in a separate `.toml` file without a section prefix.
 
-##### `[jsonl]`
+##### Configuration Settings
 
 | Setting               | Type   | Description                                             | Required | Default |
 | --------------------- | ------ | ------------------------------------------------------- | -------- | ------- |
@@ -621,7 +626,7 @@ The configuration can be added directly to `config.toml` (recommended) or in a s
 [testbench-requirement-service]
 reader_class = "JsonlRequirementReader"
 
-[jsonl]
+[testbench-requirement-service.reader_config]
 requirements_path = "requirements/jsonl/"
 ```
 
@@ -635,8 +640,7 @@ reader_config_path = "reader_config.toml"
 ```
 
 ```toml
-# reader_config.toml
-[jsonl]
+# reader_config.toml (no section prefix needed)
 requirements_path = "requirements/jsonl/"
 ```
 
@@ -664,7 +668,7 @@ Reads requirement data from various file formats, including `.xlsx`, `.xls`, `.c
    [testbench-requirement-service]
    reader_class = "ExcelRequirementReader"
    
-   [excel]
+   [testbench-requirement-service.reader_config]
    requirementsDataPath = "requirements/excel/"
    columnSeparator = ";"
    arrayValueSeparator = ","
@@ -682,7 +686,7 @@ Reads requirement data from various file formats, including `.xlsx`, `.xls`, `.c
    See [Setup](#setup) for detailed configuration instructions.
 
 #### Configuration:
-The configuration can be added directly to `config.toml` as an `[excel]` section (recommended) or in a separate Java Properties `.properties` file. 
+The configuration can be added directly to `config.toml` under `[testbench-requirement-service.reader_config]` (recommended) or in a separate Java Properties `.properties` file without a section prefix. 
 
 When using a `.properties` file, the reader uses a global `.properties` file, but if a project-specific `.properties` file is found, it can override the global configuration.
 
@@ -793,13 +797,13 @@ udf.attr3.type=array
 udf.attr3.column=17
 ```
 
-**Note:** When using inline configuration in `config.toml`, the same properties can be configured in the `[excel]` section using TOML syntax. For example:
+**Note:** When using inline configuration in `config.toml`, the same properties can be configured under `[testbench-requirement-service.reader_config]` using TOML syntax. For example:
 
 ```toml
 [testbench-requirement-service]
 reader_class = "ExcelRequirementReader"
 
-[excel]
+[testbench-requirement-service.reader_config]
 requirementsDataPath = "requirements/excel/"
 columnSeparator = ";"
 arrayValueSeparator = ","
@@ -840,7 +844,7 @@ Reads requirement data from a Jira instance using the Jira REST API. The connect
    [testbench-requirement-service]
    reader_class = "JiraRequirementReader"
    
-   [jira]
+   [testbench-requirement-service.reader_config]
    server_url = "https://your-jira.atlassian.net/"
    auth_type = "basic"
    # ... additional settings
@@ -860,9 +864,9 @@ Reads requirement data from a Jira instance using the Jira REST API. The connect
    - Or configure credentials directly in the configuration file
 
 #### Configuration:
-The configuration can be added directly to `config.toml` (recommended) or in a separate `.toml` file with a `[jira]` table as the main section.
+The configuration can be added directly to `config.toml` under `[testbench-requirement-service.reader_config]` (recommended) or in a separate `.toml` file without a section prefix.
 
-##### `[jira]`
+##### Configuration Settings
 
 | Setting                     | Type         | Description                                                                                                                                                                         | Required | Default                                                                                                                 |
 | --------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -879,7 +883,7 @@ The configuration can be added directly to `config.toml` (recommended) or in a s
 | `owner`                   | String       | Field used for the owner                                                                                                                                                            | No       | `assignee`                                                                                                            |
 | `rendered_fields`         | List[String] | List of UDF fields that should be shown as rendered fields in the TestBench Client.<br />*Note*: Field has to be of type multiline text in order to be shown rendered             | No       | `[]`                                                                                                                  |
 
-##### `[jira.projects.<project>]`
+##### Project-Specific Settings (`projects.<project>` subsection)
 
 | Setting                     | Type         | Description                                                                                                                                                                                          | Required | Default                  |
 | --------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------ |
@@ -909,7 +913,7 @@ Pick the auth flow that matches your Jira deployment; the reader enforces the re
 [testbench-requirement-service]
 reader_class = "JiraRequirementReader"
 
-[jira]
+[testbench-requirement-service.reader_config]
 server_url = "https://example.atlassian.net/"
 auth_type = "basic"          # or "token" / "oauth"
 
@@ -927,7 +931,7 @@ minor_change_fields = ["summary", "description", "affectsVersions", "status"]
 owner = "assignee"
 rendered_fields = ["Support Ticket", "Technical criteria", "Acceptance criteria"]
 
-[jira.projects."Project A"]
+[testbench-requirement-service.reader_config.projects."Project A"]
 # Project specific overrides (all optional)
 baseline_field = "fixVersions"
 baseline_jql = "fixVersion = '{baseline}'"
@@ -946,11 +950,18 @@ reader_config_path = "jira_config.toml"
 ```
 
 ```toml
-# jira_config.toml
-[jira]
+# jira_config.toml (no section prefix needed)
 server_url = "https://example.atlassian.net/"
 auth_type = "basic"
 # ... same settings as above
+
+[projects."Project A"]
+# Project specific overrides (all optional)
+baseline_field = "fixVersions"
+baseline_jql = "fixVersion = '{baseline}'"
+current_baseline_jql = "project = '{project}' AND fixVersion = '{baseline}'"
+requirement_group_types = ["Initiative"]
+owner = "creator"
 ```
 
 #### Example `.env` file for basic authentication:

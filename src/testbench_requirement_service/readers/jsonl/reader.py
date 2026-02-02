@@ -22,16 +22,13 @@ from testbench_requirement_service.readers.jsonl.utils import (
     build_extendedrequirementobject_from_file_object,
     build_requirementobject_from_file_object,
 )
-from testbench_requirement_service.readers.utils import load_reader_config_from_path
 
 
 class JsonlRequirementReader(AbstractRequirementReader):
-    def __init__(self, config_path: str):
-        self.config = load_reader_config_from_path(
-            config_path=Path(config_path),
-            config_class=JsonlRequirementReaderConfig,
-            config_prefix="jsonl",
-        )
+    CONFIG_CLASS = JsonlRequirementReaderConfig
+
+    def __init__(self, config: JsonlRequirementReaderConfig):
+        self.config = config
 
     def project_exists(self, project: str) -> bool:
         return self._get_project_path(project).exists()

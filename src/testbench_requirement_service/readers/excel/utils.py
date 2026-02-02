@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -121,7 +122,7 @@ def build_requirementobjectnode_from_row_data(
 def build_requirementversionobject_from_row_data(
     row_data: dict, config: ExcelRequirementReaderConfig
 ) -> RequirementVersionObject:
-    date_string = row_data.get("date", "")
+    date_string = row_data.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
     date_format = config.dateFormat or "yyyy-MM-dd HH:mm:ss"
     date = parse_date_string(date_string, date_format)
 

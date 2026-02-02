@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 
 try:  # noqa: SIM105
     from jira.resources import Field, Issue, Project
@@ -35,16 +34,13 @@ from testbench_requirement_service.readers.jira.utils import (
     get_issue_version,
     is_version_type_field,
 )
-from testbench_requirement_service.readers.utils import load_reader_config_from_path
 
 
 class JiraRequirementReader(AbstractRequirementReader):
-    def __init__(self, config_path: str):
-        self.config = load_reader_config_from_path(
-            config_path=Path(config_path),
-            config_class=JiraRequirementReaderConfig,
-            config_prefix="jira",
-        )
+    CONFIG_CLASS = JiraRequirementReaderConfig
+
+    def __init__(self, config: JiraRequirementReaderConfig):
+        self.config = config
         self.jira_client = JiraClient(self.config)
 
         # key: project name (format: "{project.name} ({project.key})"), value: Project Resource

@@ -1,4 +1,7 @@
 from abc import ABC, abstractmethod
+from typing import ClassVar
+
+from pydantic import BaseModel
 
 from testbench_requirement_service.models.requirement import (
     BaselineObject,
@@ -12,16 +15,22 @@ from testbench_requirement_service.models.requirement import (
 
 
 class AbstractRequirementReader(ABC):
-    @abstractmethod
-    def __init__(self, config_path: str):
-        """
-        Initialize the requirement reader with the given configuration file path.
+    """Base class for requirement readers.
 
-        The config_path is set either via CLI option (--reader-config)
-        or in the app configuration file.
+    Subclasses must:
+    - Set CONFIG_CLASS to their specific config model type
+    """
+
+    # Subclasses must override this to specify their config model type
+    CONFIG_CLASS: ClassVar[type[BaseModel] | None] = None
+
+    @abstractmethod
+    def __init__(self, config: BaseModel):
+        """
+        Initialize the requirement reader with validated configuration.
 
         Args:
-            config_path (str): Path to the reader configuration file.
+            config: Validated configuration object (type specified by CONFIG_CLASS)
         """
 
     @abstractmethod
