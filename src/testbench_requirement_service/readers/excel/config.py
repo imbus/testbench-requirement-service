@@ -1,13 +1,25 @@
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializationInfo,
+    SerializerFunctionWrapHandler,
+    ValidationInfo,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 from pydantic.fields import FieldInfo
 
 INVALID_SEPARATOR_CHARS = {"\r", "\n", "\r\n", '"'}
 
 
 class ExcelRequirementReaderConfigValidatorsMixin:
+    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
+
     @model_validator(mode="before")
     @classmethod
     def build_derived_fields(cls, values: dict) -> dict:
@@ -21,6 +33,11 @@ class ExcelRequirementReaderConfigValidatorsMixin:
     def validate_column_separator(cls, v: str) -> str:
         return validate_column_separator(v)
 
+    @field_validator("arrayValueSeparator")
+    @classmethod
+    def validate_array_value_separator_field(cls, v: str, info: ValidationInfo) -> str:
+        return validate_array_value_separator(v, info.data)
+
     @field_validator("header_rowIdx")
     @classmethod
     def validate_header_row_idx(cls, v: int | None) -> int | None:
@@ -31,39 +48,117 @@ class ExcelRequirementReaderConfigValidatorsMixin:
             )
         return v
 
+    @field_validator("data_rowIdx")
+    @classmethod
+    def validate_data_row_idx_field(cls, v: int | None, info: ValidationInfo) -> int | None:
+        return validate_data_row_idx(v, info.data)
+
+    @field_validator(
+        "requirement_hierarchyID",
+        "requirement_id",
+        "requirement_version",
+        "requirement_name",
+        "requirement_owner",
+        "requirement_status",
+        "requirement_priority",
+        "requirement_comment",
+        "requirement_date",
+        "requirement_references",
+        "requirement_description",
+        "requirement_type",
+    )
+    @classmethod
+    def validate_requirement_column_field(
+        cls, v: int | list[int] | None, info: ValidationInfo
+    ) -> int | list[int] | None:
+        """Validate requirement column fields against already validated fields.
+
+        Prevents duplicate column indices across requirement fields.
+        """
+        if v is None or info.field_name is None:
+            return v
+        return validate_column_setting(info.field_name, v, info.data)
+
     @model_validator(mode="after")
-    def validate_config(self):
-        validate_array_value_separator(self)
-        validate_data_row_idx(self)
-        validate_column_settings(self)
-        return self
+    def check_required_fields(self):
+        raise ValueError("TESTING ONLY - REMOVE ME")
 
 
 class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfigValidatorsMixin):
-    columnSeparator: str | None = Field(None, alias="columnSeparator")
-    arrayValueSeparator: str | None = Field(None, alias="arrayValueSeparator")
-    baselineFileExtensions: list[str] | None = Field(None, alias="baselineFileExtensions")
+    columnSeparator: str | None = Field(
+        None, alias="columnSeparator", description="Column separator character"
+    )
+    arrayValueSeparator: str | None = Field(
+        None, alias="arrayValueSeparator", description="Separator for array values within cells"
+    )
+    baselineFileExtensions: list[str] | None = Field(
+        None,
+        alias="baselineFileExtensions",
+        description="Allowed file extensions for baseline files (comma-separated)",
+    )
 
-    useExcelDirectly: bool | None = Field(None, alias="useExcelDirectly")
-    baselinesFromSubfolders: bool | None = Field(None, alias="baselinesFromSubfolders")
-    worksheetName: str | None = Field(None, alias="worksheetName")
-    dateFormat: str | None = Field(None, alias="dateFormat")
-    header_rowIdx: int | None = Field(None, alias="header.rowIdx")
-    data_rowIdx: int | None = Field(None, alias="data.rowIdx")
+    useExcelDirectly: bool | None = Field(
+        None, alias="useExcelDirectly", description="Read directly from Excel files (.xlsx)"
+    )
+    baselinesFromSubfolders: bool | None = Field(
+        None, alias="baselinesFromSubfolders", description="Look for baselines in subfolders"
+    )
+    worksheetName: str | None = Field(
+        None, alias="worksheetName", description="Worksheet name (for Excel files)"
+    )
+    dateFormat: str | None = Field(
+        None, alias="dateFormat", description="Date format string (e.g., %Y-%m-%d)"
+    )
+    header_rowIdx: int | None = Field(
+        None, alias="header.rowIdx", description="Row index for header (1-based)"
+    )
+    data_rowIdx: int | None = Field(
+        None, alias="data.rowIdx", description="Row index where data starts (1-based)"
+    )
 
-    requirement_hierarchyID: int | None = Field(None, alias="requirement.hierarchyID")
-    requirement_id: int | None = Field(None, alias="requirement.id")
-    requirement_version: int | None = Field(None, alias="requirement.version")
-    requirement_name: int | None = Field(None, alias="requirement.name")
-    requirement_owner: int | None = Field(None, alias="requirement.owner")
-    requirement_status: int | None = Field(None, alias="requirement.status")
-    requirement_priority: int | None = Field(None, alias="requirement.priority")
-    requirement_comment: int | None = Field(None, alias="requirement.comment")
-    requirement_date: int | None = Field(None, alias="requirement.date")
-    requirement_references: int | None = Field(None, alias="requirement.references")
-    requirement_description: list[int] | None = Field(None)
-    requirement_type: int | None = Field(None, alias="requirement.type")
-    requirement_folderPattern: str | None = Field(None, alias="requirement.folderPattern")
+    requirement_hierarchyID: int | None = Field(
+        None, alias="requirement.hierarchyID", description="Column index for hierarchy ID"
+    )
+    requirement_id: int | None = Field(
+        None, alias="requirement.id", description="Column index for requirement ID"
+    )
+    requirement_version: int | None = Field(
+        None, alias="requirement.version", description="Column index for requirement version"
+    )
+    requirement_name: int | None = Field(
+        None, alias="requirement.name", description="Column index for requirement name"
+    )
+    requirement_owner: int | None = Field(
+        None, alias="requirement.owner", description="Column index for requirement owner"
+    )
+    requirement_status: int | None = Field(
+        None, alias="requirement.status", description="Column index for requirement status"
+    )
+    requirement_priority: int | None = Field(
+        None, alias="requirement.priority", description="Column index for requirement priority"
+    )
+    requirement_comment: int | None = Field(
+        None, alias="requirement.comment", description="Column index for requirement comment"
+    )
+    requirement_date: int | None = Field(
+        None, alias="requirement.date", description="Column index for requirement date"
+    )
+    requirement_references: int | None = Field(
+        None,
+        alias="requirement.references",
+        description="Column index for requirement references",
+    )
+    requirement_description: list[int] | None = Field(
+        None, description="Column indices for requirement description parts"
+    )
+    requirement_type: int | None = Field(
+        None, alias="requirement.type", description="Column index for requirement type"
+    )
+    requirement_folderPattern: str | None = Field(
+        None,
+        alias="requirement.folderPattern",
+        description="Regex pattern to identify folder/group requirements",
+    )
 
     @property
     def column_settings(self) -> dict[str, FieldInfo]:
@@ -82,35 +177,96 @@ class UserDefinedAttributeConfig(BaseModel):
 
 
 class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValidatorsMixin):
-    requirementsDataPath: Path = Field(..., alias="requirementsDataPath")
+    requirementsDataPath: Path = Field(
+        ..., alias="requirementsDataPath", description="Path to the requirements data directory"
+    )
 
-    columnSeparator: str = Field(..., alias="columnSeparator")
-    arrayValueSeparator: str = Field(..., alias="arrayValueSeparator")
-    baselineFileExtensions: list[str] = Field(..., alias="baselineFileExtensions")
+    columnSeparator: str = Field(
+        ..., alias="columnSeparator", description="Column separator character"
+    )
+    arrayValueSeparator: str = Field(
+        ..., alias="arrayValueSeparator", description="Separator for array values within cells"
+    )
+    baselineFileExtensions: list[str] = Field(
+        ...,
+        alias="baselineFileExtensions",
+        description=(
+            "Allowed file extensions for baseline files (comma-separated, e.g., .tsv,.csv,.txt)"
+        ),
+    )
 
-    useExcelDirectly: bool = Field(False, alias="useExcelDirectly")
-    baselinesFromSubfolders: bool = Field(False, alias="baselinesFromSubfolders")
-    worksheetName: str | None = Field(None, alias="worksheetName")
-    dateFormat: str | None = Field(None, alias="dateFormat")
-    header_rowIdx: int | None = Field(None, alias="header.rowIdx")
-    data_rowIdx: int | None = Field(None, alias="data.rowIdx")
+    useExcelDirectly: bool = Field(
+        False, alias="useExcelDirectly", description="Read directly from Excel files (.xlsx)"
+    )
+    baselinesFromSubfolders: bool = Field(
+        False, alias="baselinesFromSubfolders", description="Look for baselines in subfolders"
+    )
+    worksheetName: str | None = Field(
+        None, alias="worksheetName", description="Worksheet name (for Excel files)"
+    )
+    dateFormat: str | None = Field(
+        None, alias="dateFormat", description="Date format string (e.g., %Y-%m-%d)"
+    )
+    header_rowIdx: int | None = Field(
+        None, alias="header.rowIdx", description="Row index for header (1-based)"
+    )
+    data_rowIdx: int | None = Field(
+        None, alias="data.rowIdx", description="Row index where data starts (1-based)"
+    )
 
-    requirement_hierarchyID: int | None = Field(None, alias="requirement.hierarchyID")
-    requirement_id: int = Field(..., alias="requirement.id")
-    requirement_version: int = Field(..., alias="requirement.version")
-    requirement_name: int = Field(..., alias="requirement.name")
-    requirement_owner: int | None = Field(None, alias="requirement.owner")
-    requirement_status: int | None = Field(None, alias="requirement.status")
-    requirement_priority: int | None = Field(None, alias="requirement.priority")
-    requirement_comment: int | None = Field(None, alias="requirement.comment")
-    requirement_date: int | None = Field(None, alias="requirement.date")
-    requirement_references: int | None = Field(None, alias="requirement.references")
-    requirement_description: list[int] | None = Field(default_factory=list)
-    requirement_type: int | None = Field(None, alias="requirement.type")
-    requirement_folderPattern: str = Field(".*folder.*", alias="requirement.folderPattern")
+    requirement_hierarchyID: int | None = Field(
+        None, alias="requirement.hierarchyID", description="Column index for hierarchy ID"
+    )
+    requirement_id: int = Field(
+        ..., alias="requirement.id", description="Column index for requirement ID"
+    )
+    requirement_version: int = Field(
+        ..., alias="requirement.version", description="Column index for requirement version"
+    )
+    requirement_name: int = Field(
+        ..., alias="requirement.name", description="Column index for requirement name"
+    )
+    requirement_owner: int | None = Field(
+        None, alias="requirement.owner", description="Column index for requirement owner"
+    )
+    requirement_status: int | None = Field(
+        None, alias="requirement.status", description="Column index for requirement status"
+    )
+    requirement_priority: int | None = Field(
+        None, alias="requirement.priority", description="Column index for requirement priority"
+    )
+    requirement_comment: int | None = Field(
+        None, alias="requirement.comment", description="Column index for requirement comment"
+    )
+    requirement_date: int | None = Field(
+        None, alias="requirement.date", description="Column index for requirement date"
+    )
+    requirement_references: int | None = Field(
+        None, alias="requirement.references", description="Column index for requirement references"
+    )
+    requirement_description: list[int] | None = Field(
+        default_factory=list, description="Column indices for requirement description parts"
+    )
+    requirement_type: int | None = Field(
+        None, alias="requirement.type", description="Column index for requirement type"
+    )
+    requirement_folderPattern: str = Field(
+        ".*folder.*",
+        alias="requirement.folderPattern",
+        description="Regex pattern to identify folder/group requirements",
+    )
 
-    udf_count: int = Field(0, alias="udf.count")
-    udf_configs: list[UserDefinedAttributeConfig] = Field(default_factory=list)
+    udf_count: int = Field(
+        0,
+        alias="udf.count",
+        description="Number of user-defined attributes (auto-generated)",
+        json_schema_extra={"skip_if_wizard": True},
+    )
+    udf_configs: list[UserDefinedAttributeConfig] = Field(
+        default_factory=list,
+        description="User-defined attribute configurations",
+        json_schema_extra={"prompt_as_list": True, "item_label": "User Defined Attribute"},
+    )
 
     @property
     def column_settings(self) -> dict[str, FieldInfo]:
@@ -129,56 +285,132 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
             )
         return v
 
+    @model_serializer(mode="wrap")
+    def serialize_model(self, serializer: SerializerFunctionWrapHandler, info: SerializationInfo):
+        """Custom serializer that flattens derived fields for properties file export."""
+        data = serializer(self)
 
-def validate_array_value_separator(config) -> None:
-    array_sep = getattr(config, "arrayValueSeparator", None)
-    column_sep = getattr(config, "columnSeparator", None)
-    if array_sep is None or column_sep is None:
-        return
-    if any(char in array_sep for char in INVALID_SEPARATOR_CHARS | {column_sep}):
+        # Only flatten when serializing by alias (for properties files)
+        if info.by_alias:
+            dump_baseline_file_extensions_field(data)
+            dump_requirement_description_field(data)
+            dump_udf_configs_field(data)
+
+        return data
+
+
+def validate_array_value_separator(v: str, data: dict) -> str:
+    """Validate arrayValueSeparator against columnSeparator.
+
+    Args:
+        v: The arrayValueSeparator value to validate
+        data: ValidationInfo.data containing other field values
+
+    Returns:
+        The validated arrayValueSeparator value
+    """
+    column_sep = data.get("columnSeparator")
+    if column_sep is None:
+        return v
+    if any(char in v for char in INVALID_SEPARATOR_CHARS | {column_sep}):
         raise ValueError(
             "Invalid value for 'arrayValueSeparator' in reader config: "
             "Cannot contain line feed characters ('\\r', '\\n', '\\r\\n'), "
-            "double quotes ('\"') or the defined 'columnSeparator'"
+            "double quotes ('\"') or the defined 'columnSeparator' "
             f"({column_sep!r})."
         )
+    return v
 
 
-def validate_data_row_idx(config) -> None:
-    data_row_idx = getattr(config, "data_rowIdx", None)
-    header_row_idx = getattr(config, "header_rowIdx", None)
+def validate_data_row_idx(v: int | None, data: dict) -> int | None:
+    """Validate data_rowIdx against header_rowIdx.
 
-    if data_row_idx is None:
-        return
-    if data_row_idx < 1:
+    Args:
+        v: The data_rowIdx value to validate
+        data: ValidationInfo.data containing other field values
+
+    Returns:
+        The validated data_rowIdx value
+    """
+    if v is None:
+        return v
+    if v < 1:
         raise ValueError(
             "Invalid value for 'data.rowIdx' in reader config: "
-            f"Expected a positive integer (starting from 1), but got '{data_row_idx}'."
+            f"Expected a positive integer (starting from 1), but got '{v}'."
         )
-    if header_row_idx is not None and data_row_idx <= header_row_idx:
+
+    header_row_idx = data.get("header_rowIdx") or data.get("header.rowIdx")
+    if header_row_idx is not None and v <= header_row_idx:
         raise ValueError(
             "Invalid value for 'data.rowIdx' in reader config: "
-            "Expected a row index (starting from 1) greater than 'header.rowIdx'"
-            f"({header_row_idx}), but got {data_row_idx}."
+            f"Must be greater than 'header.rowIdx' ({header_row_idx}), but got '{v}'."
         )
+    return v
 
 
-def validate_column_settings(config) -> None:
+def _get_field_alias(field_name: str) -> str:
+    """Convert field name to field alias for error messages.
+
+    Args:
+        field_name: The field name (e.g., 'requirement_id')
+
+    Returns:
+        The field alias (e.g., 'requirement.id')
+    """
+    if field_name == "requirement_description":
+        return "requirement.description"
+    return field_name.replace("_", ".", 1)
+
+
+def validate_column_setting(field_name: str, value: int | list[int], data: dict) -> int | list[int]:
+    """Validate a single column setting field against already validated fields.
+
+    Args:
+        field_name: Name of the field being validated (e.g., 'requirement_id')
+        value: The column index or list of column indices
+        data: ValidationInfo.data containing already validated fields
+
+    Returns:
+        The validated value
+    """
     column_idx_mapping: dict[int, str] = {}
-    for field_name, field_info in config.column_settings.items():
-        field_value = getattr(config, field_name)
-        if field_value is None:
-            continue
-        if isinstance(field_value, list):
-            field_alias = field_name.replace("_", ".")
-            for idx, column_idx in enumerate(field_value, start=1):
-                alias_with_idx = f"{field_alias}.{idx}"
-                validate_column_index(column_idx, alias_with_idx, column_idx_mapping)
-        elif isinstance(field_value, int):
-            validate_column_index(field_value, field_info.alias, column_idx_mapping)
+    for key, val in data.items():
+        if key.startswith("requirement_") and key != field_name and val is not None:
+            field_alias = _get_field_alias(key)
+            if isinstance(val, list):
+                for idx, column_idx in enumerate(val, start=1):
+                    if isinstance(column_idx, int):
+                        _validate_column_index(
+                            column_idx,
+                            f"{field_alias}.{idx}",
+                            column_idx_mapping,
+                        )
+            elif isinstance(val, int):
+                _validate_column_index(val, field_alias, column_idx_mapping)
+    field_alias = _get_field_alias(field_name)
+    if isinstance(value, list):
+        for idx, column_idx in enumerate(value, start=1):
+            _validate_column_index(column_idx, f"{field_alias}.{idx}", column_idx_mapping)
+    elif isinstance(value, int):
+        _validate_column_index(value, field_alias, column_idx_mapping)
+
+    return value
 
 
-def validate_column_index(column_idx: int, field_alias: str, column_idx_mapping: dict[int, str]):
+def _validate_column_index(
+    column_idx: int, field_alias: str, column_idx_mapping: dict[int, str]
+) -> None:
+    """Validate a single column index and add to mapping if valid.
+
+    Args:
+        column_idx: The column index to validate
+        field_alias: The field alias for error messages
+        column_idx_mapping: Mapping of already validated column indices
+
+    Raises:
+        ValueError: If column index is invalid or already used
+    """
     if not isinstance(column_idx, int) or column_idx < 1:
         raise ValueError(
             f"Invalid value for '{field_alias}' in reader config: "
@@ -256,6 +488,35 @@ def build_udf_configs_field(config: dict) -> list[UserDefinedAttributeConfig]:
         udf_configs.append(_build_single_udf_config(config, i))
     config["udf_configs"] = udf_configs
     return udf_configs
+
+
+def dump_baseline_file_extensions_field(data: dict) -> None:
+    """Convert baselineFileExtensions list to comma-separated string for properties export."""
+    if "baselineFileExtensions" in data and isinstance(data["baselineFileExtensions"], list):
+        data["baselineFileExtensions"] = ",".join(
+            str(ext) for ext in data["baselineFileExtensions"]
+        )
+
+
+def dump_requirement_description_field(data: dict) -> None:
+    """Flatten requirement_description list to individual requirement.description.N keys."""
+    if "requirement_description" in data and isinstance(data["requirement_description"], list):
+        desc_list = data.pop("requirement_description")
+        for idx, col_idx in enumerate(desc_list, start=1):
+            data[f"requirement.description.{idx}"] = col_idx
+
+
+def dump_udf_configs_field(data: dict) -> None:
+    """Flatten udf_configs list to individual udf.attrN.* keys for properties export."""
+    if "udf_configs" in data and isinstance(data["udf_configs"], list):
+        udf_list = data.pop("udf_configs")
+        data["udf.count"] = len(udf_list)
+        for idx, udf in enumerate(udf_list, start=1):
+            data[f"udf.attr{idx}.name"] = udf["name"]
+            data[f"udf.attr{idx}.type"] = udf["type"]
+            data[f"udf.attr{idx}.column"] = udf["column"]
+            if udf.get("trueValue") is not None:
+                data[f"udf.attr{idx}.trueValue"] = udf["trueValue"]
 
 
 def _parse_udf_count(raw_count: object) -> int:
