@@ -6,6 +6,7 @@ A REST API service for imbus TestBench that provides unified access to requireme
 
 - [Installation](#installation)
 - [Setup](#setup)
+- [CLI Commands](#cli-commands)
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [API Documentation](#api-documentation)
@@ -70,154 +71,88 @@ If the installation was successful, this will output the installed version of th
 
 ## Setup
 
-Before starting the service, you need to configure authentication and choose a requirement reader.
+> **New users?** Use [Option 1: Interactive Wizard](#option-1-quick-start-with-interactive-wizard-recommended) for the fastest setup.
+> 
+> **Advanced users?** See [Option 2: Manual Configuration](#option-2-manual-configuration) for full control.
 
-### Step 1: Initialize configuration
+### Option 1: Quick Start with Interactive Wizard (Recommended)
 
-The service requires a configuration file in **TOML** format.
-
-Run the init command to create your configuration file interactively:
+Run the interactive configuration wizard:
 
 ```powershell
 testbench-requirement-service init
 ```
 
-This launches an interactive wizard that guides you through configuring:
-- Service settings (host, port)
-- Service credentials (username, password)
-- Reader selection and configuration (JSONL, Excel, Jira, or Custom)
+This **single command** guides you through:
+- Service settings (host, port, debug mode)
+- Credentials setup (username, password)
+- Reader selection (JSONL, Excel, Jira, or Custom)
+- Reader-specific configuration
 
-The wizard creates a `config.toml` file with all settings in one place. You can also use the `configure` command to update specific parts of your configuration later (see [CLI Commands](#cli-commands)).
+The wizard creates a complete `config.toml` file with all settings.
 
-**Note:** The legacy `config.py` (Python) format is still supported but will be deprecated in a future release. New projects should use TOML.
+**Then start the service:**
 
-### Step 2: Set up your service credentials
+```powershell
+testbench-requirement-service start
+```
 
-Set credentials for Basic Auth by running:
+**That's it!** Your service is ready to use.
+
+---
+
+### Option 2: Manual Configuration
+
+If you prefer manual setup or need to customize existing configuration:
+
+#### Step 1: Install optional dependencies (if needed)
+
+Choose based on your data source:
+
+| Reader | Data Source | Install Command |
+|--------|-------------|-----------------|
+| **[JsonlRequirementReader](#jsonlrequirementreader-default)** *(default)* | `.jsonl` files | Included in base install |
+| **[ExcelRequirementReader](#excelrequirementreader)** | `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` files | `pip install testbench-requirement-service[excel]` |
+| **[JiraRequirementReader](#jirarequirementreader)** | Jira REST API | `pip install testbench-requirement-service[jira]` |
+
+#### Step 2: Create configuration file
+
+Create `config.toml` with your reader configuration. See the [Configuration](#configuration) section for detailed options, or jump directly to your reader:
+- [JsonlRequirementReader configuration](#jsonlrequirementreader-default)
+- [ExcelRequirementReader configuration](#excelrequirementreader)
+- [JiraRequirementReader configuration](#jirarequirementreader)
+
+**Quick example** (JsonlRequirementReader):
+
+```toml
+[testbench-requirement-service]
+reader_class = "JsonlRequirementReader"
+host = "127.0.0.1"
+port = 8000
+
+[testbench-requirement-service.reader_config]
+requirements_path = "requirements/jsonl/"
+```
+
+#### Step 3: Set credentials
 
 ```powershell
 testbench-requirement-service set-credentials
 ```
 
-This prompts for username and password and updates your configuration file with hashed credentials. Alternatively, specify them directly:
+This prompts for username and password and securely stores them in `config.toml`.
+
+#### Step 4: Start the service
 
 ```powershell
-testbench-requirement-service set-credentials --username USERNAME --password PASSWORD
+testbench-requirement-service start
 ```
-
-### Step 3: Choose and configure your requirement reader
-
-The service supports four built-in readers. Choose one based on your data source:
-
-| Reader | Data Source | Config Format | Install Command |
-|--------|-------------|---------------|-----------------|
-| **[JsonlRequirementReader](#jsonlrequirementreader-default)** *(default)* | `.jsonl` files | `.toml` | Included in base install |
-| **[ExcelRequirementReader](#excelrequirementreader)** | `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` files | `.toml` or `.properties` file | `pip install testbench-requirement-service[excel]` |
-| **[JiraRequirementReader](#jirarequirementreader)** | Jira REST API | `.toml` + `.env` | `pip install testbench-requirement-service[jira]` |
-
-By default, all configuration is stored in `config.toml`. For example, to configure the JsonlRequirementReader:
-
-```toml
-[testbench-requirement-service]
-reader_class = "JsonlRequirementReader"
-...
-
-[testbench-requirement-service.reader_config]
-requirements_path = "requirements/jsonl/"
-```
-
-**Optional:** You can use a separate configuration file for your reader by setting `reader_config_path`:
-
-```toml
-[testbench-requirement-service]
-reader_class = "JsonlRequirementReader"
-reader_config_path = "reader_config.toml"  # Optional: use separate file
-...
-```
-
-Note: When using a separate file, reader configuration goes directly in the file without a section prefix.
-
-Refer to the [Configuration](#configuration) section for detailed configuration options and advanced settings.
-
-**Note:** You can override configuration settings at startup using command-line flags:
-
-```powershell
-testbench-requirement-service start --reader-class JiraRequirementReader --reader-config jira_config.toml
-```
-
-### Step 4: Configure your reader (if not using the wizard)
-
-If you didn't use the init wizard or need to manually edit your configuration, add the reader configuration directly to your `config.toml` file.
-
-#### For JsonlRequirementReader (default):
-
-Add to your `config.toml`:
-
-```toml
-[testbench-requirement-service]
-reader_class = "JsonlRequirementReader"
-...
-
-[testbench-requirement-service.reader_config]
-requirements_path = "requirements/jsonl/"
-```
-
-See [JsonlRequirementReader](#jsonlrequirementreader-default) for full schema and requirements.
-
-#### For ExcelRequirementReader:
-
-Option 1: Add inline to `config.toml`:
-
-```toml
-[testbench-requirement-service]
-reader_class = "ExcelRequirementReader"
-...
-
-[testbench-requirement-service.reader_config]
-requirementsDataPath = "requirements/excel/"
-columnSeparator = ";"
-arrayValueSeparator = ","
-baselineFileExtensions = ".tsv,.csv,.txt"
-# ... additional settings
-```
-
-Option 2: Use separate `excel_config.properties` file:
-
-```toml
-[testbench-requirement-service]
-reader_class = "ExcelRequirementReader"
-reader_config_path = "excel_config.properties"
-```
-
-See [ExcelRequirementReader](#excelrequirementreader) for complete configuration options.
-
-#### For JiraRequirementReader:
-
-Add to your `config.toml`:
-
-```toml
-[testbench-requirement-service]
-reader_class = "JiraRequirementReader"
-...
-
-[testbench-requirement-service.reader_config]
-server_url = "https://your-jira.atlassian.net/"
-auth_type = "basic"
-# ... additional settings
-```
-
-Create a `.env` file with credentials:
-
-```text
-JIRA_USERNAME=your-email@example.com
-JIRA_API_TOKEN=your-api-token
-```
-
-See [JiraRequirementReader](#jirarequirementreader) for authentication methods and full configuration.
 
 ---
 
-**You're now ready to start the service!** See the [Usage](#usage) section below.
+**Tip:** Use `testbench-requirement-service configure` to update specific parts of your configuration later without starting from scratch.
+
+**Note:** The legacy `config.py` (Python) format is still supported but will be deprecated in a future release. New projects should use TOML.
 
 ## CLI Commands
 
@@ -523,38 +458,9 @@ Below is a detailed description of each reader:
 
 Reads requirement data from `.jsonl` (JSON Lines) files.
 
-#### Prerequisites:
+**When to use**: You have requirement data in `.jsonl` format or want the simplest reader with no external dependencies.
 
-1. **Install the base package:**
-   ```powershell
-   pip install testbench-requirement-service
-   ```
-   The JsonlRequirementReader is included in the base installation.
-
-2. **Set up credentials** (if not already done):
-   ```powershell
-   testbench-requirement-service set-credentials
-   ```
-
-3. **Configure in your app configuration file** (`config.toml`):
-   ```toml
-   [testbench-requirement-service]
-   reader_class = "JsonlRequirementReader"
-   
-   [testbench-requirement-service.reader_config]
-   requirements_path = "requirements/jsonl/"
-   ```
-   
-   **Optional:** Use a separate configuration file by setting `reader_config_path`:
-   ```toml
-   [testbench-requirement-service]
-   reader_class = "JsonlRequirementReader"
-   reader_config_path = "reader_config.toml"  # Optional
-   ```
-   
-   Note: Separate files contain config directly without section prefix.
-   
-   See [Setup](#setup) for detailed configuration instructions.
+**Installation**: Included in base package (no extras needed).
 
 #### Configuration:
 The configuration can be added directly to `config.toml` under `[testbench-requirement-service.reader_config]` (recommended) or in a separate `.toml` file without a section prefix.
@@ -646,44 +552,14 @@ requirements_path = "requirements/jsonl/"
 
 ### ExcelRequirementReader
 
-Reads requirement data from various file formats, including `.xlsx`, `.xls`, `.csv`, `.tsv`, and `.txt` files. The reader allows for flexible configuration to handle either Microsoft Excel formats (`.xlsx` or `.xls`) or CSV/Text files (`.csv`, `.tsv` or `.txt`).
+Reads requirement data from various file formats: `.xlsx`, `.xls`, `.csv`, `.tsv`, and `.txt` files.
 
-#### Prerequisites:
+**When to use**: You have requirements in Excel spreadsheets or delimited text files (CSV/TSV).
 
-1. **Install Excel extras:**
-   ```powershell
-   pip install testbench-requirement-service[excel]
-   ```
-   This installs dependencies for reading `.xlsx`, `.xls`, `.csv`, `.tsv`, and `.txt` files.
-
-2. **Set up credentials** (if not already done):
-   ```powershell
-   testbench-requirement-service set-credentials
-   ```
-
-3. **Configure in your app configuration file** (`config.toml`):
-   
-   **Option 1: Inline configuration in `config.toml` (recommended):**
-   ```toml
-   [testbench-requirement-service]
-   reader_class = "ExcelRequirementReader"
-   
-   [testbench-requirement-service.reader_config]
-   requirementsDataPath = "requirements/excel/"
-   columnSeparator = ";"
-   arrayValueSeparator = ","
-   baselineFileExtensions = ".tsv,.csv,.txt"
-   # ... additional settings
-   ```
-   
-   **Option 2: Use a separate `.properties` file:**
-   ```toml
-   [testbench-requirement-service]
-   reader_class = "ExcelRequirementReader"
-   reader_config_path = "excel_config.properties"
-   ```
-   
-   See [Setup](#setup) for detailed configuration instructions.
+**Installation**: Requires Excel extras:
+```powershell
+pip install testbench-requirement-service[excel]
+```
 
 #### Configuration:
 The configuration can be added directly to `config.toml` under `[testbench-requirement-service.reader_config]` (recommended) or in a separate Java Properties `.properties` file without a section prefix. 
@@ -830,46 +706,16 @@ useExcelDirectly = false
 
 ### JiraRequirementReader
 
-Reads requirement data from a Jira instance using the Jira REST API. The connection is configured via a `.toml` file.
+Reads requirement data from a Jira instance using the Jira REST API.
 
-#### Prerequisites:
+**When to use**: Your requirements are managed in Jira issues (Stories, Epics, Tasks, etc.).
 
-1. **Install Jira extras:**
-   ```powershell
-   pip install testbench-requirement-service[jira]
-   ```
-   This installs the Jira Python client and HTML parsing libraries (`jira`, `beautifulsoup4`).
+**Installation**: Requires Jira extras:
+```powershell
+pip install testbench-requirement-service[jira]
+```
 
-2. **Set up credentials** (if not already done):
-   ```powershell
-   testbench-requirement-service set-credentials
-   ```
-
-3. **Configure in your app configuration file** (`config.toml`):
-   
-   **Option 1: Inline configuration in `config.toml` (recommended):**
-   ```toml
-   [testbench-requirement-service]
-   reader_class = "JiraRequirementReader"
-   
-   [testbench-requirement-service.reader_config]
-   server_url = "https://your-jira.atlassian.net/"
-   auth_type = "basic"
-   # ... additional settings
-   ```
-   
-   **Option 2: Use a separate configuration file:**
-   ```toml
-   [testbench-requirement-service]
-   reader_class = "JiraRequirementReader"
-   reader_config_path = "jira_config.toml"
-   ```
-   
-   See [Setup](#setup) for detailed configuration instructions.
-
-4. **Set up Jira authentication:**
-   - Create a `.env` file with your Jira credentials (see [Authentication methods](#authentication-methods) below)
-   - Or configure credentials directly in the configuration file
+**Authentication**: Create a `.env` file with your Jira credentials (see [Authentication methods](#authentication-methods) below) or configure credentials in `config.toml`.
 
 #### Configuration:
 The configuration can be added directly to `config.toml` under `[testbench-requirement-service.reader_config]` (recommended) or in a separate `.toml` file without a section prefix.
