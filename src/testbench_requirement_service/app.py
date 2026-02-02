@@ -11,6 +11,7 @@ from testbench_requirement_service.utils.config import load_config
 from testbench_requirement_service.utils.dependencies import (
     check_excel_dependencies,
     check_jira_dependencies,
+    check_sql_dependencies,
 )
 
 
@@ -38,6 +39,9 @@ def check_dependencies(app: Sanic) -> None:
 
     if "JiraRequirementReader" in app.config.READER_CLASS:
         check_jira_dependencies(raise_on_missing=True)
+
+    if "SqlRequirementReader" in app.config.READER_CLASS:
+        check_sql_dependencies(raise_on_missing=True)
 
 
 def create_app(name: str, config: AppConfig | None = None) -> Sanic:

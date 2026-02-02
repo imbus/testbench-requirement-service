@@ -107,7 +107,7 @@ testbench-requirement-service set-credentials --username USERNAME --password PAS
 
 ### Step 3: Choose and configure your requirement reader
 
-The service supports three built-in readers. Choose one based on your data source:
+The service supports four built-in readers. Choose one based on your data source:
 
 | Reader | Data Source | Config Format | Install Command |
 |--------|-------------|---------------|-----------------|
@@ -612,7 +612,7 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
   ```json
   [
       {
-          "name": "string", 
+          "name": "string",
           "valueType": "STRING" | "ARRAY" | "BOOLEAN"
       }
   ]
@@ -690,6 +690,8 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
 
 When using a `.properties` file, the reader uses a global `.properties` file, but if a project-specific `.properties` file is found, it can override the global configuration.
 
+
+**Dataframe buffering:** The Excel reader keeps a catalog of dataframes keyed by file path. A cached dataframe is reused if the source file modification time matches, and each access refreshes the entry age. Entries expire after `bufferMaxAgeMinutes`, and a background cleanup task runs every `bufferCleanupIntervalMinutes`. If the total buffer size exceeds `bufferMaxSizeMiB`, the reader evicts the least-recently accessed entries until the buffer is back to $80\%$ of the limit. Set `bufferMaxSizeMiB=0` to disable buffering entirely.
 - **Global Settings**:
   The global settings are mandatory. They can only be configured in the global configuration file.
 
@@ -715,6 +717,9 @@ When using a `.properties` file, the reader uses a global `.properties` file, bu
   | `dateFormat`              | Date format in documents as Javas SimpleDateFormat                                                                        | `dateFormat=yyyy-MM-dd HH:mm:ss` |
   | `header.rowIdx`           | Line number of the header line in the requirement documents. Numbering starts at 1.                                       | `header.rowIdx=1`                |
   | `data.rowIdx`             | Line number of the first requirement line. Numbering starts at 1.                                                         | `data.rowIdx=2`                  |
+  | `bufferMaxAgeMinutes`       | Maximum idle age (in minutes) before a buffered dataframe is evicted.                                                      | `bufferMaxAgeMinutes=1440`       |
+  | `bufferMaxSizeMiB`          | Maximum total buffer size in MiB. When exceeded, least-recently accessed entries are evicted until $80\%$ of the limit is reached again. Set to $0$ to disable buffering. | `bufferMaxSizeMiB=1024`          |
+  | `bufferCleanupIntervalMinutes` | Background cleanup interval in minutes for expiring cached dataframes.                                              | `bufferCleanupIntervalMinutes=1` |
 - **Column Mapping: Attributes**:
   The column mapping of attributes configured in the global configuration file can be overwritten by values in project-specific configuration files. The column mapping for the attributes `íd`, `version` and `name` is mandatory. Column numbering starts at 1.
 
@@ -764,6 +769,9 @@ worksheetName=Tabelle1
 dateFormat=yyyy-MM-dd HH:mm:ss
 header.rowIdx=1
 data.rowIdx=2
+bufferMaxAgeMinutes=1440
+bufferMaxSizeMiB=1024
+bufferCleanupIntervalMinutes=1
 
 # Column Mapping: Attributes
 requirement.hierarchyID=2

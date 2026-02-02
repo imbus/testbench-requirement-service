@@ -3,6 +3,7 @@ import importlib.util
 
 EXCEL_PACKAGES = ["pandas", "openpyxl", "xlrd", "javaproperties"]
 JIRA_PACKAGES = ["jira", "beautifulsoup4"]
+SQL_PACKAGES = ["sqlalchemy"]
 
 
 def _missing_packages(packages: list[str]) -> list[str]:
@@ -90,6 +91,31 @@ def check_jira_dependencies(raise_on_missing: bool = True) -> list[str]:
     return missing
 
 
+def check_sql_dependencies(raise_on_missing: bool = True) -> list[str]:
+    """
+    Check for SQL-related optional dependencies.
+
+    Args:
+        raise_on_missing: if True, raise ImportError when missing packages are found.
+                          if False, return the list of missing packages.
+
+    Returns:
+        List of missing package names (empty if all present).
+
+    Raises:
+        ImportError: when raise_on_missing is True and missing packages exist.
+    """
+    missing = _missing_packages(SQL_PACKAGES)
+    if missing and raise_on_missing:
+        raise ImportError(
+            "SQL functionality is required but missing.\n"
+            "To enable SQL support, install the required dependencies with:\n\n"
+            "    pip install testbench-requirement-service[sql]\n\n"
+            f"Missing dependencies: {', '.join(missing)}"
+        )
+    return missing
+
+
 def is_excel_available() -> bool:
     """Convenience: True when all excel packages are available."""
     return not _missing_packages(EXCEL_PACKAGES)
@@ -98,6 +124,11 @@ def is_excel_available() -> bool:
 def is_jira_available() -> bool:
     """Convenience: True when all jira packages are available."""
     return not _missing_packages(JIRA_PACKAGES)
+
+
+def is_sql_available() -> bool:
+    """Convenience: True when all sql packages are available."""
+    return not _missing_packages(SQL_PACKAGES)
 
 
 def check_reader_dependencies(reader_type: str, raise_on_missing: bool = True) -> list[str]:
@@ -118,4 +149,6 @@ def check_reader_dependencies(reader_type: str, raise_on_missing: bool = True) -
         return check_excel_dependencies(raise_on_missing=raise_on_missing)
     if reader_type == "jira":
         return check_jira_dependencies(raise_on_missing=raise_on_missing)
+    if reader_type == "sql":
+        return check_sql_dependencies(raise_on_missing=raise_on_missing)
     return []

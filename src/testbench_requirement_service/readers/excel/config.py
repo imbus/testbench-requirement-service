@@ -79,9 +79,35 @@ class ExcelRequirementReaderConfigValidatorsMixin:
             return v
         return validate_column_setting(info.field_name, v, info.data)
 
-    @model_validator(mode="after")
-    def check_required_fields(self):
-        raise ValueError("TESTING ONLY - REMOVE ME")
+    @field_validator("bufferMaxAgeMinutes")
+    @classmethod
+    def validate_buffer_max_age_minutes(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError(
+                "Invalid value for 'bufferMaxAgeMinutes' in reader config: "
+                f"Expected a positive number of minutes, but got '{v}'."
+            )
+        return v
+
+    @field_validator("bufferMaxSizeMiB")
+    @classmethod
+    def validate_buffer_max_size_mib(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError(
+                "Invalid value for 'bufferMaxSizeMiB' in reader config: "
+                f"Expected a positive number of MiB, but got '{v}'."
+            )
+        return v
+
+    @field_validator("bufferCleanupIntervalMinutes")
+    @classmethod
+    def validate_buffer_cleanup_interval_minutes(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError(
+                "Invalid value for 'bufferCleanupIntervalMinutes' in reader config: "
+                f"Expected a positive number of minutes, but got '{v}'."
+            )
+        return v
 
 
 class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfigValidatorsMixin):
@@ -159,6 +185,10 @@ class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfi
         alias="requirement.folderPattern",
         description="Regex pattern to identify folder/group requirements",
     )
+
+    bufferMaxAgeMinutes: float | None = Field(None, alias="bufferMaxAgeMinutes")
+    bufferMaxSizeMiB: float | None = Field(None, alias="bufferMaxSizeMiB")
+    bufferCleanupIntervalMinutes: float | None = Field(None, alias="bufferCleanupIntervalMinutes")
 
     @property
     def column_settings(self) -> dict[str, FieldInfo]:
@@ -244,7 +274,7 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
     requirement_references: int | None = Field(
         None, alias="requirement.references", description="Column index for requirement references"
     )
-    requirement_description: list[int] | None = Field(
+    requirement_description: list[int] = Field(
         default_factory=list, description="Column indices for requirement description parts"
     )
     requirement_type: int | None = Field(
@@ -255,6 +285,10 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
         alias="requirement.folderPattern",
         description="Regex pattern to identify folder/group requirements",
     )
+
+    bufferMaxAgeMinutes: float = Field(1440.0, alias="bufferMaxAgeMinutes")
+    bufferMaxSizeMiB: float = Field(1024.0, alias="bufferMaxSizeMiB")
+    bufferCleanupIntervalMinutes: float = Field(1.0, alias="bufferCleanupIntervalMinutes")
 
     udf_count: int = Field(
         0,

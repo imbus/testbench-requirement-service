@@ -37,22 +37,10 @@ def build_requirementobjectnode_from_sprint(
     )
 
 
-def build_userdefinedattribute_object(  # noqa: RET503
+def build_userdefinedattribute_object(
     field: dict[str, Any], field_value: Any
 ) -> UserDefinedAttribute:
     value_type = extract_valuetype_from_issue_field(field)
-    if value_type == "STRING":
-        if hasattr(field_value, "value"):
-            string_value = field_value.value
-        elif hasattr(field_value, "name"):
-            string_value = field_value.name
-        else:
-            string_value = str(field_value) if field_value else None
-        return UserDefinedAttribute(
-            name=field["name"],
-            valueType="STRING",
-            stringValue=string_value,
-        )
     if value_type == "ARRAY":
         string_values: list[str] | None = None
         if isinstance(field_value, list):
@@ -75,6 +63,18 @@ def build_userdefinedattribute_object(  # noqa: RET503
             valueType="BOOLEAN",
             booleanValue=bool(field_value),
         )
+    # Default to STRING type
+    if hasattr(field_value, "value"):
+        string_value = field_value.value
+    elif hasattr(field_value, "name"):
+        string_value = field_value.name
+    else:
+        string_value = str(field_value) if field_value else None
+    return UserDefinedAttribute(
+        name=field["name"],
+        valueType="STRING",
+        stringValue=string_value,
+    )
 
 
 def extract_valuetype_from_issue_field(

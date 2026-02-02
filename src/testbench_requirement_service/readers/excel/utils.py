@@ -1,8 +1,10 @@
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from testbench_requirement_service.log import logger
 from testbench_requirement_service.models.requirement import (
     ExtendedRequirementObject,
     RequirementObjectNode,
@@ -44,6 +46,12 @@ def get_column_mapping_for_config(config: ExcelRequirementReaderConfig) -> dict[
 def read_data_frame_from_file_path(
     file_path: Path, config: ExcelRequirementReaderConfig
 ) -> pd.DataFrame:
+    logger.debug(
+        "Reading file: %s (%.2f MiB)",
+        file_path,
+        file_path.stat().st_size / (1024**2),
+    )
+    start = time.monotonic()
     header_row_idx = (config.header_rowIdx or 1) - 1
     data_row_idx = (config.data_rowIdx or 2) - 1
     skiprows = list(range(header_row_idx + 1, data_row_idx))
@@ -89,6 +97,13 @@ def read_data_frame_from_file_path(
         )
         df["description"] = description_values
 
+    # Bytes used by the DataFrame columns + index
+    bytes_used = df.memory_usage(index=True, deep=True).sum()
+    logger.debug(
+        "Read dataframe in %.3fs (%.2f MiB)",
+        time.monotonic() - start,
+        bytes_used / (1024**2),
+    )
     return df
 
 
@@ -101,7 +116,7 @@ def build_extendedrequirementobject_from_row_data(
     row_data["requirement"] = re.fullmatch(folder_pattern, row_data.get("type", "")) is None
     sep = config.arrayValueSeparator
     row_data["documents"] = (
-        str(row_data.get("documents")).split(sep) if row_data.get("documents") else []
+        str(row_data.get("references")).split(sep) if row_data.get("references") else []
     )
     row_data["baseline"] = baseline
 
