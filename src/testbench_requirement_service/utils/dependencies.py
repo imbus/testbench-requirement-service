@@ -98,3 +98,24 @@ def is_excel_available() -> bool:
 def is_jira_available() -> bool:
     """Convenience: True when all jira packages are available."""
     return not _missing_packages(JIRA_PACKAGES)
+
+
+def check_reader_dependencies(reader_type: str, raise_on_missing: bool = True) -> list[str]:
+    """Check dependencies for a specific reader type.
+
+    Args:
+        reader_type: Type of reader ('excel', 'jira', 'jsonl', etc.)
+        raise_on_missing: if True, raise ImportError when missing packages are found.
+                          if False, return the list of missing packages.
+
+    Returns:
+        List of missing package names (empty if all present or no checks needed).
+
+    Raises:
+        ImportError: when raise_on_missing is True and missing packages exist.
+    """
+    if reader_type == "excel":
+        return check_excel_dependencies(raise_on_missing=raise_on_missing)
+    if reader_type == "jira":
+        return check_jira_dependencies(raise_on_missing=raise_on_missing)
+    return []

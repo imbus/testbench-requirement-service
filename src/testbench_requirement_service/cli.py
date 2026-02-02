@@ -32,6 +32,7 @@ def print_wizard_banner():
 @click.pass_context
 def cli(ctx):
     ctx.max_content_width = 120
+    load_dotenv()
 
 
 @click.command()
@@ -110,9 +111,6 @@ def configure(  # noqa: PLR0911, PLR0913, C901
             view_current_config(config_path)
             return
 
-        click.echo("\nConfiguration cancelled.")
-        return
-
     run_full_wizard(config_path)
 
 
@@ -159,8 +157,6 @@ def start(  # noqa: PLR0913
     dev: bool = False,
 ):
     """Start the TestBench Requirement Service."""
-    load_dotenv()
-
     app_name = "TestBenchRequirementService"
     app_config = AppConfig(
         config_path=config_path,

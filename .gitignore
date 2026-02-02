@@ -179,7 +179,7 @@ tmp/
 *.tmp
 
 # Backup files
-*.backup
+*backup*
 
 # Application log files
 *.log
