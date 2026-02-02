@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class JsonlRequirementReaderConfig(BaseModel):
-    requirements_path: Path
+    requirements_path: Path = Field(..., description="Path to your JSONL requirements directory")
 
     @field_validator("requirements_path", mode="after")
     @classmethod
