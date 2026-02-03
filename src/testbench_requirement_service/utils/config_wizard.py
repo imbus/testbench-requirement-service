@@ -605,8 +605,6 @@ def run_full_wizard(config_path: Path):  # noqa: C901, PLR0912, PLR0915
     click.echo()
 
     reader_config_path = ask_for_separate_config(reader_type)
-    if reader_config_path:
-        service_config["reader_config_path"] = reader_config_path
 
     click.echo("\n📋 Configuration Summary\n")
     click.echo("─" * 60)
@@ -639,18 +637,16 @@ def run_full_wizard(config_path: Path):  # noqa: C901, PLR0912, PLR0915
 
     click.echo("\n⚙️  Generating configuration files...\n")
 
-    service_config = merge_with_defaults(
-        service_config, RequirementServiceConfig, exclude_fields={"reader_config"}
-    )
-
     if reader_config_path:
         # Save to separate file
+        service_config["reader_config_path"] = reader_config_path
         save_reader_config(reader_config, Path(reader_config_path))
         click.echo(f"✓ Created {reader_config_path}")
     else:
         # Add reader config inline to [testbench-requirement-service.reader_config]
         service_config["reader_config"] = reader_config
 
+    service_config = merge_with_defaults(service_config, RequirementServiceConfig)
     config_dict: dict[str, Any] = {CONFIG_PREFIX: service_config}
     save_toml_config(config_dict, config_path)
     click.echo(f"✓ Created {config_path.name}")

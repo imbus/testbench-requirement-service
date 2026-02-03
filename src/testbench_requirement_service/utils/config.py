@@ -279,7 +279,8 @@ def update_config_files(
     Args:
         config_path: Path to the main config file
         updates: Dictionary of fields to update in service config section
-        reader_config: Optional reader configuration to save to separate file or inline
+        reader_config: Optional reader configuration to save to separate file or inline.
+                      If None, reader config is not modified.
     """
     service_config = load_service_config(config_path)
 
@@ -287,12 +288,14 @@ def update_config_files(
     config_data.update(updates)
     updated_config = RequirementServiceConfig.model_validate(config_data)
 
-    reader_config = reader_config or updated_config.reader_config
-    if updated_config.reader_config_path:
-        save_reader_config(reader_config, Path(updated_config.reader_config_path))
+    if reader_config is not None:
+        if updated_config.reader_config_path:
+            save_reader_config(reader_config, Path(updated_config.reader_config_path))
+            updated_config.reader_config = {}
+        else:
+            updated_config.reader_config = reader_config
+    elif updated_config.reader_config_path:
         updated_config.reader_config = {}
-    else:
-        updated_config.reader_config = reader_config
 
     save_service_config(updated_config, config_path)
 
@@ -332,8 +335,11 @@ def save_properties_config(config_dict: dict, config_path: Path):
 def load_service_config(config_path: Path) -> RequirementServiceConfig:
     """Load service configuration from TOML config file."""
     config_dict = load_toml_config(config_path)
-    service_config_dict = config_dict.get(CONFIG_PREFIX, {})
-    return RequirementServiceConfig(**service_config_dict)
+    try:
+        return RequirementServiceConfig(**config_dict.get(CONFIG_PREFIX, {}))
+    except ValidationError as e:
+        print_config_errors(e, config_path, CONFIG_PREFIX)
+        sys.exit(1)
 
 
 def save_service_config(config: RequirementServiceConfig, config_path: Path):
