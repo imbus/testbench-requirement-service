@@ -313,12 +313,15 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
     @field_validator("requirementsDataPath")
     @classmethod
     def validate_requirements_data_path(cls, v: Path) -> Path:
-        if not v.exists():
-            raise ValueError(
-                f"'requirementsDataPath' defined in reader config not found: '{v}'.\n"
-                "  Hint: Use forward slashes (C:/path/to/folder)"
-                " or double-backslashes (C:\\\\path\\\\to\\\\folder)"
-            )
+        try:
+            if not v.exists():
+                raise ValueError(
+                    f"'requirementsDataPath' defined in reader config not found: '{v}'.\n"
+                    "  Hint: Use forward slashes (C:/path/to/folder)"
+                    " or double-backslashes (C:\\\\path\\\\to\\\\folder)"
+                )
+        except OSError as e:
+            raise ValueError(f"cannot access requirementsDataPath: '{v}'\n  OSError: {e}") from e
         return v
 
     @model_serializer(mode="wrap")
