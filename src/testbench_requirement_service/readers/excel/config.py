@@ -186,9 +186,23 @@ class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfi
         description="Regex pattern to identify folder/group requirements",
     )
 
-    bufferMaxAgeMinutes: float | None = Field(None, alias="bufferMaxAgeMinutes")
-    bufferMaxSizeMiB: float | None = Field(None, alias="bufferMaxSizeMiB")
-    bufferCleanupIntervalMinutes: float | None = Field(None, alias="bufferCleanupIntervalMinutes")
+    bufferMaxAgeMinutes: float | None = Field(
+        None,
+        alias="bufferMaxAgeMinutes",
+        description="Maximum age in minutes to keep DataFrames in memory cache before eviction "
+        "(0 to disable caching)",
+    )
+    bufferMaxSizeMiB: float | None = Field(
+        None,
+        alias="bufferMaxSizeMiB",
+        description="Maximum total size in MiB for the in-memory DataFrame cache "
+        "(0 to disable caching)",
+    )
+    bufferCleanupIntervalMinutes: float | None = Field(
+        None,
+        alias="bufferCleanupIntervalMinutes",
+        description="Interval in minutes between automatic cleanup of expired cached DataFrames",
+    )
 
     @property
     def column_settings(self) -> dict[str, FieldInfo]:
@@ -200,10 +214,16 @@ class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfi
 
 
 class UserDefinedAttributeConfig(BaseModel):
-    name: str
-    type: Literal["STRING", "ARRAY", "BOOLEAN"]
-    column: int
-    trueValue: str | None = None
+    name: str = Field(..., description="Name of the user-defined attribute")
+    type: Literal["STRING", "ARRAY", "BOOLEAN"] = Field(
+        ..., description="Value type: STRING (single text), ARRAY (multiple values), or BOOLEAN"
+    )
+    column: int = Field(..., description="Column index where this attribute is located")
+    trueValue: str | None = Field(
+        None,
+        description="For BOOLEAN type: the cell value that represents 'true' (e.g., 'Yes', '1')",
+        json_schema_extra={"depends_on": {"type": "BOOLEAN"}},
+    )
 
 
 class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValidatorsMixin):
@@ -286,9 +306,24 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
         description="Regex pattern to identify folder/group requirements",
     )
 
-    bufferMaxAgeMinutes: float = Field(1440.0, alias="bufferMaxAgeMinutes")
-    bufferMaxSizeMiB: float = Field(1024.0, alias="bufferMaxSizeMiB")
-    bufferCleanupIntervalMinutes: float = Field(1.0, alias="bufferCleanupIntervalMinutes")
+    bufferMaxAgeMinutes: float = Field(
+        1440.0,
+        alias="bufferMaxAgeMinutes",
+        description="Maximum age in minutes to keep DataFrames in memory cache before eviction "
+        "(default: 1440 = 24 hours, set to 0 to disable caching)",
+    )
+    bufferMaxSizeMiB: float = Field(
+        1024.0,
+        alias="bufferMaxSizeMiB",
+        description="Maximum total size in MiB for the in-memory DataFrame cache "
+        "(default: 1024 MiB, set to 0 to disable caching)",
+    )
+    bufferCleanupIntervalMinutes: float = Field(
+        1.0,
+        alias="bufferCleanupIntervalMinutes",
+        description="Interval in minutes between automatic cleanup of expired cached DataFrames "
+        "(default: 1 minute)",
+    )
 
     udf_count: int = Field(
         0,
@@ -298,8 +333,13 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
     )
     udf_configs: list[UserDefinedAttributeConfig] = Field(
         default_factory=list,
-        description="User-defined attribute configurations",
-        json_schema_extra={"prompt_as_list": True, "item_label": "User Defined Attribute"},
+        description="User-defined attribute configurations for custom fields in your requirements",
+        json_schema_extra={
+            "prompt_as_list": True,
+            "item_label": "User Defined Attribute",
+            "add_prompt": "Would you like to add a user-defined attribute?",
+            "add_another_prompt": "Add another user-defined attribute?",
+        },
     )
 
     @property
