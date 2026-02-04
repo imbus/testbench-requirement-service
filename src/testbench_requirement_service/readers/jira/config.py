@@ -47,7 +47,7 @@ class JiraRequirementReaderConfig(BaseModel):
         description="Username for basic authentication (Jira Cloud)",
         json_schema_extra={
             "env_var": "JIRA_USERNAME",
-            "depends_on": {"field": "auth_type", "value": "basic"},
+            "depends_on": {"auth_type": "basic"},
             "required": True,
         },
     )
@@ -57,7 +57,7 @@ class JiraRequirementReaderConfig(BaseModel):
         json_schema_extra={
             "sensitive": True,
             "env_var": "JIRA_API_TOKEN",
-            "depends_on": {"field": "auth_type", "value": "basic"},
+            "depends_on": {"auth_type": "basic"},
             "required": True,
         },
     )
@@ -68,7 +68,7 @@ class JiraRequirementReaderConfig(BaseModel):
         json_schema_extra={
             "sensitive": True,
             "env_var": "JIRA_BEARER_TOKEN",
-            "depends_on": {"field": "auth_type", "value": "token"},
+            "depends_on": {"auth_type": "token"},
             "required": True,
         },
     )
@@ -79,7 +79,7 @@ class JiraRequirementReaderConfig(BaseModel):
         json_schema_extra={
             "sensitive": True,
             "env_var": "JIRA_ACCESS_TOKEN",
-            "depends_on": {"field": "auth_type", "value": "oauth"},
+            "depends_on": {"auth_type": "oauth"},
             "required": True,
         },
     )
@@ -89,7 +89,7 @@ class JiraRequirementReaderConfig(BaseModel):
         json_schema_extra={
             "sensitive": True,
             "env_var": "JIRA_ACCESS_TOKEN_SECRET",
-            "depends_on": {"field": "auth_type", "value": "oauth"},
+            "depends_on": {"auth_type": "oauth"},
             "required": True,
         },
     )
@@ -98,7 +98,7 @@ class JiraRequirementReaderConfig(BaseModel):
         description="OAuth consumer key",
         json_schema_extra={
             "env_var": "JIRA_CONSUMER_KEY",
-            "depends_on": {"field": "auth_type", "value": "oauth"},
+            "depends_on": {"auth_type": "oauth"},
             "required": True,
         },
     )
@@ -108,7 +108,7 @@ class JiraRequirementReaderConfig(BaseModel):
         json_schema_extra={
             "sensitive": True,
             "env_var": "JIRA_KEY_CERT",
-            "depends_on": {"field": "auth_type", "value": "oauth"},
+            "depends_on": {"auth_type": "oauth"},
             "required": True,
         },
     )
@@ -146,6 +146,8 @@ class JiraRequirementReaderConfig(BaseModel):
             "prompt_as_dict": True,
             "item_label": "Project Configuration",
             "key_label": "Project Key",
+            "add_prompt": "Would you like to add a project-specific configuration?",
+            "add_another_prompt": "Add another project configuration?",
         },
     )
 
