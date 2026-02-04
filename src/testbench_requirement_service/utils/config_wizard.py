@@ -13,7 +13,6 @@ from testbench_requirement_service.models.config import (
     DEFAULT_PORT,
     RequirementServiceConfig,
 )
-from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 from testbench_requirement_service.readers.utils import (
     get_reader_config_class,
     get_requirement_reader_from_reader_class_str,
@@ -145,23 +144,21 @@ def merge_with_defaults(
     Args:
         config_dict: User-provided configuration values
         config_class: Pydantic model class with field defaults
+        exclude_fields: Optional set of field names to exclude from output
 
     Returns:
         Complete configuration dict with all fields (user values + defaults), TOML-serializable
     """
-    config_obj = config_class(**config_dict)
+    config_obj = config_class.model_validate(config_dict)
     return config_obj.model_dump(
         mode="json", by_alias=True, exclude_none=True, exclude=exclude_fields
     )
 
 
-def configure_reader(reader_type: str, service_config: RequirementServiceConfig) -> dict | None:
+def configure_reader(
+    reader_type: str, reader_class: str, service_config: RequirementServiceConfig | None = None
+) -> dict | None:
     """Universal reader configurator for built-in readers like JSONL, Excel, and Jira."""
-    reader_class = READER_CLASSES.get(reader_type)
-    if reader_class is None:
-        click.echo(f"❌ Unknown reader type: {reader_type}")
-        return None
-
     try:
         check_reader_dependencies(reader_type, raise_on_missing=True)
     except ImportError as e:
@@ -180,7 +177,13 @@ def configure_reader(reader_type: str, service_config: RequirementServiceConfig)
         )
         return None
 
-    existing_config = get_reader_config(service_config) or {}
+    existing_config = {}
+    if service_config is not None:
+        try:
+            existing_config = get_reader_config(service_config) or {}
+            existing_config = config_class.model_validate(existing_config).model_dump()
+        except Exception:
+            pass
 
     reader_config = prompt_model_fields(
         config_class,
@@ -192,52 +195,6 @@ def configure_reader(reader_type: str, service_config: RequirementServiceConfig)
         return None
 
     return merge_with_defaults(reader_config, config_class)
-
-
-def configure_custom_reader() -> tuple[str | None, dict | None]:
-    """Configure custom reader settings.
-
-    Returns:
-        Tuple of (reader_class, reader_config) or (None, None) if cancelled
-    """
-    click.echo("\n⚙️  Custom Reader Configuration")
-    click.echo("Configure your custom requirement reader\n")
-
-    reader_class = questionary.text(
-        "Enter the full module path to your custom reader class:",
-        default="custom_reader.CustomRequirementReader",
-    ).ask()
-
-    if reader_class is None:
-        return None, None
-
-    try:
-        reader_cls = get_requirement_reader_from_reader_class_str(reader_class)
-
-        if not isinstance(reader_cls, type):
-            raise TypeError(f"'{reader_class}' is not a class")
-
-        if not issubclass(reader_cls, AbstractRequirementReader):
-            raise TypeError(f"'{reader_class}' must inherit from AbstractRequirementReader")
-
-        config_class = get_reader_config_class(reader_cls)
-        if config_class is None:
-            click.echo("⚠️  Reader class does not define a CONFIG_CLASS.")
-            click.echo("You'll need to configure it manually in the config file")
-            return reader_class, {}
-
-        click.echo(f"✓ Found config class: {config_class.__name__}")
-        click.echo("Generating configuration wizard...\n")
-
-        reader_config = prompt_model_fields(
-            config_class, section_label="Custom Reader Configuration"
-        )
-
-        return reader_class, reader_config
-
-    except (ModuleNotFoundError, AttributeError, ImportError, TypeError, FileNotFoundError) as e:
-        click.echo(f"❌ Error: Could not load custom reader class: {e}")
-        return None, None
 
 
 def setup_authentication(
@@ -290,7 +247,7 @@ def is_sensitive_config_key(key: str) -> bool:
     return any(sensitive in key_lower for sensitive in sensitive_keys)
 
 
-def _print_nested_config(config: dict[str, Any], indent: int = 0, parent_key: str = "") -> None:
+def print_nested_config(config: dict[str, Any], indent: int = 0, parent_key: str = "") -> None:
     """Recursively print nested configuration dictionaries in TOML-like format.
 
     Args:
@@ -300,11 +257,9 @@ def _print_nested_config(config: dict[str, Any], indent: int = 0, parent_key: st
     """
     for key, value in config.items():
         if isinstance(value, dict):
-            # Nested section
             section_path = f"{parent_key}.{key}" if parent_key else key
             click.echo(f"\n[{CONFIG_PREFIX}.{section_path}]")
-            _print_nested_config(value, indent, section_path)
-        # Simple key-value
+            print_nested_config(value, indent, section_path)
         elif is_sensitive_config_key(key):
             click.echo(f"{key} = {'*' * 10}")
         else:
@@ -348,7 +303,7 @@ def view_service_config(config_path: Path) -> RequirementServiceConfig | None:
         if is_sensitive_config_key(key):
             click.echo(f"{key} = {'*' * 10}")
         elif isinstance(value, dict):
-            _print_nested_config(value, indent=0, parent_key=key)
+            print_nested_config(value, indent=0, parent_key=key)
         else:
             click.echo(f"{key} = {value}")
 
@@ -378,20 +333,31 @@ def view_reader_config(service_config: RequirementServiceConfig):
         click.echo(f"{key} = {'*' * 10}" if is_sensitive_config_key(key) else f"{key} = {value}")
 
 
-def view_env_config(dotenv_path=Path(".env")):
-    """Display .env file contents."""
+def view_env_config(dotenv_path: Path = Path(".env")) -> None:
+    """Display .env file contents.
+
+    Args:
+        dotenv_path: Path to the .env file (defaults to '.env' in current directory)
+    """
     if not dotenv_path.exists():
         click.echo(f"❌ No {dotenv_path.name} file found")
         return
 
     click.echo(f"⚙️  Environment Variables ({dotenv_path.name})")
     click.echo("─" * 50)
-    with dotenv_path.open() as f:
-        for line in f:
-            line_stripped = line.rstrip()
-            if line_stripped and not line_stripped.startswith("#") and "=" in line_stripped:
-                key = line_stripped.split("=", 1)[0]
-                click.echo(f"{key}={'*' * 10}" if is_sensitive_config_key(key) else line_stripped)
+
+    try:
+        with dotenv_path.open() as f:
+            for line in f:
+                line_stripped = line.rstrip()
+                if line_stripped and not line_stripped.startswith("#") and "=" in line_stripped:
+                    key = line_stripped.split("=", 1)[0]
+                    if is_sensitive_config_key(key):
+                        click.echo(f"{key}={'*' * 10}")
+                    else:
+                        click.echo(line_stripped)
+    except (OSError, UnicodeDecodeError) as e:
+        click.echo(f"❌ Error reading {dotenv_path.name}: {e}")
 
 
 def view_current_config(config_path: Path):
@@ -405,24 +371,21 @@ def view_current_config(config_path: Path):
     click.echo()
 
 
-def select_and_configure_reader(
-    reader_type: str, service_config: RequirementServiceConfig
-) -> tuple[str | None, dict | None]:
-    """Select and configure a reader, returning reader class and reader config."""
-
-    reader_class = None
-    reader_config = None
-
+def get_reader_class(reader_type: str) -> str | None:
     if reader_type == "custom":
-        reader_class, reader_config = configure_custom_reader()
-    else:
-        reader_class = READER_CLASSES.get(reader_type)
-        reader_config = configure_reader(reader_type, service_config)
-
-    if reader_class is None or reader_config is None:
-        return None, None
-
-    return reader_class, reader_config
+        reader_class: str | None = questionary.text(
+            "Enter the full class path to your custom reader class:",
+            default="CustomRequirementReader.py",
+        ).ask()
+        if reader_class is None:
+            return None
+        try:
+            get_requirement_reader_from_reader_class_str(reader_class)
+            return reader_class
+        except Exception as e:
+            click.echo(f"❌ Error: Could not load custom reader class: {e}")
+            return None
+    return READER_CLASSES.get(reader_type)
 
 
 def get_reader_type(reader: str) -> str | None:
@@ -430,6 +393,7 @@ def get_reader_type(reader: str) -> str | None:
     for reader_type, reader_class in READER_CLASSES.items():
         if reader in reader_class or reader_type in reader.lower():
             return reader_type
+
     return None
 
 
@@ -440,7 +404,10 @@ def configure_reader_only(config_path: Path):
     service_config = load_service_config(config_path)
 
     reader_class_path = service_config.reader_class
-    reader = reader_class_path.split(".")[-1]
+    if ".py" in reader_class_path:
+        reader = Path(reader_class_path).stem
+    else:
+        reader = reader_class_path.split(".")[-1]
     if reader:
         click.echo(f"Current reader: {reader}\n")
 
@@ -452,11 +419,7 @@ def configure_reader_only(config_path: Path):
         click.echo("\nConfiguration cancelled.")
         return
 
-    reader_type = None
-    if not change_reader_type:
-        reader_type = get_reader_type(reader) or "custom"
-
-    if reader_type is None:
+    if change_reader_type:
         click.echo()
         reader_type = questionary.select(
             "Select reader type:",
@@ -467,28 +430,33 @@ def configure_reader_only(config_path: Path):
                 Choice("⚙️  Custom Reader", "custom"),
             ],
         ).ask()
+    else:
+        reader_type = get_reader_type(reader) or "custom"
 
-        if reader_type is None:
-            click.echo("\nConfiguration cancelled.")
-            return
+    if reader_type is None:
+        click.echo("\nConfiguration cancelled.")
+        return
 
-    reader_class, reader_config = select_and_configure_reader(reader_type, service_config)
-    if reader_class is None or reader_config is None:
+    reader_class = get_reader_class(reader_type)
+    if reader_class is None:
+        click.echo("\nConfiguration cancelled.")
+        return
+
+    reader_config = configure_reader(reader_type, reader_class, service_config)
+    if reader_config is None:
         click.echo("\nConfiguration cancelled.")
         return
 
     click.echo()
 
-    updates: dict[str, Any] = {"reader_class": reader_class}
-
     reader_config_path = ask_for_separate_config(reader_type, service_config.reader_config_path)
     if reader_config_path:
-        updates["reader_config_path"] = reader_config_path
         save_reader_config(reader_config, Path(reader_config_path))
-    else:
-        updates["reader_config_path"] = None
-        updates["reader_config"] = reader_config
 
+    updates: dict[str, Any] = {
+        "reader_class": reader_class,
+        "reader_config_path": reader_config_path,
+    }
     update_config_files(config_path, updates=updates, reader_config=reader_config)
 
     click.echo("\n✅ Reader configuration updated successfully!")
@@ -500,7 +468,7 @@ def configure_service_only(config_path: Path):
 
     service_config = load_service_config(config_path)
 
-    click.echo(f"Current: {service_config.host}:{service_config.port}\n")
+    click.echo(f"Current: http://{service_config.host}:{service_config.port}\n")
 
     updates = prompt_model_fields(
         RequirementServiceConfig,
@@ -592,11 +560,13 @@ def run_full_wizard(config_path: Path):  # noqa: C901, PLR0912, PLR0915
 
     click.echo(f"\n📝 Step 4: Configure {reader_type.capitalize()} Reader\n")
 
-    reader_class, reader_config = select_and_configure_reader(
-        reader_type, RequirementServiceConfig.model_construct()
-    )
+    reader_class = get_reader_class(reader_type)
+    if reader_class is None:
+        click.echo("\nConfiguration cancelled.")
+        return
 
-    if reader_class is None or reader_config is None:
+    reader_config = configure_reader(reader_type, reader_class)
+    if reader_config is None:
         click.echo("\nConfiguration cancelled.")
         return
 
@@ -651,7 +621,6 @@ def run_full_wizard(config_path: Path):  # noqa: C901, PLR0912, PLR0915
     save_toml_config(config_dict, config_path)
     click.echo(f"✓ Created {config_path.name}")
 
-    # Success message
     click.echo("\n" + "═" * 60)
     click.echo("✅ Configuration completed successfully!")
     click.echo("═" * 60)
@@ -659,6 +628,7 @@ def run_full_wizard(config_path: Path):  # noqa: C901, PLR0912, PLR0915
     click.echo("  1. Review the generated configuration files")
     click.echo("  2. Start the service with: testbench-requirement-service start")
     click.echo(
-        f"  3. Access the API documentation at: {host or DEFAULT_HOST}:{port or DEFAULT_PORT}/docs"
+        "  3. Access the API documentation at: "
+        f"http://{host or DEFAULT_HOST}:{port or DEFAULT_PORT}/docs"
     )
     click.echo()
