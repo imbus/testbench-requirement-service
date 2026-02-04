@@ -18,6 +18,16 @@ from testbench_requirement_service.utils.config_wizard import (
 )
 
 
+def print_service_banner():
+    """Print the service banner."""
+    click.echo(r"""  ______          __  ____                  __       ____  __  ___   _____                 _         
+ /_  __/__  _____/ /_/ __ )___  ____  _____/ /_     / __ \/  |/  /  / ___/___  ______   __(_)_______ 
+  / / / _ \/ ___/ __/ __  / _ \/ __ \/ ___/ __ \   / /_/ / /|_/ /   \__ \/ _ \/ ___/ | / / / ___/ _ \
+ / / /  __(__  ) /_/ /_/ /  __/ / / / /__/ / / /  / _, _/ /  / /   ___/ /  __/ /   | |/ / / /__/  __/
+/_/  \___/____/\__/_____/\___/_/ /_/\___/_/ /_/  /_/ |_/_/  /_/   /____/\___/_/    |___/_/\___/\___/ 
+                                                                                                     """)  # noqa: W291, E501
+
+
 def print_wizard_banner():
     """Print the configuration wizard banner."""
     click.echo("╔════════════════════════════════════════════════════════╗")
@@ -66,9 +76,9 @@ def init(config_path: Path):
 def configure(  # noqa: PLR0911, PLR0913, C901
     config_path: Path,
     full: bool,
-    reader_only: bool,
     service_only: bool,
     credentials_only: bool,
+    reader_only: bool,
     view: bool,
 ):
     """Create or update configuration files interactively."""
@@ -166,14 +176,7 @@ def start(  # noqa: PLR0913
         port=port,
         debug=dev,
     )
-
-    click.echo(r"""  ______          __  ____                  __       ____  __  ___   _____                 _         
- /_  __/__  _____/ /_/ __ )___  ____  _____/ /_     / __ \/  |/  /  / ___/___  ______   __(_)_______ 
-  / / / _ \/ ___/ __/ __  / _ \/ __ \/ ___/ __ \   / /_/ / /|_/ /   \__ \/ _ \/ ___/ | / / / ___/ _ \
- / / /  __(__  ) /_/ /_/ /  __/ / / / /__/ / / /  / _, _/ /  / /   ___/ /  __/ /   | |/ / / /__/  __/
-/_/  \___/____/\__/_____/\___/_/ /_/\___/_/ /_/  /_/ |_/_/  /_/   /____/\___/_/    |___/_/\___/\___/ 
-                                                                                                     """)  # noqa: W291, E501
-
+    print_service_banner()
     factory = partial(create_app, app_name, app_config)
     loader = AppLoader(factory=factory)
     app = loader.load()
