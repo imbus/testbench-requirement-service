@@ -79,36 +79,6 @@ class ExcelRequirementReaderConfigValidatorsMixin:
             return v
         return validate_column_setting(info.field_name, v, info.data)
 
-    @field_validator("bufferMaxAgeMinutes")
-    @classmethod
-    def validate_buffer_max_age_minutes(cls, v: float | None) -> float | None:
-        if v is not None and v <= 0:
-            raise ValueError(
-                "Invalid value for 'bufferMaxAgeMinutes' in reader config: "
-                f"Expected a positive number of minutes, but got '{v}'."
-            )
-        return v
-
-    @field_validator("bufferMaxSizeMiB")
-    @classmethod
-    def validate_buffer_max_size_mib(cls, v: float | None) -> float | None:
-        if v is not None and v <= 0:
-            raise ValueError(
-                "Invalid value for 'bufferMaxSizeMiB' in reader config: "
-                f"Expected a positive number of MiB, but got '{v}'."
-            )
-        return v
-
-    @field_validator("bufferCleanupIntervalMinutes")
-    @classmethod
-    def validate_buffer_cleanup_interval_minutes(cls, v: float | None) -> float | None:
-        if v is not None and v <= 0:
-            raise ValueError(
-                "Invalid value for 'bufferCleanupIntervalMinutes' in reader config: "
-                f"Expected a positive number of minutes, but got '{v}'."
-            )
-        return v
-
 
 class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfigValidatorsMixin):
     columnSeparator: str | None = Field(
@@ -184,24 +154,6 @@ class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfi
         None,
         alias="requirement.folderPattern",
         description="Regex pattern to identify folder/group requirements",
-    )
-
-    bufferMaxAgeMinutes: float | None = Field(
-        None,
-        alias="bufferMaxAgeMinutes",
-        description="Maximum age in minutes to keep DataFrames in memory cache before eviction "
-        "(0 to disable caching)",
-    )
-    bufferMaxSizeMiB: float | None = Field(
-        None,
-        alias="bufferMaxSizeMiB",
-        description="Maximum total size in MiB for the in-memory DataFrame cache "
-        "(0 to disable caching)",
-    )
-    bufferCleanupIntervalMinutes: float | None = Field(
-        None,
-        alias="bufferCleanupIntervalMinutes",
-        description="Interval in minutes between automatic cleanup of expired cached DataFrames",
     )
 
     @property
@@ -362,6 +314,36 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
                 )
         except OSError as e:
             raise ValueError(f"cannot access requirementsDataPath: '{v}'\n  OSError: {e}") from e
+        return v
+
+    @field_validator("bufferMaxAgeMinutes")
+    @classmethod
+    def validate_buffer_max_age_minutes(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError(
+                "Invalid value for 'bufferMaxAgeMinutes' in reader config: "
+                f"Expected a non-negative number of minutes (0 to disable), but got '{v}'."
+            )
+        return v
+
+    @field_validator("bufferMaxSizeMiB")
+    @classmethod
+    def validate_buffer_max_size_mib(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError(
+                "Invalid value for 'bufferMaxSizeMiB' in reader config: "
+                f"Expected a non-negative number of MiB (0 to disable), but got '{v}'."
+            )
+        return v
+
+    @field_validator("bufferCleanupIntervalMinutes")
+    @classmethod
+    def validate_buffer_cleanup_interval_minutes(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError(
+                "Invalid value for 'bufferCleanupIntervalMinutes' in reader config: "
+                f"Expected a non-negative number of minutes, but got '{v}'."
+            )
         return v
 
     @model_serializer(mode="wrap")
