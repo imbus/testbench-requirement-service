@@ -221,3 +221,8 @@ results/
 
 # Requirement files
 requirements
+
+# Certificates
+*.crt
+*.pem
+*.key

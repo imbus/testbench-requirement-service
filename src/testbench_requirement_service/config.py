@@ -27,6 +27,9 @@ class AppConfig(Config):
         host: str | None = None,
         port: int | None = None,
         debug: bool | None = None,
+        ssl_cert: Path | str | None = None,
+        ssl_key: Path | str | None = None,
+        ssl_ca_cert: Path | str | None = None,
         *args,
         **kwargs,
     ):
@@ -68,6 +71,35 @@ class AppConfig(Config):
         # Load credentials
         self.PASSWORD_HASH = service_config.password_hash or os.getenv("PASSWORD_HASH") or ""
         self.SALT = service_config.salt or os.getenv("SALT") or ""
+
+        # SSL/TLS configuration
+        self.SSL_CERT = ssl_cert or service_config.ssl_cert
+        self.SSL_KEY = ssl_key or service_config.ssl_key
+        self.SSL_CA_CERT = ssl_ca_cert or service_config.ssl_ca_cert
+
+    def get_ssl_context(self) -> dict | None:
+        """Get SSL configuration for HTTPS if certificates are configured.
+
+        Returns a dictionary with certificate paths that Sanic will use to create
+        the SSLContext in each worker process. This approach works on Windows where
+        SSLContext objects cannot be pickled for multiprocessing.
+
+        Returns:
+            dict: Dictionary with 'cert' and 'key' (and optionally 'ca') paths,
+            None if SSL is not configured
+        """
+        if not self.SSL_CERT or not self.SSL_KEY:
+            return None
+
+        ssl_config = {
+            "cert": self.SSL_CERT,
+            "key": self.SSL_KEY,
+        }
+
+        if self.SSL_CA_CERT:
+            ssl_config["ca"] = self.SSL_CA_CERT
+
+        return ssl_config
 
     def _validate_reader_config(self):
         """Validate reader_config dict against the reader's CONFIG_CLASS.

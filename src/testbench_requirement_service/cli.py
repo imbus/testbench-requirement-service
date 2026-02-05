@@ -158,6 +158,24 @@ def configure(  # noqa: PLR0911, PLR0913, C901
     show_default=True,
     help="Run the service in dev mode (debug + auto reload)",
 )
+@click.option(
+    "--ssl-cert",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    metavar="PATH",
+    help="Path to SSL certificate file for HTTPS",
+)
+@click.option(
+    "--ssl-key",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    metavar="PATH",
+    help="Path to SSL private key file for HTTPS",
+)
+@click.option(
+    "--ssl-ca-cert",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    metavar="PATH",
+    help="Path to CA certificate file for client verification (optional)",
+)
 def start(  # noqa: PLR0913
     config_path: Path | None = None,
     reader_class: str | None = None,
@@ -165,6 +183,9 @@ def start(  # noqa: PLR0913
     host: str | None = None,
     port: int | None = None,
     dev: bool = False,
+    ssl_cert: Path | None = None,
+    ssl_key: Path | None = None,
+    ssl_ca_cert: Path | None = None,
 ):
     """Start the TestBench Requirement Service."""
     app_name = "TestBenchRequirementService"
@@ -175,8 +196,13 @@ def start(  # noqa: PLR0913
         host=host,
         port=port,
         debug=dev,
+        ssl_cert=ssl_cert,
+        ssl_key=ssl_key,
+        ssl_ca_cert=ssl_ca_cert,
     )
+
     print_service_banner()
+
     factory = partial(create_app, app_name, app_config)
     loader = AppLoader(factory=factory)
     app = loader.load()
@@ -184,7 +210,16 @@ def start(  # noqa: PLR0913
         host = getattr(app.config, "HOST", None)
     if not port:
         port = getattr(app.config, "PORT", None)
-    app.prepare(host=host, port=port, dev=dev, debug=app_config.DEBUG, access_log=True)
+    ssl_context = app_config.get_ssl_context()
+
+    app.prepare(
+        host=host,
+        port=port,
+        dev=dev,
+        debug=app_config.DEBUG,
+        access_log=True,
+        ssl=ssl_context,
+    )
     try:
         Sanic.serve(primary=app, app_loader=loader)
     except Exception as e:
