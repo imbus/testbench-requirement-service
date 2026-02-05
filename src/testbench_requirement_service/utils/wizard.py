@@ -47,6 +47,20 @@ def is_basemodel_subclass(cls: Any) -> bool:
         return False
 
 
+def normalize_to_dict(item: dict | BaseModel) -> dict:
+    """Convert a Pydantic model or dict to a plain dict.
+
+    Args:
+        item: Either a dictionary or Pydantic BaseModel instance
+
+    Returns:
+        Plain dictionary representation
+    """
+    if isinstance(item, BaseModel):
+        return item.model_dump()
+    return item
+
+
 def normalize_answer(answer: Any) -> Any:
     """Convert blank string answers to None for optional fields."""
     if isinstance(answer, str) and not answer.strip():
@@ -355,7 +369,7 @@ def select_items_for_action(
 
 
 def handle_existing_list_of_models(
-    existing: list[dict], item_class: type[BaseModel], item_label: str
+    existing: list[dict | BaseModel], item_class: type[BaseModel], item_label: str
 ) -> list[dict] | None:
     """Handle existing list of models for editing/removal.
 
@@ -365,8 +379,10 @@ def handle_existing_list_of_models(
 
     result: list[dict] = []
 
-    click.echo(f"\n📋 Found {len(existing)} existing {item_label}(s)\n")
-    for i, existing_item in enumerate(existing, 1):
+    existing_dicts = [normalize_to_dict(item) for item in existing]
+
+    click.echo(f"\n📋 Found {len(existing_dicts)} existing {item_label}(s)\n")
+    for i, existing_item in enumerate(existing_dicts, 1):
         item_name = existing_item.get("name", f"{item_label} {i}")
         click.echo(f"  {i}. {item_name}")
 
@@ -379,17 +395,17 @@ def handle_existing_list_of_models(
         return result
 
     if action == "keep_all":
-        return existing.copy()
+        return existing_dicts.copy()
 
     items_info = [
         (i - 1, f"{i}. {existing_item.get('name', f'{item_label} {i}')}")
-        for i, existing_item in enumerate(existing, 1)
+        for i, existing_item in enumerate(existing_dicts, 1)
     ]
     selected_indices = select_items_for_action(items_info, action, item_label)
     if selected_indices is None:
         return None
 
-    for i, existing_item in enumerate(existing):
+    for i, existing_item in enumerate(existing_dicts):
         if i not in selected_indices:
             result.append(existing_item)
             continue
@@ -413,7 +429,7 @@ def handle_existing_list_of_models(
 def prompt_list_of_models(
     item_class: type[BaseModel],
     item_label: str,
-    existing: list[dict] | None = None,
+    existing: list[dict | BaseModel] | None = None,
     schema_extra: dict[str, Any] | None = None,
 ) -> list[dict] | None:
     """Prompt user to configure a list of BaseModel items interactively.
@@ -461,7 +477,7 @@ def prompt_list_of_models(
 
 
 def handle_existing_dict_of_models(
-    existing: dict[str, dict], item_class: type[BaseModel], item_label: str
+    existing: dict[str, dict | BaseModel], item_class: type[BaseModel], item_label: str
 ) -> dict[str, dict] | None:
     """Handle existing dict of models for editing/removal.
 
@@ -471,9 +487,11 @@ def handle_existing_dict_of_models(
 
     result: dict[str, dict] = {}
 
-    click.echo(f"\n📋 Found {len(existing)} existing {item_label}(s)\n")
-    for key in existing:
-        click.echo(f"  • {key}")
+    existing_dicts = {key: normalize_to_dict(value) for key, value in existing.items()}
+
+    click.echo(f"\n📋 Found {len(existing_dicts)} existing {item_label}(s)\n")
+    for key in existing_dicts:
+        click.echo(f"  {key}")
 
     click.echo()
     action = prompt_for_existing_items_action(item_label)
@@ -484,15 +502,15 @@ def handle_existing_dict_of_models(
         return result
 
     if action == "keep_all":
-        return existing.copy()
+        return existing_dicts.copy()
 
-    items_info = [(key, key) for key in existing]
+    items_info = [(key, key) for key in existing_dicts]
 
     selected_keys = select_items_for_action(items_info, action, item_label)
     if selected_keys is None:
         return None
 
-    for key, value in existing.items():
+    for key, value in existing_dicts.items():
         if key not in selected_keys:
             result[key] = value
             continue
@@ -538,7 +556,7 @@ def prompt_dict_of_models(
     item_class: type[BaseModel],
     item_label: str,
     key_label: str = "Key",
-    existing: dict[str, dict] | None = None,
+    existing: dict[str, dict | BaseModel] | None = None,
     schema_extra: dict[str, Any] | None = None,
 ) -> dict[str, dict] | None:
     """Prompt user to configure a dictionary of BaseModel items interactively.
