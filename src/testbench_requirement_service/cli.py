@@ -1,5 +1,6 @@
 from functools import partial
 from pathlib import Path
+from ssl import SSLContext
 
 import click
 from dotenv import load_dotenv
@@ -210,20 +211,37 @@ def start(  # noqa: PLR0913
         host = getattr(app.config, "HOST", None)
     if not port:
         port = getattr(app.config, "PORT", None)
+
     ssl_context = app_config.get_ssl_context()
 
-    app.prepare(
-        host=host,
-        port=port,
-        dev=dev,
-        debug=app_config.DEBUG,
-        access_log=True,
-        ssl=ssl_context,
-    )
-    try:
-        Sanic.serve(primary=app, app_loader=loader)
-    except Exception as e:
-        raise click.ClickException("Server could not start.") from e
+    use_single_process = isinstance(ssl_context, SSLContext)
+    if use_single_process:
+        # SSLContext cannot be pickled, so we must use app.run() directly (single-process)
+        # instead of Sanic.serve() with AppLoader (which uses multiprocessing)
+        try:
+            app.run(
+                host=host,
+                port=port,
+                debug=app_config.DEBUG,
+                access_log=True,
+                ssl=ssl_context,
+                single_process=True,
+            )
+        except Exception as e:
+            raise click.ClickException("Server could not start.") from e
+    else:
+        app.prepare(
+            host=host,
+            port=port,
+            dev=dev,
+            debug=app_config.DEBUG,
+            access_log=True,
+            ssl=ssl_context,
+        )
+        try:
+            Sanic.serve(primary=app, app_loader=loader)
+        except Exception as e:
+            raise click.ClickException("Server could not start.") from e
 
 
 @click.command()
