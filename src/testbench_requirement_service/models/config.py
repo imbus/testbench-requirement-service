@@ -58,6 +58,18 @@ class RequirementServiceConfig(BaseModel):
         default=None,
         description="Optional path to CA certificate file for client verification",
     )
+    proxies_count: int | None = Field(
+        default=None,
+        description="Number of proxy servers in front of the application (for X-Forwarded headers)",
+    )
+    real_ip_header: str | None = Field(
+        default=None,
+        description="Header name to use for client IP (e.g., 'CF-Connecting-IP', 'X-Real-IP')",
+    )
+    forwarded_secret: str | None = Field(
+        default=None,
+        description="Secret token for validating Forwarded header (security measure)",
+    )
 
     @field_validator("reader_config_path")
     @classmethod
