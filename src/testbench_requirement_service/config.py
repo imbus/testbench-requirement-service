@@ -79,6 +79,11 @@ class AppConfig(Config):
         self.SSL_KEY = ssl_key or service_config.ssl_key
         self.SSL_CA_CERT = ssl_ca_cert or service_config.ssl_ca_cert
 
+        # Reverse Proxy configuration
+        self.PROXIES_COUNT = service_config.proxies_count
+        self.REAL_IP_HEADER = service_config.real_ip_header
+        self.FORWARDED_SECRET = service_config.forwarded_secret
+
     def get_ssl_context(self) -> ssl.SSLContext | dict | None:
         """Get SSL configuration for HTTPS if certificates are configured.
 

@@ -64,7 +64,7 @@ class RequirementServiceConfig(BaseModel):
     )
     real_ip_header: str | None = Field(
         default=None,
-        description="Header name to use for client IP (e.g., 'CF-Connecting-IP', 'X-Real-IP')",
+        description="Header name to use for client IP (e.g., 'X-Real-IP')",
     )
     forwarded_secret: str | None = Field(
         default=None,
