@@ -1,6 +1,113 @@
 # Windows Service Installation Guide
 
-## Option 1: FireDaemon
+## Prerequisites
+
+Before installing the service, ensure the following requirements are met:
+
+- **Python Service**: The requirement service must be built and installed
+- **Virtual Environment**: A `.venv` with the executable `testbench-requirement-service.exe` must exist
+- **Administrator Privileges**: Required for installing and managing Windows services
+- **Port Availability**: Ensure the desired port (default: 8000) is not in use by another application
+
+---
+
+## Which Option to Choose?
+
+| Feature | YAJSW | FireDaemon | NSSM |
+|---------|-------|------------|------|
+| **License** | Free (Apache License) | Commercial | Free (Public Domain) |
+| **GUI** | No | Yes | Yes |
+| **Requirements** | Java Runtime | None | None |
+| **Complexity** | Medium | Low | Low |
+| **Best For** | Java environments, cross-platform | Enterprise GUI management | Most users, simple & free |
+
+### Recommendations:
+
+- **YAJSW**: Choose if you already have Java installed or need cross-platform compatibility (also supports Linux/macOS)
+- **FireDaemon**: Choose if you have budget for commercial software and prefer comprehensive GUI-based management with advanced features
+- **NSSM**: **Recommended for most users** - free, lightweight, simple to configure, well-documented, and widely used
+
+---
+
+## Option 1: YAJSW (Yet Another Java Service Wrapper)
+
+### Installation Steps
+
+1. **Prerequisites:**
+   - YAJSW downloaded and extracted, e.g., to `C:\YAJSW`
+   - Java Runtime Environment (JRE) installed
+   - Administrator privileges
+
+2. **Configure YAJSW:**
+   - Navigate to `<YAJSW_INSTALL_DIR>\conf\` and open (or create) `wrapper.conf`
+   - Update the configuration with the following values:
+   
+   ```ini
+   # Java executable for YAJSW (adjust path to your Java installation)
+   wrapper.java.command=C:/Program Files/Eclipse Adoptium/jre-8.0.472.8-hotspot/bin/java.exe
+
+   # Windows Service
+   wrapper.ntservice.name=TestBenchRequirementService
+   wrapper.ntservice.displayname=TestBench Requirement Service
+   wrapper.ntservice.description=Python-based TestBench Requirement Service
+
+   # Python Service (adjust paths to your installation directory)
+   wrapper.working.dir=E:/TestBenchRequirementService
+   wrapper.image=E:/TestBenchRequirementService/.venv/Scripts/testbench-requirement-service.exe
+   wrapper.app.parameter.1=start
+   wrapper.app.parameter.2=--port
+   wrapper.app.parameter.3=8010
+
+   # Startup (Delayed Auto)
+   wrapper.startup.type=DELAYED_AUTO
+
+   # Logging
+   wrapper.console.log=TRUE
+   wrapper.logfile=../log/wrapper.log
+   wrapper.logfile.maxsize=10m
+   wrapper.logfile.maxfiles=5
+
+   # Exit (Stop Service)
+   wrapper.on_exit.default=STOP_SERVICE
+   ```
+
+   **Note:** Replace paths with your actual installation directories and Java version.
+
+3. **Test Configuration:**
+   - Open Command Prompt as Administrator
+   - Navigate to `<YAJSW_INSTALL_DIR>\bat\`
+   - Run: `runConsole.bat`
+   - Verify the application starts without errors
+   - Stop with `Ctrl+C`
+
+4. **Install and Start Service:**
+   - Open Command Prompt as Administrator
+   - Navigate to `<YAJSW_INSTALL_DIR>\bat\`
+   - Install the service: `installService.bat`
+   - Start the service: `startService.bat`
+
+### Managing the Service
+
+Open Command Prompt as Administrator and navigate to `<YAJSW_INSTALL_DIR>\bat\`:
+
+##### Start service:
+```cmd
+startService.bat
+```
+
+##### Stop service:
+```cmd
+stopService.bat
+```
+
+##### Remove service:
+```cmd
+uninstallService.bat
+```
+
+---
+
+## Option 2: FireDaemon
 
 ### Installation Steps
 
@@ -16,7 +123,7 @@
    ###### Service Identification:
    - Service Name: `TestBenchRequirementService`
    - Display Name: `TestBench Requirement Service`
-   - Custom Prefix String: Check and leave empty ` `
+   - Custom Prefix String: Enable checkbox and leave field empty
    - Description: `Python-based TestBench Requirement Service`
    - Startup Type: `Automatic (Delayed Start)`
    ###### Program to Run as a Service:
@@ -93,7 +200,9 @@ First select the service from the services list.
 ##### Remove service:
 ![FireDaemon GUI Remove Service](images/firedaemon-16.png)
 
-## Option 2: NSSM
+---
+
+## Option 3: NSSM
 
 ### Installation
 
@@ -164,8 +273,8 @@ nssm set TestBenchRequirementService AppDirectory "E:\Code\requirement-service-p
 
 3. Configure details settings (display name, description, startup type):
 ```powershell
-nssm set TestBenchRequirementService DisplayName "Requirement Service"
-nssm set TestBenchRequirementService Description "Python-based Requirement Service"
+nssm set TestBenchRequirementService DisplayName "TestBench Requirement Service"
+nssm set TestBenchRequirementService Description "Python-based TestBench Requirement Service"
 nssm set TestBenchRequirementService Start SERVICE_DELAYED_AUTO_START
 ```
 
