@@ -510,10 +510,13 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
   }
   ```
 
+  > **Full JSON Schema**: For validation and detailed type information, see [`requirement_object_schema.json`](src/testbench_requirement_service/readers/jsonl/schemas/requirement_object_schema.json)
+
   If the `"requirement"` attribute is set to `true`, the object represents an actual requirement. Otherwise, it serves only as a node in the requirements tree structure.
   Root requirement objects have their `"parent"` attribute set to `null`.
+
 - ***UserDefinedAttributes*** are specified in the `UserDefinedAttributes.json` file, located at the top level in `requirements_path`.
-  This file follows the Schema below:
+  This file defines available attribute types and follows this Schema:
 
   ```json
   [
@@ -523,6 +526,8 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
       }
   ]
   ```
+
+  > **Full JSON Schema**: For validation, see [`user_defined_attributes_schema.json`](src/testbench_requirement_service/readers/jsonl/schemas/user_defined_attributes_schema.json)
 
 #### Example Configuration:
 
