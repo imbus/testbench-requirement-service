@@ -58,17 +58,10 @@ Before installing the service, ensure the following requirements are met:
    wrapper.app.parameter.2=--port
    wrapper.app.parameter.3=8010
 
-   # Startup (Delayed Auto)
-   wrapper.startup.type=DELAYED_AUTO
-
    # Logging
-   wrapper.console.log=TRUE
    wrapper.logfile=../log/wrapper.log
    wrapper.logfile.maxsize=10m
    wrapper.logfile.maxfiles=5
-
-   # Exit (Stop Service)
-   wrapper.on_exit.default=STOP_SERVICE
    ```
 
    **Note:** Replace paths with your actual installation directories and Java version.
