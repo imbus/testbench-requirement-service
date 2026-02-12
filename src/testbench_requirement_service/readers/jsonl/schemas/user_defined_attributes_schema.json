@@ -1,0 +1,62 @@
+{
+    "properties": {
+        "name": {
+            "title": "Name",
+            "type": "string"
+        },
+        "valueType": {
+            "enum": [
+                "STRING",
+                "ARRAY",
+                "BOOLEAN"
+            ],
+            "title": "Valuetype",
+            "type": "string"
+        },
+        "stringValue": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "title": "Stringvalue"
+        },
+        "stringValues": {
+            "anyOf": [
+                {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "title": "Stringvalues"
+        },
+        "booleanValue": {
+            "anyOf": [
+                {
+                    "type": "boolean"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "title": "Booleanvalue"
+        }
+    },
+    "required": [
+        "name",
+        "valueType"
+    ],
+    "title": "UserDefinedAttribute",
+    "type": "object"
+}
