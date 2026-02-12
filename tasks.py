@@ -1,4 +1,7 @@
-import robot  # type: ignore
+try:
+    import robot  # type: ignore
+except ImportError:
+    robot = None
 from invoke import Context, task
 
 
@@ -42,3 +45,11 @@ def test(c: Context, loglevel: str = "TRACE:INFO") -> None:  # noqa: PT028
     )
     if failed:
         raise SystemExit(failed)
+
+
+@task
+def generate_schemas(c: Context) -> None:
+    """Generate JSON schemas from Pydantic models."""
+    run_command(
+        c, "python src/testbench_requirement_service/readers/jsonl/schemas/generate_schemas.py"
+    )
