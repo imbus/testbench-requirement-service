@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 try:  # noqa: SIM105
-    from jira import JIRAError
+    from jira import JIRAError  # type: ignore[import-not-found]
 except ImportError:
     pass
 from sanic import Forbidden, NotFound, Request, ServerError

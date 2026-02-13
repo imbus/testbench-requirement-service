@@ -2,8 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy import (  # type: ignore[import-not-found]
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+)
+from sqlalchemy.orm import (  # type: ignore[import-not-found]
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 
 class Base(DeclarativeBase):

@@ -1,8 +1,15 @@
 from typing import Any
 
 try:
-    from jira import JIRA, JIRAError
-    from jira.resources import Board, Field, Issue, Project, Sprint, dict2resource
+    from jira import JIRA, JIRAError  # type: ignore[import-not-found]
+    from jira.resources import (  # type: ignore[import-not-found]
+        Board,
+        Field,
+        Issue,
+        Project,
+        Sprint,
+        dict2resource,
+    )
 except ImportError:
     pass
 
@@ -150,7 +157,7 @@ class JiraClient:
 
     def fetch_projects(self) -> list[Project]:
         try:
-            return self.jira.projects()
+            return self.jira.projects()  # type: ignore[no-any-return]
         except JIRAError as e:
             logger.debug(f"Error fetching projects: {e}")
             return []

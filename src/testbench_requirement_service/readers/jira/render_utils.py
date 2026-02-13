@@ -6,8 +6,8 @@ from urllib.parse import urljoin, urlparse
 
 try:
     from bs4 import BeautifulSoup
-    from jira.resilientsession import ResilientSession
-    from jira.resources import Issue
+    from jira.resilientsession import ResilientSession  # type: ignore[import-not-found]
+    from jira.resources import Issue  # type: ignore[import-not-found]
 except ImportError:  # pragma: no cover
     pass
 
@@ -93,7 +93,7 @@ def process_task_items(soup: BeautifulSoup):
                         cleaned = cleaned.lstrip()[1:]
                     if cleaned.rstrip().endswith("-"):
                         cleaned = cleaned.rstrip()[:-1]
-                    content.replace_with(cleaned)
+                    content.replace_with(cleaned)  # type: ignore[attr-defined]
 
             li["style"] = "text-decoration: line-through;"
 

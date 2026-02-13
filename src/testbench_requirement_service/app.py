@@ -25,7 +25,7 @@ def register_middlewares(app: Sanic) -> None:
 def register_exception_handlers(app: Sanic) -> None:
     """Register application exception handlers."""
     try:
-        from jira import JIRAError  # noqa: PLC0415
+        from jira import JIRAError  # noqa: PLC0415 # type: ignore[import-not-found]
 
         app.exception(JIRAError)(handle_jira_error)
     except ImportError:

@@ -5,8 +5,8 @@ from datetime import datetime
 from typing import Literal, cast
 
 from sanic.exceptions import NotFound
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import create_engine, select  # type: ignore[import-not-found]
+from sqlalchemy.orm import Session, joinedload  # type: ignore[import-not-found]
 
 from testbench_requirement_service.models.requirement import (
     BaselineObject,
@@ -259,4 +259,4 @@ class SqlRequirementReader(AbstractRequirementReader):
             .join(Baseline.project)
             .where(Project.name == project, Baseline.name == baseline)
         )
-        return session.scalar(stmt)
+        return session.scalar(stmt)  # type: ignore[no-any-return]
