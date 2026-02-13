@@ -96,7 +96,7 @@ def dependency_matches(
     return True
 
 
-def parse_value_from_input(value_str: str, field_type: type) -> Any:  # noqa: PLR0911
+def parse_value_from_input(value_str: str, field_type: type) -> Any:  # noqa: C901, PLR0911
     """Parse user input string to the appropriate Python type."""
     if not value_str:
         return None
@@ -107,6 +107,10 @@ def parse_value_from_input(value_str: str, field_type: type) -> Any:  # noqa: PL
         return Path(value_str)
 
     if origin is list:
+        value_str = value_str.strip()
+        if value_str.startswith("[") and value_str.endswith("]"):
+            value_str = value_str[1:-1].strip()
+
         args = get_args(field_type)
         if args and args[0] is str:
             # Comma-separated string list
@@ -723,9 +727,9 @@ def prompt_single_field(  # noqa: C901, PLR0912, PLR0913
             raw_answer: Any = None
 
             if origin is Literal:
-                raw_answer = prompt_literal_field(field_type, description, default_display)
+                raw_answer = prompt_literal_field(field_type, description, default_value)
             elif field_type is bool:
-                raw_answer = prompt_bool_field(description, default_display)
+                raw_answer = prompt_bool_field(description, default_value)
             elif field_type is Path:
                 raw_answer = prompt_path_field(description, default_display)
             elif is_sensitive_field(field_name, field_info):
