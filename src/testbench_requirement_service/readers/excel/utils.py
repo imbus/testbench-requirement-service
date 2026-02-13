@@ -7,6 +7,7 @@ from typing import Any, Literal
 from testbench_requirement_service.log import logger
 from testbench_requirement_service.models.requirement import (
     ExtendedRequirementObject,
+    RequirementKey,
     RequirementObjectNode,
     RequirementVersionObject,
 )
@@ -104,34 +105,42 @@ def read_data_frame_from_file_path(
         time.monotonic() - start,
         bytes_used / (1024**2),
     )
-    return df
+    return df  # type: ignore[no-any-return]
 
 
 def build_extendedrequirementobject_from_row_data(
     row_data: dict, config: ExcelRequirementReaderConfig, baseline: str
 ) -> ExtendedRequirementObject:
-    row_data["extendedID"] = row_data["id"]
-    row_data["key"] = {"id": row_data["id"], "version": row_data["version"]}
-    folder_pattern = config.requirement_folderPattern
-    row_data["requirement"] = re.fullmatch(folder_pattern, row_data.get("type", "")) is None
+    requirement_object = build_requirementobjectnode_from_row_data(row_data, config)
     sep = config.arrayValueSeparator
-    row_data["documents"] = (
-        str(row_data.get("references")).split(sep) if row_data.get("references") else []
-    )
-    row_data["baseline"] = baseline
+    documents = str(row_data.get("references")).split(sep) if row_data.get("references") else []
 
-    return ExtendedRequirementObject(**row_data)
+    return ExtendedRequirementObject(
+        **requirement_object.model_dump(exclude={"children"}),
+        description=row_data.get("description", ""),
+        documents=documents,
+        baseline=baseline,
+    )
 
 
 def build_requirementobjectnode_from_row_data(
     row_data: dict, config: ExcelRequirementReaderConfig
 ) -> RequirementObjectNode:
-    row_data["extendedID"] = row_data["id"]
-    row_data["key"] = {"id": row_data["id"], "version": row_data["version"]}
+    extended_id = row_data["id"]
+    key = RequirementKey(id=row_data["id"], version=row_data["version"])
     folder_pattern = config.requirement_folderPattern
-    row_data["requirement"] = re.fullmatch(folder_pattern, row_data.get("type", "")) is None
+    is_requirement = re.fullmatch(folder_pattern, row_data.get("type", "")) is None
 
-    return RequirementObjectNode(**row_data)
+    return RequirementObjectNode(
+        name=row_data["name"],
+        extendedID=extended_id,
+        key=key,
+        owner=row_data.get("owner", ""),
+        status=row_data.get("status", ""),
+        priority=row_data.get("priority", ""),
+        requirement=is_requirement,
+        children=row_data.get("children"),
+    )
 
 
 def build_requirementversionobject_from_row_data(
@@ -146,7 +155,45 @@ def build_requirementversionobject_from_row_data(
         date=date,
         author=row_data.get("owner", ""),
         comment=row_data.get("comment", ""),
-    )  # TODO: which data should be filled in ?
+    )
+
+
+def build_requirement_tree_from_dataframe(
+    df: pd.DataFrame, config: ExcelRequirementReaderConfig
+) -> list[RequirementObjectNode]:
+    """Build requirement tree from dataframe, handling optional hierarchyID.
+
+    If hierarchyID column exists, builds a hierarchical tree structure.
+    Otherwise, returns a flat list in the original order.
+    """
+    if "hierarchyID" in df.columns:
+        df = df.sort_values(by="hierarchyID")
+
+    requirement_nodes: dict[str, RequirementObjectNode] = {}
+    requirement_tree: list[RequirementObjectNode] = []
+    hierarchy_id_mapping: dict[str, str] = {}
+
+    for row in df.to_dict("records"):
+        requirement_node = build_requirementobjectnode_from_row_data(row, config)
+        requirement_id = requirement_node.key.id
+
+        parent_id = None
+        hierarchy = row.get("hierarchyID")
+        if hierarchy:
+            hierarchy_id_mapping[hierarchy] = requirement_id
+            parent_hierarchy = hierarchy.rpartition(".")[0]
+            parent_id = hierarchy_id_mapping.get(parent_hierarchy)
+
+        if parent_id:
+            parent = requirement_nodes[parent_id]
+            parent.children = parent.children or []
+            parent.children.append(requirement_node)
+        else:
+            requirement_tree.append(requirement_node)
+
+        requirement_nodes[requirement_id] = requirement_node
+
+    return requirement_tree
 
 
 def get_config_for_user_defined_attribute(

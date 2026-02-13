@@ -19,7 +19,6 @@ from testbench_requirement_service.models.requirement import (
     BaselineObjectNode,
     ExtendedRequirementObject,
     RequirementKey,
-    RequirementObjectNode,
     RequirementVersionObject,
     UserDefinedAttribute,
     UserDefinedAttributeResponse,
@@ -32,7 +31,7 @@ from testbench_requirement_service.readers.excel.config import (
 )
 from testbench_requirement_service.readers.excel.utils import (
     build_extendedrequirementobject_from_row_data,
-    build_requirementobjectnode_from_row_data,
+    build_requirement_tree_from_dataframe,
     build_requirementversionobject_from_row_data,
     get_config_for_user_defined_attribute,
     read_data_frame_from_file_path,
@@ -100,29 +99,7 @@ class ExcelRequirementReader(AbstractRequirementReader):
         config = self._get_config_for_project(project)
 
         df = self._get_dataframe(baseline_path, config)
-        df = df.sort_values(by="hierarchyID")
-
-        requirement_nodes: dict[str, RequirementObjectNode] = {}
-        requirement_tree: list[RequirementObjectNode] = []
-        hierarchy_id_mapping: dict[str, str] = {}
-
-        for row in df.to_dict("records"):
-            hierarchy: str = row["hierarchyID"]
-            requirement_node = build_requirementobjectnode_from_row_data(row, config)
-
-            requirement_id = requirement_node.key.id
-            hierarchy_id_mapping[hierarchy] = requirement_id
-
-            parent_hierarchy = hierarchy.rpartition(".")[0]
-            parent_id = hierarchy_id_mapping.get(parent_hierarchy)
-            if parent_id:
-                parent = requirement_nodes[parent_id]
-                parent.children = parent.children or []
-                parent.children.append(requirement_node)
-            else:
-                requirement_tree.append(requirement_node)
-
-            requirement_nodes[requirement_id] = requirement_node
+        requirement_tree = build_requirement_tree_from_dataframe(df, config)
 
         stat_result = baseline_path.stat()
         creation_timestamp = getattr(stat_result, "st_birthtime", stat_result.st_ctime)
