@@ -5,7 +5,7 @@ Library     resources/APIKeywords.py    reuse_session=True
 *** Test Cases ***
 Get Server Name And Version Should Return 200 And String With Name And Version
     ${response}=    Get Server Name And Version
-    Should Be Equal    ${response.json()}    TestBenchRequirementService-1.0.0b2
+    Should Be Equal    ${response.json()}    TestBenchRequirementService-1.0.0b3
 
 Get All Projects Should Return 200 And List Of Projects
     ${response}=    Get Projects
