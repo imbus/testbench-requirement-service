@@ -43,8 +43,27 @@ If you want to contribute code, it's important to ensure that everything works c
 
 **Run the Robot Framework Tests**
 
-To run the tests, simply execute the following from the project’s root directory:
+To run the tests, execute the following from the project's root directory:
 ```powershell
-robot .
+robot --pythonpath tests/robot tests/robot/tests
 ```
-This will automatically discover and run all robot tests in the project.
+
+This uses `--pythonpath tests/robot` to enable clean import paths in test files.
+
+**Run specific test suites:**
+```powershell
+# Excel tests only
+robot --pythonpath tests/robot tests/robot/tests/excel_tests
+
+# JSONL tests only
+robot --pythonpath tests/robot tests/robot/tests/jsonl_tests
+
+# Generic tests only
+robot --pythonpath tests/robot tests/robot/tests/generic_tests
+```
+
+**Run from test directory:**
+```powershell
+cd tests/robot
+robot --pythonpath . tests
+```

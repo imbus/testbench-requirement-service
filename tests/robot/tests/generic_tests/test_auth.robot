@@ -1,5 +1,5 @@
 *** Settings ***
-Library     ../../resources/APIKeywords.py
+Library     resources/APIKeywords.py    reuse_session=False
 
 
 *** Test Cases ***

@@ -1,2 +1,2 @@
 [jsonl]
-requirements_path = "requirements/jsonl"
+requirements_path = "data/requirements/jsonl"

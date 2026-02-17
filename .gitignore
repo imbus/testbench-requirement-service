@@ -220,4 +220,5 @@ config.py
 results/
 
 # Requirement files
-requirements
+requirements/
+!tests/robot/data/requirements/
