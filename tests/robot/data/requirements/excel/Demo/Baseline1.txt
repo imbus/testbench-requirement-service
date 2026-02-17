@@ -1,0 +1,12 @@
+hierarchy;name;extendedID;id;version;date;author;comment;owner;status;priority;requirement;description;documents;parent;Priority;Status
+1;Requirement1;req1;req1;1.0;2024-01-01T10:00:00Z;Author1;Initial version;Owner1;Open;High;False;User login functionality;login_spec.pdf;;High;Open
+1.1;Requirement2;req2;req2;1.0;2024-01-02T11:00:00Z;Author2;Initial version;Owner2;Closed;Medium;True;User logout functionality;logout_spec.pdf;req1;Medium;Closed
+2;Car Configuration;req3;req3;1.0;2024-01-03T12:00:00Z;Author1;Initial version;Owner3;Open;High;False;Parent requirement for car configuration features;;;High;
+2.1;Accessory Selection;req5;req5;1.0;2024-01-05T14:00:00Z';Author3;Initial version;Owner5;Open;Medium;True;Users can choose additional accessories such as wheels, sunroof, and lights.;accessories_spec.pdf;req3;Medium;Open
+2.2;Base Mode Configuration;req4;req4;1.0;2024-01-04T13:00:00Z;Author2;Initial version;Owner4;In Progress;High;True;Allow users to configure base car settings such as color and model.;base_mode_spec.pdf;req3;High;In Progress
+2.3;Special Mode Configuration;req6;req6;1.0;2024-01-06T15:00:00Z;Author4;Initial version;Owner6;Open;Low;True;Users can configure special modes such as sport mode or eco mode.;special_mode_spec.pdf;req3;Low;Open
+2.4;User Preferences Storage;req7;req7;1.0;2024-01-07T16:00:00Z;Author5;Initial version;Owner7;Open;High;False;Save user preferences for configurations.;preferences_spec.pdf;req3;High;
+2.4.1;Backend Integration;req8;req8;1.0;2024-01-08T17:00:00Z';Author6;Initial version;Owner8;Open;High;True;Integrate the backend services for configuration storage and retrieval.;backend_integration.pdf;req7;High;Closed
+2.4.2;Backend Integration;req8;req8;2.0;2024-01-08T17:00:01Z;Author6;another version;Owner8;Closed;High;True;<html><body><b>New Version</b> Integrate the backend services for configuration storage and retrieval.</body></html>;backend_integration.pdf;req7;High;Closed
+2.5;UI Design;req9;req9;1.0;2024-01-09T18:00:00Z;Author7;Initial version;Owner9;In Review;Medium;True;Design a user-friendly UI for car configuration.;ui_design.pdf;req3;Medium;In Review
+2.4.3;API Development;req10;req10;1.0;2024-01-10T19:00:00Z;Author8;Initial version;Owner10;Open;High;True;Develop APIs to connect the car configuration tool with the backend services.;api_development.pdf;req7;High;Open
