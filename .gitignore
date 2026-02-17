@@ -222,3 +222,8 @@ results/
 # Requirement files
 requirements/
 !tests/robot/data/requirements/
+
+# Certificates
+*.crt
+*.pem
+*.key

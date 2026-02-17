@@ -1,11 +1,13 @@
 """Configuration management for TestBench Requirement Service."""
 
 import os
+import ssl
 import sys
 from pathlib import Path
 
 from pydantic import ValidationError
 from sanic.config import Config
+from sanic.http.tls.context import CIPHERS_TLS12
 
 from testbench_requirement_service.readers.utils import get_reader_config_class
 from testbench_requirement_service.utils.config import (
@@ -27,6 +29,9 @@ class AppConfig(Config):
         host: str | None = None,
         port: int | None = None,
         debug: bool | None = None,
+        ssl_cert: Path | str | None = None,
+        ssl_key: Path | str | None = None,
+        ssl_ca_cert: Path | str | None = None,
         *args,
         **kwargs,
     ):
@@ -68,6 +73,44 @@ class AppConfig(Config):
         # Load credentials
         self.PASSWORD_HASH = service_config.password_hash or os.getenv("PASSWORD_HASH") or ""
         self.SALT = service_config.salt or os.getenv("SALT") or ""
+
+        # SSL/TLS configuration
+        self.SSL_CERT = ssl_cert or service_config.ssl_cert
+        self.SSL_KEY = ssl_key or service_config.ssl_key
+        self.SSL_CA_CERT = ssl_ca_cert or service_config.ssl_ca_cert
+
+        # Reverse Proxy configuration
+        self.PROXIES_COUNT = service_config.proxies_count
+        self.REAL_IP_HEADER = service_config.real_ip_header
+        self.FORWARDED_SECRET = service_config.forwarded_secret
+
+    def get_ssl_context(self) -> ssl.SSLContext | dict | None:
+        """Get SSL configuration for HTTPS if certificates are configured.
+
+        Returns:
+            ssl.SSLContext: SSL context with mTLS (client certificate verification)
+            dict: Simple cert/key dict for basic HTTPS (Sanic's built-in handling)
+            None: If SSL is not configured
+        """
+        if not self.SSL_CERT or not self.SSL_KEY:
+            return None
+
+        # If no CA cert specified, return simple dict (Sanic's built-in handling)
+        if not self.SSL_CA_CERT:
+            return {
+                "cert": self.SSL_CERT,
+                "key": self.SSL_KEY,
+            }
+
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.set_ciphers(":".join(CIPHERS_TLS12))
+        context.set_alpn_protocols(["http/1.1"])
+        context.load_cert_chain(str(self.SSL_CERT), str(self.SSL_KEY))
+        context.load_verify_locations(cafile=str(self.SSL_CA_CERT))
+        context.verify_mode = ssl.CERT_REQUIRED
+
+        return context
 
     def _validate_reader_config(self):
         """Validate reader_config dict against the reader's CONFIG_CLASS.

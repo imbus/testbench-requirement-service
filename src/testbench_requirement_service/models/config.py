@@ -46,6 +46,30 @@ class RequirementServiceConfig(BaseModel):
         default_factory=dict,
         description="Inline reader configuration when no separate file is used",
     )
+    ssl_cert: str | None = Field(
+        default=None,
+        description="Path to SSL/TLS certificate file for HTTPS support (.crt or .pem)",
+    )
+    ssl_key: str | None = Field(
+        default=None,
+        description="Path to SSL/TLS private key file for HTTPS support (.key)",
+    )
+    ssl_ca_cert: str | None = Field(
+        default=None,
+        description="Optional path to CA certificate file for client verification",
+    )
+    proxies_count: int | None = Field(
+        default=None,
+        description="Number of proxy servers in front of the application (for X-Forwarded headers)",
+    )
+    real_ip_header: str | None = Field(
+        default=None,
+        description="Header name to use for client IP (e.g., 'X-Real-IP')",
+    )
+    forwarded_secret: str | None = Field(
+        default=None,
+        description="Secret token for validating Forwarded header (security measure)",
+    )
 
     @field_validator("reader_config_path")
     @classmethod
@@ -53,4 +77,12 @@ class RequirementServiceConfig(BaseModel):
         """Validate that reader_config_path exists if provided."""
         if v is not None and not Path(v).exists():
             raise ValueError(f"Reader config file not found: '{v}'")
+        return v
+
+    @field_validator("ssl_cert", "ssl_key", "ssl_ca_cert")
+    @classmethod
+    def validate_ssl_files_exist(cls, v: str | None) -> str | None:
+        """Validate that SSL certificate files exist if provided."""
+        if v is not None and not Path(v).exists():
+            raise ValueError(f"SSL certificate file not found: '{v}'")
         return v
