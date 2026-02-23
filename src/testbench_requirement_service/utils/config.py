@@ -73,14 +73,16 @@ def print_config_errors(
     """
     for error in e.errors():
         loc = [str(loc) for loc in error["loc"]]
-        field_name = loc[-1]
+        field_name = loc[-1] if loc else None
 
         error_type = error.get("type", "")
         if error_type == "missing":
-            msg = f"Missing required field '{field_name}'"
+            msg = (
+                f"Missing required field '{field_name}'" if field_name else "Missing required field"
+            )
             detail = None
         else:
-            msg = f"Invalid field '{field_name}'"
+            msg = f"Invalid field '{field_name}'" if field_name else "Invalid configuration"
             detail = error.get("msg")
 
         if config_path is not None:
