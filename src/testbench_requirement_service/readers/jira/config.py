@@ -1,7 +1,8 @@
 import os
+from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic.fields import Field
 
 
@@ -102,14 +103,24 @@ class JiraRequirementReaderConfig(BaseModel):
             "required": True,
         },
     )
+    key_cert_path: str | None = Field(
+        None,
+        description="Path to the OAuth private key certificate file (.pem)",
+        json_schema_extra={
+            "env_var": "JIRA_KEY_CERT_PATH",
+            "depends_on": {"auth_type": "oauth"},
+            "required": True,
+        },
+    )
     key_cert: str | None = Field(
         None,
-        description="OAuth private key certificate",
+        description="OAuth private key certificate content (use key_cert_path instead)",
         json_schema_extra={
             "sensitive": True,
             "env_var": "JIRA_KEY_CERT",
             "depends_on": {"auth_type": "oauth"},
-            "required": True,
+            "required": False,
+            "skip_if_wizard": True,
         },
     )
 
@@ -117,11 +128,11 @@ class JiraRequirementReaderConfig(BaseModel):
         "fixVersions", description="Jira field used to identify baselines/versions"
     )
     baseline_jql: str = Field(
-        'project = "{project}" AND fixVersion = "{baseline}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")',  # noqa: E501
+        'project = "{project}" AND fixVersion = "{baseline}" AND issuetype in standardIssueTypes()',
         description="JQL query template for fetching baseline requirements",
     )
     current_baseline_jql: str = Field(
-        'project = "{project}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")',
+        'project = "{project}" AND issuetype in standardIssueTypes()',
         description="JQL query template for fetching current baseline requirements",
     )
     requirement_group_types: list[str] = Field(
@@ -138,6 +149,18 @@ class JiraRequirementReaderConfig(BaseModel):
     rendered_fields: list[str] = Field(
         default_factory=list, description="Fields to render as HTML (e.g., description)"
     )
+    timeout: int = Field(
+        30,
+        description="HTTP request timeout in seconds for Jira API calls",
+        ge=1,
+        le=300,
+    )
+    max_retries: int = Field(
+        3,
+        description="Maximum number of retries for failed Jira API requests",
+        ge=0,
+        le=10,
+    )
 
     projects: dict[str, JiraProjectConfig] = Field(
         default_factory=dict,
@@ -151,54 +174,73 @@ class JiraRequirementReaderConfig(BaseModel):
         },
     )
 
-    @model_validator(mode="after")
-    def validate_config(self):  # noqa: C901
-        if self.auth_type == "basic":
-            self.username = self.username or os.getenv("JIRA_USERNAME")
-            if not self.username:
-                raise ValueError(
-                    "Jira username must be provided for basic auth "
-                    "(via config or JIRA_USERNAME env)"
-                )
+    @field_validator("key_cert_path")
+    @classmethod
+    def validate_key_cert_path_exists(cls, v: str | None) -> str | None:
+        """Validate that key_cert_path exists if provided."""
+        if v is not None and not Path(v).exists():
+            raise ValueError(f"OAuth private key file not found: '{v}'")
+        return v
 
-            self.api_token = self.api_token or os.getenv("JIRA_API_TOKEN")
-            if not self.api_token:
-                raise ValueError(
-                    "Jira API token must be provided for basic auth "
-                    "(via config or JIRA_API_TOKEN env)"
-                )
-        elif self.auth_type == "token":
-            self.token = self.token or os.getenv("JIRA_BEARER_TOKEN")
-            if not self.token:
-                raise ValueError(
-                    "Jira Personal Access Token must be provided for token auth "
-                    "(via config or JIRA_BEARER_TOKEN env)"
-                )
-        elif self.auth_type == "oauth":
-            self.access_token = self.access_token or os.getenv("JIRA_ACCESS_TOKEN")
-            self.access_token_secret = self.access_token_secret or os.getenv(
-                "JIRA_ACCESS_TOKEN_SECRET"
+    def _validate_basic_auth(self) -> None:
+        self.username = self.username or os.getenv("JIRA_USERNAME")
+        if not self.username:
+            raise ValueError(
+                "Jira username must be provided for basic auth (via config or JIRA_USERNAME env)"
             )
-            self.consumer_key = self.consumer_key or os.getenv("JIRA_CONSUMER_KEY")
-            self.key_cert = self.key_cert or os.getenv("JIRA_KEY_CERT")
-            if not self.access_token:
-                raise ValueError(
-                    "Jira Access Token must be provided for OAuth "
-                    "(via config or JIRA_ACCESS_TOKEN env)"
-                )
-            if not self.access_token_secret:
-                raise ValueError(
-                    "Jira Access Token Secret must be provided for OAuth "
-                    "(via config or JIRA_ACCESS_TOKEN_SECRET env)"
-                )
-            if not self.consumer_key:
-                raise ValueError(
-                    "Jira consumer key must be provided for OAuth "
-                    "(via config or JIRA_CONSUMER_KEY env)"
-                )
-            if not self.key_cert:
-                raise ValueError(
-                    "Jira Private Key must be provided for OAuth (via config or JIRA_KEY_CERT env)"
-                )
+        self.api_token = self.api_token or os.getenv("JIRA_API_TOKEN")
+        if not self.api_token:
+            raise ValueError(
+                "Jira API token must be provided for basic auth (via config or JIRA_API_TOKEN env)"
+            )
 
+    def _validate_token_auth(self) -> None:
+        self.token = self.token or os.getenv("JIRA_BEARER_TOKEN")
+        if not self.token:
+            raise ValueError(
+                "Jira Personal Access Token must be provided for token auth "
+                "(via config or JIRA_BEARER_TOKEN env)"
+            )
+
+    def _validate_oauth(self) -> None:
+        self.access_token = self.access_token or os.getenv("JIRA_ACCESS_TOKEN")
+        self.access_token_secret = self.access_token_secret or os.getenv("JIRA_ACCESS_TOKEN_SECRET")
+        self.consumer_key = self.consumer_key or os.getenv("JIRA_CONSUMER_KEY")
+        self.key_cert_path = self.key_cert_path or os.getenv("JIRA_KEY_CERT_PATH")
+        if self.key_cert_path:
+            try:
+                self.key_cert = Path(self.key_cert_path).read_text(encoding="utf-8")
+            except OSError as e:
+                raise ValueError(
+                    f"Could not read OAuth private key from '{self.key_cert_path}': {e}"
+                ) from e
+        else:
+            self.key_cert = self.key_cert or os.getenv("JIRA_KEY_CERT")
+        if not self.access_token:
+            raise ValueError(
+                "Jira Access Token must be provided for OAuth (via config or JIRA_ACCESS_TOKEN env)"
+            )
+        if not self.access_token_secret:
+            raise ValueError(
+                "Jira Access Token Secret must be provided for OAuth "
+                "(via config or JIRA_ACCESS_TOKEN_SECRET env)"
+            )
+        if not self.consumer_key:
+            raise ValueError(
+                "Jira consumer key must be provided for OAuth (via config or JIRA_CONSUMER_KEY env)"
+            )
+        if not self.key_cert:
+            raise ValueError(
+                "Jira Private Key must be provided for OAuth "
+                "(via key_cert_path / JIRA_KEY_CERT_PATH or key_cert / JIRA_KEY_CERT env)"
+            )
+
+    @model_validator(mode="after")
+    def validate_config(self) -> "JiraRequirementReaderConfig":
+        if self.auth_type == "basic":
+            self._validate_basic_auth()
+        elif self.auth_type == "token":
+            self._validate_token_auth()
+        elif self.auth_type == "oauth":
+            self._validate_oauth()
         return self
