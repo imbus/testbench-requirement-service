@@ -1,5 +1,6 @@
 import base64
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -17,8 +18,6 @@ MAX_EMBEDDED_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB limit for embedded images
 JIRA_ATTACHMENT_URL_PATTERN = re.compile(r"^/rest/api/\d+/attachment/content/(\d+)$")
 DEFAULT_INLINE_STYLES_PATH = Path(__file__).parents[2] / "static" / "rendered_fields.css"
 
-default_inline_styles = ""
-
 
 def load_inline_styles(path: Path) -> str:
     try:
@@ -29,6 +28,12 @@ def load_inline_styles(path: Path) -> str:
     except OSError as exc:  # pragma: no cover - edge case
         logger.warning(f"Failed to read inline styles from {path}: {exc}")
         return ""
+
+
+@lru_cache(maxsize=1)
+def _get_inline_styles() -> str:
+    """Return cached inline styles, loading from disk only on the first call."""
+    return load_inline_styles(DEFAULT_INLINE_STYLES_PATH)
 
 
 def build_rendered_field_html(
@@ -53,7 +58,7 @@ def build_rendered_field_html(
 
 def wrap_in_html(body: str, include_head: bool = True) -> str:
     if include_head:
-        styles = default_inline_styles or load_inline_styles(DEFAULT_INLINE_STYLES_PATH)
+        styles = _get_inline_styles()
         style_tag = f"<style>{styles}</style>" if styles else ""
         head = f"<head>{style_tag}</head>"
     else:
@@ -279,7 +284,7 @@ def handle_remote_image(
         return True
 
     # Try to inline
-    if should_inline_remote_image(src):
+    if should_inline_remote_image(src, jira_server_url):
         data_uri = fetch_image_as_data_uri(issue, src)
         image_cache[src] = data_uri
         if data_uri:
@@ -326,8 +331,45 @@ def is_remote_http(value: str) -> bool:
     return parsed.scheme in {"http", "https"}
 
 
-def should_inline_remote_image(src: str) -> bool:
-    return True  # For now, inline all remote images
+def is_trusted_atlassian_host(hostname: str) -> bool:
+    trusted_hosts = {"atlassian.net", "atlassian.com", "atl-paas.net"}
+    return any(hostname == host or hostname.endswith(f".{host}") for host in trusted_hosts)
+
+
+def should_inline_remote_image(src: str, jira_server_url: str) -> bool:
+    """Only inline images hosted on the same Jira instance or trusted Atlassian CDN hosts.
+
+    Allows:
+    - data: URIs
+    - Relative URLs
+    - Same-host URLs
+    - Trusted Atlassian hosts
+
+    Blocks:
+    - Any absolute URL pointing to an unknown external host
+    """
+    try:
+        if src.startswith("data:"):
+            return True
+
+        parsed = urlparse(src)
+        if not parsed.hostname:
+            return True
+
+        src_host = parsed.hostname.lower()
+
+        jira_host = urlparse(jira_server_url).hostname
+        if jira_host and src_host == jira_host.lower():
+            return True
+
+        if is_trusted_atlassian_host(src_host):
+            return True
+
+        logger.debug(f"Skipping remote image (untrusted host): {src!r} ")
+        return False
+    except Exception as e:
+        logger.debug(f"Skipping image src {src!r}: failed to parse URL ({e})")
+        return False
 
 
 def fetch_image_as_data_uri(

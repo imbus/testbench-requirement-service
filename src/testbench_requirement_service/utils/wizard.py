@@ -185,7 +185,7 @@ def prompt_with_validation(
 
 def is_sensitive_field(field_name: str, field_info: FieldInfo) -> bool:
     """Check if a field contains sensitive data like passwords or tokens."""
-    sensitive_keywords = {"password", "token", "secret", "key_cert", "api_token"}
+    sensitive_keywords = {"password", "token", "secret", "api_token"}
     if any(keyword in field_name.lower() for keyword in sensitive_keywords):
         return True
     schema_extra = get_field_extra(field_info)

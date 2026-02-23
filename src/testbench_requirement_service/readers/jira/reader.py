@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 try:  # noqa: SIM105
-    from jira.resources import Field, Issue, Project
+    from jira.resources import Field, Issue, Project, PropertyHolder
 except ImportError:
     pass
 from sanic import NotFound
@@ -27,9 +27,11 @@ from testbench_requirement_service.readers.jira.utils import (
     build_extendedrequirementobject_from_issue,
     build_requirementobjectnode_from_issue,
     build_userdefinedattribute_object,
+    escape_jql_value,
     extract_baselines_from_issue,
     extract_valuetype_from_issue_field,
     generate_requirement_versions,
+    get_config_value,
     get_field_id,
     get_issue_version,
     is_version_type_field,
@@ -93,15 +95,13 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         jql_query = self._build_issues_jql(project, baseline)
-        issues = self.jira_client.fetch_issues_by_jql(jql_query, expand="changelog")
+        issues = self.jira_client.fetch_issues_by_jql(jql_query)
         if not issues:
             logger.debug(f"No issues found for project '{project}' and baseline '{baseline}'")
 
-        issue_ids = [issue.id for issue in issues]
-        issue_changelogs = self.jira_client.fetch_changelog_histories(issue_ids)
+        issue_changelogs = self.jira_client.fetch_changelog_histories(issues)
         for issue in issues:
-            histories = issue_changelogs.get(issue.id, [])
-            issue.changelog.histories = histories
+            self._attach_changelog(issue, issue_changelogs.get(issue.key, []))
 
         issues.sort(key=self.sort_by_issue_key)
         requirement_nodes = self._build_requirement_nodes(issues, project)
@@ -112,7 +112,14 @@ class JiraRequirementReader(AbstractRequirementReader):
             date=datetime.now(timezone.utc),
             type="CURRENT",
             children=sorted(
-                requirement_tree.values(), key=lambda x: int(x.extendedID.split("-")[-1])
+                requirement_tree.values(),
+                key=lambda x: (
+                    (0, int(x.extendedID.split("-")[-1]))
+                    if x.extendedID
+                    and "-" in x.extendedID
+                    and x.extendedID.split("-")[-1].isdigit()
+                    else (1, x.extendedID or "")
+                ),
             ),
         )
 
@@ -136,7 +143,8 @@ class JiraRequirementReader(AbstractRequirementReader):
             return []
 
         custom_fields = self.jira_client.fetch_all_custom_fields()
-        fields = [field for field in custom_fields if field["name"] in attribute_names]
+        attribute_names_set = set(attribute_names)
+        fields = [field for field in custom_fields if field["name"] in attribute_names_set]
         field_ids = [field["id"] for field in fields]
 
         issue_keys = [req_key.id for req_key in requirement_keys]
@@ -159,9 +167,9 @@ class JiraRequirementReader(AbstractRequirementReader):
             for field in fields:
                 if not hasattr(issue.fields, field["id"]):
                     continue
-                if hasattr(issue.renderedFields, field["id"]) and field[
-                    "name"
-                ] in self._get_config_value("rendered_fields", project):
+                if hasattr(issue.renderedFields, field["id"]) and field["name"] in get_config_value(
+                    self.config, "rendered_fields", project
+                ):
                     field_value = build_rendered_field_html(
                         issue,
                         field_id=field["id"],
@@ -185,20 +193,18 @@ class JiraRequirementReader(AbstractRequirementReader):
             project=project,
             baseline=baseline,
         )
-        expand = "renderedFields,changelog"
+        expand = "renderedFields"
         issue = self.jira_client.fetch_issue(key.id, fields=fields, expand=expand)
         if issue is None:
             raise NotFound("Requirement not found")
-        self._validate_issue(
-            issue
-        )  # TODO: discuss whether project and baseline checks are needed here
 
+        self._fetch_and_attach_changelog(issue)
         custom_fields = self.jira_client.fetch_all_custom_fields()
         issue = get_issue_version(project, issue, key, self.config, custom_fields)
         requirement_object = build_requirementobjectnode_from_issue(
             project=project,
             issue=issue,
-            owner_field_name=self._get_config_value("owner", project),
+            owner_field_name=get_config_value(self.config, "owner", project),
             config=self.config,
             key=key,
             is_requirement=True,
@@ -214,12 +220,11 @@ class JiraRequirementReader(AbstractRequirementReader):
         self, project: str, baseline: str, key: RequirementKey
     ) -> list[RequirementVersionObject]:
         fields = self._prepare_fields("summary,created,creator", project, baseline)
-        issue = self.jira_client.fetch_issue(key.id, fields=fields, expand="changelog")
+        issue = self.jira_client.fetch_issue(key.id, fields=fields)
         if issue is None:
             raise NotFound("Requirement not found")
-        self._validate_issue(
-            issue
-        )  # TODO: discuss whether project and baseline checks are needed here
+
+        self._fetch_and_attach_changelog(issue)
         return generate_requirement_versions(project, issue, self.config)
 
     def _build_project_dict(self, projects: list[Project]) -> dict[str, Project]:
@@ -232,27 +237,27 @@ class JiraRequirementReader(AbstractRequirementReader):
         except (AttributeError, ValueError, IndexError):
             return float("inf")  # Push invalid/malformed keys to the end
 
-    def _fetch_baseline_field(self, project_key: str) -> Field | None:
+    def _fetch_baseline_field(self, project_key: str, field_name: str) -> Field | None:
         issue_fields = self.jira_client.fetch_project_issue_fields(project_key)
         for field in issue_fields:
             field_id = get_field_id(field)
-            if self.config.baseline_field in (field_id, field.name):
+            if field_name in (field_id, field.name):
                 return field
         logger.warning(
-            f"Configured baseline_field '{self.config.baseline_field}' not found in project {project_key}"  # noqa: E501
+            f"Configured baseline_field '{field_name}' not found in project {project_key}"
         )
         return None
 
     def _fetch_baselines_for_project(self, project: str) -> list[str]:
         project_key = self.projects[project].key
-        baseline_field = self._get_config_value("baseline_field", project)
+        baseline_field = get_config_value(self.config, "baseline_field", project)
 
         if baseline_field.lower() == "fixversions":
             baselines = self.jira_client.fetch_project_versions(project_key)
         elif baseline_field.lower() == "sprint":
             baselines = self._fetch_sprint_baselines(project_key)
         else:
-            baseline_field_obj = self._fetch_baseline_field(project_key)
+            baseline_field_obj = self._fetch_baseline_field(project_key, baseline_field)
             if baseline_field_obj:
                 if is_version_type_field(baseline_field_obj):
                     baselines = self.jira_client.fetch_project_versions(project_key)
@@ -262,19 +267,22 @@ class JiraRequirementReader(AbstractRequirementReader):
                         av.get("name") or av.get("value") or str(av) for av in allowed_values
                     ]
             else:
-                logger.warning(f"Baseline field not found for project {project}")
+                logger.warning(f"Baseline field '{baseline_field}' not found for project {project}")
                 baselines = []
         self._baselines[project] = baselines
         return baselines
 
     def _fetch_sprint_baselines(self, project_key: str) -> list[str]:
-        baselines = []
+        seen: set[str] = set()
+        baselines: list[str] = []
         boards = self.jira_client.fetch_project_boards(project_key)
         scrum_boards = [board for board in boards if board.type == "scrum"]
         for board in scrum_boards:
             sprints = self.jira_client.fetch_sprints(board.id)
             for sprint in sprints:
-                baselines.append(sprint.name)
+                if sprint.name not in seen:
+                    seen.add(sprint.name)
+                    baselines.append(sprint.name)
         return baselines
 
     def _get_baselines_for_project(self, project: str) -> list[str]:
@@ -291,7 +299,8 @@ class JiraRequirementReader(AbstractRequirementReader):
             if project:
                 fields_set.add("project")
             if baseline:
-                fields_set.add(self.config.baseline_field)
+                baseline_field = get_config_value(self.config, "baseline_field", project)
+                fields_set.add(baseline_field)
             fields_set.add("issuetype")
             return ",".join(fields_set)
         return fields
@@ -319,25 +328,10 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         # If baseline is specified, check if the issue belongs to the specified baseline
         if baseline:
-            issue_baselines = extract_baselines_from_issue(issue, self.config.baseline_field)
+            baseline_field = get_config_value(self.config, "baseline_field", project)
+            issue_baselines = extract_baselines_from_issue(issue, baseline_field)
             if baseline != "Current Baseline" and baseline not in issue_baselines:
                 raise NotFound("Requirement not found")
-
-    def _normalize_field_for_jql(self, field_name: str) -> str:
-        """
-        Normalize Jira field names to their canonical JQL equivalents.
-
-        Currently handles known special cases like converting 'fixVersions' to 'fixVersion'.
-
-        Args:
-            field_name (str): The field name to normalize.
-
-        Returns:
-            str: The normalized field name for JQL queries.
-        """
-        if field_name.lower() == "fixversions":
-            return "fixVersion"
-        return field_name
 
     def _build_issues_jql(self, project: str, baseline: str, extra_jql: str | None = None) -> str:
         jql_query = self._build_baseline_jql(project, baseline)
@@ -363,11 +357,14 @@ class JiraRequirementReader(AbstractRequirementReader):
             str: The formatted JQL clause.
         """  # noqa: E501
         if baseline == "Current Baseline":
-            jql_template = self._get_config_value("current_baseline_jql", project)
+            jql_template = get_config_value(self.config, "current_baseline_jql", project)
         else:
-            jql_template = self._get_config_value("baseline_jql", project)
+            jql_template = get_config_value(self.config, "baseline_jql", project)
         project_key = self.projects[project].key
-        return str(jql_template).format(project=project_key, baseline=baseline)
+        return str(jql_template).format(
+            project=escape_jql_value(project_key),
+            baseline=escape_jql_value(baseline),
+        )
 
     def _build_requirement_nodes(
         self, issues: list[Issue], project: str
@@ -375,11 +372,11 @@ class JiraRequirementReader(AbstractRequirementReader):
         """Convert issues into requirement nodes."""
         requirement_nodes = {}
         for issue in issues:
-            is_requirement = True  # TODO: fix ?
+            is_requirement = not self._is_requirement_group_issue(issue, project)
             req_node = build_requirementobjectnode_from_issue(
                 project=project,
                 issue=issue,
-                owner_field_name=self._get_config_value("owner", project),
+                owner_field_name=get_config_value(self.config, "owner", project),
                 config=self.config,
                 is_requirement=is_requirement,
             )
@@ -391,66 +388,72 @@ class JiraRequirementReader(AbstractRequirementReader):
     ) -> dict[str, RequirementObjectNode]:
         """Link requirement nodes into a tree structure."""
         requirement_tree = {}
-        try:
-            for issue in issues:
-                parent_obj = getattr(issue.fields, "parent", None)
-                if not parent_obj:
+        for issue in issues:
+            parent_key = self.jira_client.get_parent_key(issue)
+            if not parent_key:
+                requirement_tree[issue.key] = requirement_nodes[issue.key]
+                continue
+
+            if parent_key not in requirement_nodes:
+                try:
+                    fields = self._prepare_fields("summary,created,creator")
+                    parent_issue = self.jira_client.fetch_issue(parent_key, fields=fields)
+                    if not parent_issue:
+                        raise ValueError(f"Parent issue {parent_key} not found")
+                    self._fetch_and_attach_changelog(parent_issue)
+                    is_requirement = not self._is_requirement_group_issue(parent_issue, project)
+                    requirement_nodes[parent_key] = build_requirementobjectnode_from_issue(
+                        project=project,
+                        issue=parent_issue,
+                        owner_field_name=get_config_value(self.config, "owner", project),
+                        config=self.config,
+                        is_requirement=is_requirement,
+                    )
+                    parent = requirement_nodes[parent_key]
+                    requirement_tree[parent_key] = parent
+                except Exception as e:
+                    logger.warning(
+                        f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
+                    )
                     requirement_tree[issue.key] = requirement_nodes[issue.key]
                     continue
-
-                parent_key = parent_obj.key
-                if parent_key not in requirement_nodes:
-                    try:
-                        fields = self._prepare_fields("summary,created,creator")
-                        parent_issue = self.jira_client.fetch_issue(
-                            parent_key, fields=fields, expand="changelog"
-                        )
-                        if not parent_issue:
-                            raise ValueError(f"Parent issue {parent_key} not found")
-                        requirement_nodes[parent_key] = build_requirementobjectnode_from_issue(
-                            project=project,
-                            issue=parent_issue,
-                            owner_field_name=self._get_config_value("owner", project),
-                            config=self.config,
-                            is_requirement=not self._is_requirement_group_issue(
-                                parent_issue, project
-                            ),
-                        )
-                        parent = requirement_nodes[parent_key]
-                        requirement_tree[parent_key] = parent
-                    except Exception as e:
-                        logger.warning(
-                            f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"  # noqa: E501
-                        )
-                        continue
-                else:
-                    parent = requirement_nodes[parent_key]
-                parent.children = parent.children or []
-                parent.children.append(requirement_nodes[issue.key])
-
-        except Exception as e:
-            logger.error(f"Error building requirement tree: {e}")
-            return {}
+            else:
+                parent = requirement_nodes[parent_key]
+            parent.children = parent.children or []
+            parent.children.append(requirement_nodes[issue.key])
 
         return requirement_tree
 
-    def _get_config_value(self, attr: str, project: str | None = None) -> str:
+    def _attach_changelog(self, issue: Issue, histories: list) -> None:
+        """Attach pre-fetched changelog histories to an issue object."""
+        changelog = getattr(issue, "changelog", None)
+        if changelog is None:
+            changelog = PropertyHolder()
+            issue.changelog = changelog  # type: ignore[attr-defined]
+        changelog.histories = histories  # type: ignore[union-attr]
+
+    def _fetch_and_attach_changelog(self, issue: Issue) -> None:
+        """Fetch full paginated changelog for an issue and attach it.
+
+        Uses the dedicated paginated changelog endpoint to ensure all history
+        entries are retrieved, avoiding the ~100 entry limit of the embedded
+        ``expand=changelog`` response on Jira Cloud.
         """
-        Retrieve a configuration value, optionally project-specific, falling back to global config.
-        Args:
-            attr (str): The attribute name to retrieve.
-            project (str | None): The project name, if any.
-        Returns:
-            The value of the attribute, or None if not found.
-        """
-        if project and project in self.config.projects:
-            project_config = self.config.projects[project]
-            value = getattr(project_config, attr, None)
-            if value is not None:
-                return value  # type: ignore
-        return getattr(self.config, attr, None)  # type: ignore
+        histories = self.jira_client.fetch_issue_changelog_histories(issue.key)
+        self._attach_changelog(issue, histories)
 
     def _is_requirement_group_issue(self, issue: Issue, project: str | None = None) -> bool:
-        return issue.fields.issuetype.name in self._get_config_value(
-            "requirement_group_types", project
+        """
+        Check if an issue is a requirement group (e.g., Epic, Folder).
+        Uses case-insensitive comparison to handle different Jira instance types.
+        """
+        issuetype = getattr(issue.fields, "issuetype", None)
+        if not issuetype or not getattr(issuetype, "name", None):
+            logger.debug(f"Issue {issue.key} has no issuetype field")
+            return False
+
+        issue_type_name: str = issuetype.name
+        requirement_group_types: list[str] = (
+            get_config_value(self.config, "requirement_group_types", project) or []
         )
+        return any(issue_type_name.lower() == t.lower() for t in requirement_group_types)
