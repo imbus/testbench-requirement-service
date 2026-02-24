@@ -23,25 +23,116 @@ except ImportError:
     pass
 
 
-def get_column_mapping_for_config(config: ExcelRequirementReaderConfig) -> dict[int, str]:
+def get_column_mapping_for_config(config: ExcelRequirementReaderConfig) -> dict[int, list[str]]:
+    """Return a mapping from 0-based column index to a list of field names.
+
+    Multiple fields may share the same column index (e.g. 'id' and 'name' both
+    reading from column 4).  The first entry in each list is used as the primary
+    rename target; additional entries become copies of that column so that all
+    downstream code can look up any field name by its logical key.
+    """
     setting_column_mapping = {
         setting: setting.split("_", 1)[1] for setting in config.column_settings
     }
 
-    column_mapping: dict[int, str] = {}
+    column_mapping: dict[int, list[str]] = {}
 
     for setting, column in setting_column_mapping.items():
         setting_value = getattr(config, setting, None)
         if not setting_value or not isinstance(setting_value, int):
             continue
         column_idx = setting_value - 1
-        column_mapping[column_idx] = column
+        column_mapping.setdefault(column_idx, []).append(column)
 
     for udf_config in config.udf_configs:
         column_idx = udf_config.column - 1
-        column_mapping[column_idx] = udf_config.name
+        column_mapping.setdefault(column_idx, []).append(udf_config.name)
 
     return column_mapping
+
+
+def _load_dataframe(file_path: Path, config: ExcelRequirementReaderConfig) -> pd.DataFrame:
+    """Read raw file data into a DataFrame with all values coerced to strings."""
+    header_row_idx = (config.header_rowIdx or 1) - 1
+    data_row_idx = (config.data_rowIdx or 2) - 1
+    read_params: dict[str, Any] = {
+        "header": header_row_idx,
+        "dtype": str,
+        "skiprows": list(range(header_row_idx + 1, data_row_idx)),
+    }
+
+    if file_path.suffix in (".xls", ".xlsx"):
+        sheet_name = config.worksheetName or 0
+        engine: Literal["openpyxl", "xlrd"] = "openpyxl" if file_path.suffix == ".xlsx" else "xlrd"
+        try:
+            df = pd.read_excel(file_path, sheet_name=sheet_name, engine=engine, **read_params)
+        except ValueError:
+            df = pd.read_excel(file_path, sheet_name=0, engine=engine, **read_params)
+    elif file_path.suffix in (".csv", ".tsv", ".txt"):
+        sep = "\t" if file_path.suffix == ".tsv" else config.columnSeparator
+        try:
+            df = pd.read_csv(file_path, sep=sep, **read_params)
+        except UnicodeDecodeError:
+            df = pd.read_csv(file_path, sep=sep, encoding="windows-1252", **read_params)
+    else:
+        raise ValueError(f"Unsupported file format: {file_path.suffix}")
+
+    return df.fillna("")  # type: ignore[no-any-return]
+
+
+def _apply_column_mapping(
+    df: pd.DataFrame,
+    column_mapping: dict[int, list[str]],
+    config: ExcelRequirementReaderConfig,
+) -> pd.DataFrame:
+    """Rename physical columns to their logical field names.
+
+    Validates that every configured index exists in the DataFrame.  When multiple
+    field names share the same column index, the column is renamed to the first
+    name and copied under each additional name so all fields are addressable.
+
+    If ``config.requirement_description`` is set, an additional ``description``
+    column is created by joining the values of the listed (1-based) columns.
+    """
+    columns_count = len(df.columns)
+
+    def _assert_column_exists(idx: int, label: str) -> None:
+        if idx >= columns_count:
+            raise ValueError(
+                f"Column '{label}' (index {idx + 1}) not found in the file. "
+                f"The file has {columns_count} column{'s' if columns_count != 1 else ''}, "
+                "but the configuration specifies a higher index. "
+                "Check your configuration and make sure the index is within range."
+            )
+
+    for idx, names in column_mapping.items():
+        _assert_column_exists(idx, names[0])
+        if len(names) > 1:
+            logger.warning(
+                "Column index %d is mapped to multiple fields (%s); "
+                "the same value will be applied to all of them.",
+                idx + 1,
+                ", ".join(f"'{n}'" for n in names),
+            )
+
+    rename_map = {
+        col: column_mapping[idx][0] for idx, col in enumerate(df.columns) if idx in column_mapping
+    }
+    df = df.rename(columns=rename_map)
+
+    for names in column_mapping.values():
+        for alias in names[1:]:
+            df[alias] = df[names[0]]
+
+    if config.requirement_description:
+        description_columns = [idx - 1 for idx in config.requirement_description]
+        for idx in description_columns:
+            _assert_column_exists(idx, "description")
+        df["description"] = df.iloc[:, description_columns].apply(
+            lambda row: " ".join(x for x in row if x), axis=1
+        )
+
+    return df
 
 
 def read_data_frame_from_file_path(
@@ -53,52 +144,11 @@ def read_data_frame_from_file_path(
         file_path.stat().st_size / (1024**2),
     )
     start = time.monotonic()
-    header_row_idx = (config.header_rowIdx or 1) - 1
-    data_row_idx = (config.data_rowIdx or 2) - 1
-    skiprows = list(range(header_row_idx + 1, data_row_idx))
 
-    read_params: dict[str, Any] = {"header": header_row_idx, "dtype": str, "skiprows": skiprows}
-
-    if file_path.suffix in [".xls", ".xlsx"]:
-        sheet_name = config.worksheetName or 0
-        engine: Literal["openpyxl", "xlrd"] = "openpyxl" if file_path.suffix == ".xlsx" else "xlrd"
-        try:
-            df = pd.read_excel(file_path, sheet_name=sheet_name, engine=engine, **read_params)
-        except ValueError:
-            df = pd.read_excel(file_path, sheet_name=0, engine=engine, **read_params)
-    elif file_path.suffix in [".csv", ".tsv", ".txt"]:
-        sep = "\t" if file_path.suffix == ".tsv" else config.columnSeparator
-        try:
-            df = pd.read_csv(file_path, sep=sep, **read_params)
-        except UnicodeDecodeError:
-            df = pd.read_csv(file_path, sep=sep, encoding="windows-1252", **read_params)
-    else:
-        raise ValueError(f"Unsupported file format: {file_path.suffix}")
-
-    df = df.fillna("")
-
+    df = _load_dataframe(file_path, config)
     column_mapping = get_column_mapping_for_config(config)
-    columns_count = len(df.columns)
-    for idx, column in column_mapping.items():
-        if idx >= columns_count:
-            raise ValueError(
-                f"Column '{column}' at index {idx + 1} (specified in the configuration) "
-                "does not exist in the provided file. "
-                "Please verify that the index is correct in your configuration. "
-                f"The file contains {columns_count} column{'s' if columns_count != 1 else ''}."
-            )
+    df = _apply_column_mapping(df, column_mapping, config)
 
-    columns = {col: column_mapping.get(idx, col) for idx, col in enumerate(df.columns)}
-    df = df.rename(columns=columns)
-
-    if config.requirement_description:
-        description_columns = [idx - 1 for idx in config.requirement_description]
-        description_values = df.iloc[:, description_columns].apply(
-            lambda row: " ".join(x for x in row if x), axis=1
-        )
-        df["description"] = description_values
-
-    # Bytes used by the DataFrame columns + index
     bytes_used = df.memory_usage(index=True, deep=True).sum()
     logger.debug(
         "Read dataframe in %.3fs (%.2f MiB)",

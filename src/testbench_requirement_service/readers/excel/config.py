@@ -17,6 +17,27 @@ from pydantic.fields import FieldInfo
 INVALID_SEPARATOR_CHARS = {"\r", "\n", "\r\n", '"'}
 
 
+def _require_positive_int(raw: str | int, field_name: str) -> int:
+    """Parse *raw* as an integer and verify it is >= 1.
+
+    Accepts values that are already ``int`` as well as raw strings from config
+    files.  Raises ``ValueError`` with a consistent message on failure.
+    """
+    try:
+        value = int(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Invalid value for '{field_name}' in reader config: "
+            f"Expected a positive integer (starting from 1), but got '{raw}'."
+        ) from exc
+    if value < 1:
+        raise ValueError(
+            f"Invalid value for '{field_name}' in reader config: "
+            f"Expected a positive integer (starting from 1), but got '{raw}'."
+        )
+    return value
+
+
 class ExcelRequirementReaderConfigValidatorsMixin:
     model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
 
@@ -41,11 +62,8 @@ class ExcelRequirementReaderConfigValidatorsMixin:
     @field_validator("header_rowIdx")
     @classmethod
     def validate_header_row_idx(cls, v: int | None) -> int | None:
-        if v is not None and v < 1:
-            raise ValueError(
-                "Invalid value for 'header.rowIdx' in reader config: "
-                f"Expected a positive integer (starting from 1), but got '{v}'."
-            )
+        if v is not None:
+            _require_positive_int(v, "header.rowIdx")
         return v
 
     @field_validator("data_rowIdx")
@@ -71,13 +89,15 @@ class ExcelRequirementReaderConfigValidatorsMixin:
     def validate_requirement_column_field(
         cls, v: int | list[int] | None, info: ValidationInfo
     ) -> int | list[int] | None:
-        """Validate requirement column fields against already validated fields.
-
-        Prevents duplicate column indices across requirement fields.
-        """
+        """Validate that each column index is a positive integer (>= 1)."""
         if v is None or info.field_name is None:
             return v
-        return validate_column_setting(info.field_name, v, info.data)
+        field_alias = _get_field_alias(info.field_name)
+        values = v if isinstance(v, list) else [v]
+        for i, column_idx in enumerate(values, start=1):
+            field_name = f"{field_alias}.{i}" if isinstance(v, list) else field_alias
+            _require_positive_int(column_idx, field_name)
+        return v
 
 
 class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfigValidatorsMixin):
@@ -395,11 +415,7 @@ def validate_data_row_idx(v: int | None, data: dict) -> int | None:
     """
     if v is None:
         return v
-    if v < 1:
-        raise ValueError(
-            "Invalid value for 'data.rowIdx' in reader config: "
-            f"Expected a positive integer (starting from 1), but got '{v}'."
-        )
+    _require_positive_int(v, "data.rowIdx")
 
     header_row_idx = data.get("header_rowIdx") or data.get("header.rowIdx")
     if header_row_idx is not None and v <= header_row_idx:
@@ -422,69 +438,6 @@ def _get_field_alias(field_name: str) -> str:
     if field_name == "requirement_description":
         return "requirement.description"
     return field_name.replace("_", ".", 1)
-
-
-def validate_column_setting(field_name: str, value: int | list[int], data: dict) -> int | list[int]:
-    """Validate a single column setting field against already validated fields.
-
-    Args:
-        field_name: Name of the field being validated (e.g., 'requirement_id')
-        value: The column index or list of column indices
-        data: ValidationInfo.data containing already validated fields
-
-    Returns:
-        The validated value
-    """
-    column_idx_mapping: dict[int, str] = {}
-    for key, val in data.items():
-        if key.startswith("requirement_") and key != field_name and val is not None:
-            field_alias = _get_field_alias(key)
-            if isinstance(val, list):
-                for idx, column_idx in enumerate(val, start=1):
-                    if isinstance(column_idx, int):
-                        _validate_column_index(
-                            column_idx,
-                            f"{field_alias}.{idx}",
-                            column_idx_mapping,
-                        )
-            elif isinstance(val, int):
-                _validate_column_index(val, field_alias, column_idx_mapping)
-    field_alias = _get_field_alias(field_name)
-    if isinstance(value, list):
-        for idx, column_idx in enumerate(value, start=1):
-            _validate_column_index(column_idx, f"{field_alias}.{idx}", column_idx_mapping)
-    elif isinstance(value, int):
-        _validate_column_index(value, field_alias, column_idx_mapping)
-
-    return value
-
-
-def _validate_column_index(
-    column_idx: int, field_alias: str, column_idx_mapping: dict[int, str]
-) -> None:
-    """Validate a single column index and add to mapping if valid.
-
-    Args:
-        column_idx: The column index to validate
-        field_alias: The field alias for error messages
-        column_idx_mapping: Mapping of already validated column indices
-
-    Raises:
-        ValueError: If column index is invalid or already used
-    """
-    if not isinstance(column_idx, int) or column_idx < 1:
-        raise ValueError(
-            f"Invalid value for '{field_alias}' in reader config: "
-            "Expected a positive integer (starting from 1), "
-            f"but got '{column_idx}'."
-        )
-    if column_idx in column_idx_mapping:
-        assigned = column_idx_mapping[column_idx]
-        raise ValueError(
-            f"Invalid value for '{field_alias}' in reader config: "
-            f"Column index {column_idx} is already assigned to '{assigned}'."
-        )
-    column_idx_mapping[column_idx] = field_alias
 
 
 def validate_column_separator(v: str) -> str:
@@ -528,13 +481,7 @@ def build_requirement_description_field(config: dict) -> list[int]:
             raise ValueError(
                 f"Invalid value for '{setting}' in reader config: Value cannot be empty."
             )
-        try:
-            column_idx = int(column_raw)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"Invalid value for '{setting}' in reader config: "
-                f"Expected a positive integer (starting from 1), but got '{column_raw}'."
-            ) from exc
+        column_idx = _require_positive_int(column_raw, setting)
         description_columns.append(column_idx)
     config["requirement_description"] = description_columns
     return description_columns
@@ -613,18 +560,7 @@ def _build_single_udf_config(config: dict[str, Any], i: int) -> UserDefinedAttri
                 "Value cannot be empty."
             )
 
-    try:
-        column_idx = int(udf_config["column"])
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"Invalid value for 'udf.attr{i}.column' in reader config: "
-            f"Expected a positive integer (starting from 1), but got '{udf_config['column']}'."
-        ) from exc
-    if column_idx < 1:
-        raise ValueError(
-            f"Invalid value for 'udf.attr{i}.column' in reader config: "
-            f"Expected a positive integer (starting from 1), but got '{column_idx}'."
-        )
+    column_idx = _require_positive_int(udf_config["column"], f"udf.attr{i}.column")
 
     type_upper = str(udf_config["type"]).upper()
     if type_upper not in {"STRING", "ARRAY", "BOOLEAN"}:
