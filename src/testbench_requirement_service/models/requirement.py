@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, ValidationInfo, field_serializer, field_validator
 
 MAX_STR_LENGTH = 255
 MAX_VERSION_LENGTH = 63
@@ -17,6 +17,13 @@ def truncate(v: str, max_length: int) -> str:
 class RequirementKey(BaseModel):
     id: str
     version: str
+
+    @field_validator("id", "version")
+    @classmethod
+    def must_not_be_empty(cls, v: str, info: ValidationInfo) -> str:
+        if not v or not v.strip():
+            raise ValueError(f"'{info.field_name}' must not be empty in a requirement row.")
+        return v
 
     @field_serializer("id")
     def serialize_id(self, v: str):
@@ -35,6 +42,13 @@ class RequirementObject(BaseModel):
     status: str
     priority: str
     requirement: bool
+
+    @field_validator("name")
+    @classmethod
+    def must_not_be_empty(cls, v: str, info: ValidationInfo) -> str:
+        if not v or not v.strip():
+            raise ValueError(f"'{info.field_name}' must not be empty in a requirement row.")
+        return v
 
     @field_serializer("name", "extendedID", "owner", "status", "priority")
     def serialize_str(self, v: str):

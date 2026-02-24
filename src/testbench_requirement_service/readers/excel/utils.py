@@ -22,6 +22,9 @@ try:  # noqa: SIM105
 except ImportError:
     pass
 
+# Data column names that must have a non-blank value in every data row.
+_REQUIRED_DATA_COLUMNS: tuple[str, ...] = ("id", "version", "name")
+
 
 def get_column_mapping_for_config(config: ExcelRequirementReaderConfig) -> dict[int, list[str]]:
     """Return a mapping from 0-based column index to a list of field names.
@@ -135,6 +138,41 @@ def _apply_column_mapping(
     return df
 
 
+def _validate_required_column_values(
+    df: pd.DataFrame,
+    file_path: Path,
+    config: ExcelRequirementReaderConfig,
+) -> None:
+    """Raise ``ValueError`` if any required column contains blank values.
+
+    Reports 1-based file row numbers so the user can locate the offending rows
+    directly, taking ``header.rowIdx`` and ``data.rowIdx`` into account.
+    All violations across all required columns are collected and reported
+    together so the user can fix everything in one pass.
+    """
+    first_data_file_row = config.data_rowIdx or 2
+
+    errors: list[str] = []
+    for col in _REQUIRED_DATA_COLUMNS:
+        if col not in df.columns:
+            continue
+        blank_indices = df.index[df[col].str.strip() == ""].tolist()
+        if not blank_indices:
+            continue
+        config_key = f"requirement.{col}"
+        row_label = "row" if len(blank_indices) == 1 else "rows"
+        max_displayed_rows = 10
+        displayed = [str(first_data_file_row + i) for i in blank_indices[:max_displayed_rows]]
+        overflow = len(blank_indices) - max_displayed_rows
+        suffix = f" (and {overflow} more)" if overflow > 0 else ""
+        errors.append(f"  - '{config_key}': empty at {row_label} {', '.join(displayed)}{suffix}")
+
+    if errors:
+        raise ValueError(
+            f"Required columns contain empty values in '{file_path}':\n" + "\n".join(errors)
+        )
+
+
 def read_data_frame_from_file_path(
     file_path: Path, config: ExcelRequirementReaderConfig
 ) -> pd.DataFrame:
@@ -148,6 +186,7 @@ def read_data_frame_from_file_path(
     df = _load_dataframe(file_path, config)
     column_mapping = get_column_mapping_for_config(config)
     df = _apply_column_mapping(df, column_mapping, config)
+    _validate_required_column_values(df, file_path, config)
 
     bytes_used = df.memory_usage(index=True, deep=True).sum()
     logger.debug(
@@ -176,14 +215,13 @@ def build_extendedrequirementobject_from_row_data(
 def build_requirementobjectnode_from_row_data(
     row_data: dict, config: ExcelRequirementReaderConfig
 ) -> RequirementObjectNode:
-    extended_id = row_data["id"]
     key = RequirementKey(id=row_data["id"], version=row_data["version"])
     folder_pattern = config.requirement_folderPattern
     is_requirement = re.fullmatch(folder_pattern, row_data.get("type", "")) is None
 
     return RequirementObjectNode(
         name=row_data["name"],
-        extendedID=extended_id,
+        extendedID=row_data["id"],
         key=key,
         owner=row_data.get("owner", ""),
         status=row_data.get("status", ""),
