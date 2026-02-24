@@ -202,9 +202,8 @@ class JiraRequirementReader(AbstractRequirementReader):
         custom_fields = self.jira_client.fetch_all_custom_fields()
         issue = get_issue_version(project, issue, key, self.config, custom_fields)
         requirement_object = build_requirementobjectnode_from_issue(
-            project=project,
             issue=issue,
-            owner_field_name=get_config_value(self.config, "owner", project),
+            project=project,
             config=self.config,
             key=key,
             is_requirement=True,
@@ -372,13 +371,11 @@ class JiraRequirementReader(AbstractRequirementReader):
         """Convert issues into requirement nodes."""
         requirement_nodes = {}
         for issue in issues:
-            is_requirement = not self._is_requirement_group_issue(issue, project)
             req_node = build_requirementobjectnode_from_issue(
-                project=project,
                 issue=issue,
-                owner_field_name=get_config_value(self.config, "owner", project),
+                project=project,
                 config=self.config,
-                is_requirement=is_requirement,
+                is_requirement=not self._is_requirement_group_issue(issue, project),
             )
             requirement_nodes[issue.key] = req_node
         return requirement_nodes
@@ -395,34 +392,38 @@ class JiraRequirementReader(AbstractRequirementReader):
                 continue
 
             if parent_key not in requirement_nodes:
-                try:
-                    fields = self._prepare_fields("summary,created,creator")
-                    parent_issue = self.jira_client.fetch_issue(parent_key, fields=fields)
-                    if not parent_issue:
-                        raise ValueError(f"Parent issue {parent_key} not found")
-                    self._fetch_and_attach_changelog(parent_issue)
-                    is_requirement = not self._is_requirement_group_issue(parent_issue, project)
-                    requirement_nodes[parent_key] = build_requirementobjectnode_from_issue(
-                        project=project,
-                        issue=parent_issue,
-                        owner_field_name=get_config_value(self.config, "owner", project),
-                        config=self.config,
-                        is_requirement=is_requirement,
-                    )
-                    parent = requirement_nodes[parent_key]
-                    requirement_tree[parent_key] = parent
-                except Exception as e:
-                    logger.warning(
-                        f"Parent issue {parent_key} of issue {issue.key} could not be fetched: {e}"
-                    )
+                parent_node = self._fetch_parent_requirement_node(parent_key, issue.key, project)
+                if parent_node is None:
                     requirement_tree[issue.key] = requirement_nodes[issue.key]
                     continue
-            else:
-                parent = requirement_nodes[parent_key]
+                requirement_nodes[parent_key] = parent_node
+                requirement_tree[parent_key] = parent_node
+
+            parent = requirement_nodes[parent_key]
             parent.children = parent.children or []
             parent.children.append(requirement_nodes[issue.key])
 
         return requirement_tree
+
+    def _fetch_parent_requirement_node(
+        self, parent_key: str, issue_key: str, project: str
+    ) -> RequirementObjectNode | None:
+        """Fetch a parent issue and build its requirement node.
+
+        Returns the node, or `None` if the parent issue could not be fetched.
+        """
+        fields = self._prepare_fields("summary,created,creator")
+        parent_issue = self.jira_client.fetch_issue(parent_key, fields=fields)
+        if not parent_issue:
+            logger.warning(f"Parent issue {parent_key} of issue {issue_key} could not be fetched")
+            return None
+        self._fetch_and_attach_changelog(parent_issue)
+        return build_requirementobjectnode_from_issue(
+            issue=parent_issue,
+            project=project,
+            config=self.config,
+            is_requirement=not self._is_requirement_group_issue(parent_issue, project),
+        )
 
     def _attach_changelog(self, issue: Issue, histories: list) -> None:
         """Attach pre-fetched changelog histories to an issue object."""

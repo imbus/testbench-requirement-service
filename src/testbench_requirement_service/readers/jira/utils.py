@@ -361,28 +361,25 @@ def classify_change_scope(
 
 
 def build_requirementobjectnode_from_issue(
-    project: str,
     issue: Issue,
-    owner_field_name: str,
+    project: str,
     config: JiraRequirementReaderConfig,
-    **node_options: Any,
+    key: RequirementKey | None = None,
+    is_requirement: bool = True,
 ) -> RequirementObjectNode:
-    key: RequirementKey | None = node_options.get("key")
-    is_requirement: bool = node_options.get("is_requirement", True)
+    if key is None:
+        requirement_version = get_current_requirement_version(project, issue, config).name
+        key = RequirementKey(id=issue.key, version=requirement_version)
 
-    owner_value = getattr(issue.fields, owner_field_name, None)
-    owner = getattr(owner_value, "displayName", "") if owner_value else ""
-    owner = owner if owner else ""
+    owner_field_name = get_config_value(config, "owner", project)
+    owner_field = getattr(issue.fields, owner_field_name, None)
+    owner = getattr(owner_field, "displayName", "") if owner_field else ""
 
     status_field = getattr(issue.fields, "status", None)
     status = status_field.name if status_field else ""
 
     priority_field = getattr(issue.fields, "priority", None)
     priority = priority_field.name if priority_field else ""
-
-    if key is None:
-        requirement_version = get_current_requirement_version(project, issue, config).name
-        key = RequirementKey(id=issue.key, version=requirement_version)
 
     return RequirementObjectNode(
         name=getattr(issue.fields, "summary", ""),
