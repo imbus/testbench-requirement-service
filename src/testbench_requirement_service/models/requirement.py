@@ -3,10 +3,28 @@ from typing import Literal
 
 from pydantic import BaseModel, field_serializer
 
+MAX_STR_LENGTH = 255
+MAX_VERSION_LENGTH = 63
+
+
+def truncate(v: str, max_length: int) -> str:
+    """Truncate a string to the specified maximum length, adding "..." if it was truncated."""
+    if not v:
+        return v
+    return v if len(v) <= max_length else v[: max_length - 3] + "..."
+
 
 class RequirementKey(BaseModel):
     id: str
     version: str
+
+    @field_serializer("id")
+    def serialize_id(self, v: str):
+        return truncate(v, MAX_STR_LENGTH)
+
+    @field_serializer("version")
+    def serialize_version(self, v: str):
+        return truncate(v, MAX_VERSION_LENGTH)
 
 
 class RequirementObject(BaseModel):
@@ -17,6 +35,10 @@ class RequirementObject(BaseModel):
     status: str
     priority: str
     requirement: bool
+
+    @field_serializer("name", "extendedID", "owner", "status", "priority")
+    def serialize_str(self, v: str):
+        return truncate(v, MAX_STR_LENGTH)
 
 
 class RequirementObjectNode(RequirementObject):
@@ -35,15 +57,29 @@ class RequirementVersionObject(BaseModel):
     author: str
     comment: str | None = None
 
+    @field_serializer("name")
+    def serialize_name(self, name: str):
+        return truncate(name, MAX_VERSION_LENGTH)
+
     @field_serializer("date")
     def serialize_date(self, date: datetime):
         return date.isoformat(timespec="seconds")
+
+    @field_serializer("author", "comment")
+    def serialize_str(self, v: str | None):
+        if v is None:
+            return v
+        return truncate(v, MAX_STR_LENGTH)
 
 
 class BaselineObject(BaseModel):
     name: str
     date: datetime
     type: Literal["CURRENT", "UNLOCKED", "LOCKED", "DISABLED", "INVALID"]
+
+    @field_serializer("name")
+    def serialize_name(self, name: str):
+        return truncate(name, MAX_STR_LENGTH)
 
     @field_serializer("date")
     def serialize_date(self, date: datetime):
@@ -60,6 +96,18 @@ class UserDefinedAttribute(BaseModel):
     stringValue: str | None = None
     stringValues: list[str] | None = None
     booleanValue: bool | None = None
+
+    @field_serializer("name", "stringValue")
+    def serialize_str(self, v: str | None):
+        if v is None:
+            return v
+        return truncate(v, MAX_STR_LENGTH)
+
+    @field_serializer("stringValues")
+    def serialize_string_values(self, v: list[str] | None):
+        if v is None:
+            return v
+        return [truncate(s, MAX_STR_LENGTH) for s in v]
 
 
 class UserDefinedAttributeRequest(BaseModel):
