@@ -253,9 +253,8 @@ def set_issue_field(issue: Issue, field_name: str, value: Any) -> None:
     Helper to set a field value on the issue.fields object, handling nested attributes.
     """
     if hasattr(issue.renderedFields, field_name):
-        if field_name == "description":
-            value = format_description(value)
-        setattr(issue.renderedFields, field_name, value)
+        rendered_value = format_description(value) if field_name == "description" else value
+        setattr(issue.renderedFields, field_name, rendered_value)
 
     if hasattr(issue.fields, field_name):
         attr = getattr(issue.fields, field_name)
@@ -274,15 +273,19 @@ def get_issue_version(
     issue: Issue,
     key: RequirementKey,
     config: JiraRequirementReaderConfig,
-    custom_fields: list[dict[str, Any]],
+    fields: list[dict[str, Any]],
 ) -> Issue:
     """
     Reconstructs the issue's fields to reflect their state at the specified version.
-    Modifies the issue object in-place.
+    Returns a deep copy of the issue with fields set to the target version state.
+    The original issue object is not modified.
 
     Args:
+        project (str): The project name.
         issue (Issue): The Jira issue object.
         key (RequirementKey): The requirement key containing the target version.
+        config (JiraRequirementReaderConfig): The Jira requirement reader configuration.
+        fields (list[dict[str, Any]]): The list of Jira fields.
 
     Returns:
         Issue: The issue object with fields set to the specified version.
@@ -305,24 +308,19 @@ def get_issue_version(
     minor = 0
     major_fields = set(get_config_value(config, "major_change_fields", project) or [])
     minor_fields = set(get_config_value(config, "minor_change_fields", project) or [])
-    updated_fields: set[str] = set()
+    reverted_fields: set[str] = set()
 
     for history in histories:
         changed_fields = extract_changed_fields(history)
         is_major, is_minor = classify_change_scope(changed_fields, major_fields, minor_fields)
 
-        # If we've reached or passed the target version, revert fields to their previous values
+        # Once we've reached the target version, revert all subsequent changes.
         if (major > target_major) or (major == target_major and minor >= target_minor):
             for item in getattr(history, "items", []):
-                if item.field not in updated_fields:
-                    field_id = _get_field_id(custom_fields, item.field)
+                if item.field not in reverted_fields:
+                    field_id = _get_field_id(fields, item.field)
                     set_issue_field(issue_copy, field_id, item.fromString)
-                    updated_fields.add(item.field)
-        else:
-            for item in getattr(history, "items", []):
-                field_id = _get_field_id(custom_fields, item.field)
-                set_issue_field(issue_copy, field_id, item.toString)
-                updated_fields.add(item.field)
+                    reverted_fields.add(item.field)
 
         if is_major:
             major += 1
