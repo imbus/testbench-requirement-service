@@ -369,9 +369,16 @@ def build_requirementobjectnode_from_issue(
         requirement_version = get_current_requirement_version(project, issue, config).name
         key = RequirementKey(id=issue.key, version=requirement_version)
 
-    owner_field_name = get_config_value(config, "owner", project)
+    owner_field_name = get_config_value(config, "owner_field", project)
     owner_field = getattr(issue.fields, owner_field_name, None)
-    owner = getattr(owner_field, "displayName", "") if owner_field else ""
+    if not owner_field:
+        owner = ""
+    elif isinstance(owner_field, str):
+        owner = owner_field
+    else:
+        owner = (
+            getattr(owner_field, "displayName", None) or getattr(owner_field, "name", None) or ""
+        )
 
     status_field = getattr(issue.fields, "status", None)
     status = status_field.name if status_field else ""

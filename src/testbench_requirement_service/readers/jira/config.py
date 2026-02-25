@@ -145,7 +145,7 @@ class JiraRequirementReaderConfig(BaseModel):
         ["summary", "description", "affectsVersions", "status"],
         description="Fields that trigger minor version changes",
     )
-    owner: str = Field("assignee", description="Jira field used for requirement owner")
+    owner_field: str = Field("assignee", description="Jira field used for requirement owner")
     rendered_fields: list[str] = Field(
         default_factory=list, description="Fields to render as HTML (e.g., description)"
     )
