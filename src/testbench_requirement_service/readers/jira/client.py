@@ -16,6 +16,7 @@ except ImportError:
 
 from testbench_requirement_service.log import logger
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
+from testbench_requirement_service.utils.cache import TTLCache
 
 DEFAULT_MAX_RESULTS = 100
 DEFAULT_CHUNK_SIZE = 100
@@ -36,7 +37,7 @@ class JiraClient:
     def __init__(self, config: JiraRequirementReaderConfig):
         self.config = config
         self.jira = self._connect()
-        self._custom_fields_cache: list[dict[str, Any]] | None = None
+        self._fields_cache: TTLCache[list[dict[str, Any]]] = TTLCache(ttl=config.cache_ttl)
         # The following flags determine which Jira API endpoints to use
         self.use_issuetypes_endpoint = self.jira._is_cloud or (self.jira._version >= (8, 4, 0))
         self.use_manual_pagination = not self.jira._is_cloud
@@ -93,7 +94,7 @@ class JiraClient:
         2. field name match (fallback for old/non-standard instances)
         """
         try:
-            for field in self.fetch_all_custom_fields():
+            for field in self.fetch_issue_fields():
                 schema_custom = field.get("schema", {}).get("custom", "")
                 field_name = field.get("name", "").lower()
                 field_id = field.get("id", "")
@@ -336,20 +337,26 @@ class JiraClient:
         logger.warning(f"Sprint '{sprint_name}' not found in project '{project_key}'")
         return None
 
-    def fetch_all_custom_fields(self) -> list[dict[str, Any]]:
-        """Return all custom fields, fetching from Jira only on the first call."""
-        if self._custom_fields_cache is not None:
-            return self._custom_fields_cache
+    def fetch_issue_fields(self) -> list[dict[str, Any]]:
+        """Return all issue fields, refreshing automatically when the cache expires."""
+        cached = self._fields_cache.get()
+        if cached is not None:
+            return cached
         try:
-            self._custom_fields_cache = [
-                field
-                for field in self.jira.fields()
-                if field.get("id", "").startswith("customfield_")
-            ]
-            return self._custom_fields_cache
+            fields = self.jira.fields()
+            self._fields_cache.set(fields)
+            return fields
         except JIRAError as e:
-            logger.warning(f"Error fetching custom fields: {e}")
-            return []
+            logger.warning(f"Error fetching issue fields: {e}")
+            return self._fields_cache.stale_value or []
+
+    def fetch_custom_issue_fields(self) -> list[dict[str, Any]]:
+        """Return all custom fields, derived from the cached issue fields."""
+        return [
+            field
+            for field in self.fetch_issue_fields()
+            if field.get("id", "").startswith("customfield_")
+        ]
 
     def _fetch_changelog_via_endpoint(self, issue_id_or_key: str) -> list[Any]:
         """

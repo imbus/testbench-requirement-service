@@ -161,6 +161,11 @@ class JiraRequirementReaderConfig(BaseModel):
         ge=0,
         le=10,
     )
+    cache_ttl: float = Field(
+        300.0,
+        description="Default time-to-live in seconds for all internal caches (0 = no caching)",
+        ge=0,
+    )
 
     projects: dict[str, JiraProjectConfig] = Field(
         default_factory=dict,

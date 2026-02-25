@@ -129,7 +129,7 @@ class JiraRequirementReader(AbstractRequirementReader):
                 name=field["name"],
                 valueType=extract_valuetype_from_issue_field(field),
             )
-            for field in self.jira_client.fetch_all_custom_fields()
+            for field in self.jira_client.fetch_issue_fields()
         ]
 
     def get_all_user_defined_attributes(
@@ -142,9 +142,9 @@ class JiraRequirementReader(AbstractRequirementReader):
         if not requirement_keys:
             return []
 
-        custom_fields = self.jira_client.fetch_all_custom_fields()
+        all_fields = self.jira_client.fetch_issue_fields()
         attribute_names_set = set(attribute_names)
-        fields = [field for field in custom_fields if field["name"] in attribute_names_set]
+        fields = [field for field in all_fields if field["name"] in attribute_names_set]
         field_ids = [field["id"] for field in fields]
 
         issue_keys = [req_key.id for req_key in requirement_keys]
@@ -199,8 +199,8 @@ class JiraRequirementReader(AbstractRequirementReader):
             raise NotFound("Requirement not found")
 
         self._fetch_and_attach_changelog(issue)
-        custom_fields = self.jira_client.fetch_all_custom_fields()
-        issue = get_issue_version(project, issue, key, self.config, custom_fields)
+        all_fields = self.jira_client.fetch_issue_fields()
+        issue = get_issue_version(project, issue, key, self.config, all_fields)
         requirement_object = build_requirementobjectnode_from_issue(
             issue=issue,
             project=project,
