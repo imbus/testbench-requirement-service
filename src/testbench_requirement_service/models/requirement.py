@@ -111,17 +111,11 @@ class UserDefinedAttribute(BaseModel):
     stringValues: list[str] | None = None
     booleanValue: bool | None = None
 
-    @field_serializer("name", "stringValue")
+    @field_serializer("name")
     def serialize_str(self, v: str | None):
         if v is None:
             return v
         return truncate(v, MAX_STR_LENGTH)
-
-    @field_serializer("stringValues")
-    def serialize_string_values(self, v: list[str] | None):
-        if v is None:
-            return v
-        return [truncate(s, MAX_STR_LENGTH) for s in v]
 
 
 class UserDefinedAttributeRequest(BaseModel):
