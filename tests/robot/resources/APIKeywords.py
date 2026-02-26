@@ -15,7 +15,7 @@ class APIKeywords:
     def __init__(
         self,
         *,
-        base_url: str = "http://localhost:8000",
+        base_url: str = "http://localhost:8020",
         username: str = "admin",
         password: str = "123456",
         timeout: int = 3,

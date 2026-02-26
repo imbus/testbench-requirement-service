@@ -1,7 +1,7 @@
 [testbench-requirement-service]
 reader_class = "testbench_requirement_service.readers.JsonlRequirementReader"
 host = "127.0.0.1"
-port = 8000
+port = 8020
 debug = false
 username = "admin"
 password_hash = "ddb074d9832c0bfea04d43ce434135dd5d5497730ee8b8b1817ca5fe6053554f"

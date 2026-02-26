@@ -2,7 +2,7 @@
 reader_class = "testbench_requirement_service.readers.JsonlRequirementReader"
 reader_config_path = "reader_config.toml"
 host = "127.0.0.1"
-port = 8000
+port = 8020
 debug = false
 
 [testbench-requirement-service.logging.console]

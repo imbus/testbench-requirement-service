@@ -128,7 +128,7 @@ Create `config.toml` with your reader configuration. See the [Configuration](#co
 [testbench-requirement-service]
 reader_class = "JsonlRequirementReader"
 host = "127.0.0.1"
-port = 8000
+port = 8020
 
 [testbench-requirement-service.reader_config]
 requirements_path = "requirements/jsonl/"
@@ -255,7 +255,7 @@ testbench-requirement-service start [OPTIONS]
 - `--reader-class PATH`: Reader class name or module path (overrides config file)
 - `--reader-config PATH`: Path to the reader configuration file (overrides config file)
 - `--host HOST`: Host to run the service on (overrides config file, default: `127.0.0.1`)
-- `--port PORT`: Port to run the service on (overrides config file, default: `8000`)
+- `--port PORT`: Port to run the service on (overrides config file, default: `8020`)
 - `--dev`: Run the service in dev mode (debug + auto reload)
 
 Command-line arguments take precedence over configuration file settings.
@@ -296,7 +296,7 @@ The configuration file uses TOML format with `[testbench-requirement-service]` a
 [testbench-requirement-service]
 reader_class = "JsonlRequirementReader"
 host = "127.0.0.1"
-port = 8000
+port = 8020
 password_hash = "your_generated_hash"
 salt = "your_generated_salt"
 
@@ -325,7 +325,7 @@ requirements_path = "requirements/jsonl/"
 | `reader_class`       | String | Reader class name or module path                                            | No       | `"testbench_requirement_service.readers.JsonlRequirementReader"`          |
 | `reader_config_path` | String | Path to a separate reader configuration file (optional, for using separate config files) | No       | `None` (reads from inline config sections)                                  |
 | `host`               | String | Host address to run the service on                                          | No       | `"127.0.0.1"`                                                              |
-| `port`               | Integer | Port number to run the service on                                           | No       | `8000`                                                                      |
+| `port`               | Integer | Port number to run the service on                                           | No       | `8020`                                                                      |
 | `ssl_cert`           | String | Path to SSL certificate file for HTTPS (enables HTTPS when set with `ssl_key`) | No    | `None`                                                                      |
 | `ssl_key`            | String | Path to SSL private key file for HTTPS (enables HTTPS when set with `ssl_cert`) | No    | `None`                                                                      |
 | `ssl_ca_cert`        | String | Path to CA certificate for client verification (optional, for mutual TLS) | No       | `None`                                                                      |
@@ -405,7 +405,7 @@ server {
     ssl_certificate_key /path/to/private.key;
     
     location / {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:8020;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -418,7 +418,7 @@ server {
 ```toml
 [testbench-requirement-service]
 host = "127.0.0.1"  # Bind to localhost (proxy is on same machine)
-port = 8000
+port = 8020
 proxies_count = 1   # Trust one proxy layer
 ```
 
@@ -477,7 +477,7 @@ The basic command to start the service is:
 testbench-requirement-service start
 ```
 
-By default, the service will run locally on `127.0.0.1:8000`. If you'd like to run it on a different host or port, use the following options:
+By default, the service will run locally on `127.0.0.1:8020`. If you'd like to run it on a different host or port, use the following options:
 
 ```powershell
 testbench-requirement-service start --host HOST --port PORT
@@ -497,7 +497,7 @@ testbench-requirement-service start --host 127.0.0.2 --port 8002
 | `--reader-class`  | Path or module string to the reader class         | `testbench_requirement_service.readers.JsonlRequirementReader` |
 | `--reader-config` | Path to the reader configuration file             | `reader_config.toml`                                           |
 | `--host`          | Host to run the service on                        | `127.0.0.1`                                                    |
-| `--port`          | Port to run the service on                        | `8000`                                                         |
+| `--port`          | Port to run the service on                        | `8020`                                                         |
 | `--dev`           | Run the service in dev mode (debug + auto reload) | Not set                                                          |
 
 You can also see the available options and their descriptions by running:
@@ -532,13 +532,13 @@ Once your service is running, you can explore the available API documentation an
 ### Interactive API Docs
 
 The interactive API documentation is available at `/docs` and is powered by **Swagger UI**.
-If the server is running locally with default settings, you can access it at: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+If the server is running locally with default settings, you can access it at: [http://127.0.0.1:8020/docs](http://127.0.0.1:8020/docs)
 
 Swagger UI allows you to test API endpoints directly, including authentication using the "Authorize" button.
 
 ### OpenAPI Specification
 
-For the raw OpenAPI JSON schema, use the built-in endpoint `/docs/openapi.json`: [http://127.0.0.1:8000/docs/openapi.json](http://127.0.0.1:8000/docs/openapi.json)
+For the raw OpenAPI JSON schema, use the built-in endpoint `/docs/openapi.json`: [http://127.0.0.1:8020/docs/openapi.json](http://127.0.0.1:8020/docs/openapi.json)
 
 ## Built-in RequirementReader
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from testbench_requirement_service.models.logging import LoggingConfig
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8000
+DEFAULT_PORT = 8020
 
 
 class RequirementServiceConfig(BaseModel):

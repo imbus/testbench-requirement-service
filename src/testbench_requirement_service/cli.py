@@ -150,7 +150,7 @@ def configure(  # noqa: PLR0911, PLR0913, C901
     "--host", type=str, metavar="HOST", help="Host to run the service on  [default: 127.0.0.1]"
 )
 @click.option(
-    "--port", type=int, metavar="PORT", help="Port to run the service on  [default: 8000]"
+    "--port", type=int, metavar="PORT", help="Port to run the service on  [default: 8020]"
 )
 @click.option(
     "--dev",
