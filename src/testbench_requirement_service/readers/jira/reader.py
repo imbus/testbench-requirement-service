@@ -22,11 +22,10 @@ from testbench_requirement_service.models.requirement import (
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 from testbench_requirement_service.readers.jira.client import JiraClient
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
-from testbench_requirement_service.readers.jira.render_utils import build_rendered_field_html
 from testbench_requirement_service.readers.jira.utils import (
     build_extendedrequirementobject_from_issue,
     build_requirementobjectnode_from_issue,
-    build_userdefinedattribute_object,
+    build_userdefinedattribute_objects_for_issue,
     escape_jql_value,
     extract_baselines_from_issue,
     extract_valuetype_from_issue_field,
@@ -124,13 +123,18 @@ class JiraRequirementReader(AbstractRequirementReader):
         )
 
     def get_user_defined_attributes(self) -> list[UserDefinedAttribute]:
-        return [
-            UserDefinedAttribute(
-                name=field["name"],
-                valueType=extract_valuetype_from_issue_field(field),
-            )
-            for field in self.jira_client.fetch_issue_fields()
-        ]
+        seen: set[str] = set()
+        result: list[UserDefinedAttribute] = []
+        for field in self.jira_client.fetch_issue_fields():
+            if field["name"] not in seen:
+                seen.add(field["name"])
+                result.append(
+                    UserDefinedAttribute(
+                        name=field["name"],
+                        valueType=extract_valuetype_from_issue_field(field),
+                    )
+                )
+        return result
 
     def get_all_user_defined_attributes(
         self,
@@ -142,49 +146,19 @@ class JiraRequirementReader(AbstractRequirementReader):
         if not requirement_keys:
             return []
 
-        all_fields = self.jira_client.fetch_issue_fields()
-        attribute_names_set = set(attribute_names)
-        fields = [field for field in all_fields if field["name"] in attribute_names_set]
-        field_ids = [field["id"] for field in fields]
+        uda_fields = self._resolve_fields_by_name(attribute_names, project)
+        issue_map = self._fetch_issue_map(requirement_keys, project, baseline, uda_fields)
 
-        issue_keys = [req_key.id for req_key in requirement_keys]
-        base_jql = self._build_issues_jql(project, baseline)
-        issues = self.jira_client.fetch_issues(
-            issue_keys,
-            base_jql,
-            fields=",".join(["key", "attachment", *field_ids]),
-            expand="renderedFields",
-        )
-        issue_map = {issue.key: issue for issue in issues}
-
-        user_defined_attributes: list[UserDefinedAttributeResponse] = []
+        result: list[UserDefinedAttributeResponse] = []
         for req_key in requirement_keys:
-            issue = issue_map.get(req_key.id)
-            if not issue:
+            issue = issue_map.get((req_key.id, req_key.version))
+            if issue is None:
                 continue
-
-            udas = []
-            for field in fields:
-                if not hasattr(issue.fields, field["id"]):
-                    continue
-                if hasattr(issue.renderedFields, field["id"]) and field["name"] in get_config_value(
-                    self.config, "rendered_fields", project
-                ):
-                    field_value = build_rendered_field_html(
-                        issue,
-                        field_id=field["id"],
-                        jira_server_url=self.config.server_url,
-                        include_head=True,
-                    )
-                else:
-                    field_value = getattr(issue.fields, field["id"])
-                udas.append(build_userdefinedattribute_object(field, field_value))
-
-            user_defined_attributes.append(
-                UserDefinedAttributeResponse(key=req_key, userDefinedAttributes=udas)
+            udas = build_userdefinedattribute_objects_for_issue(
+                issue=issue, uda_fields=uda_fields, project=project, config=self.config
             )
-
-        return user_defined_attributes
+            result.append(UserDefinedAttributeResponse(key=req_key, userDefinedAttributes=udas))
+        return result
 
     def get_extended_requirement(
         self, project: str, baseline: str, key: RequirementKey
@@ -225,6 +199,57 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         self._fetch_and_attach_changelog(issue)
         return generate_requirement_versions(project, issue, self.config)
+
+    def _resolve_fields_by_name(self, names: list[str], project: str) -> list[Field]:
+        """Return project-scoped fields matching `names`, deduplicated by name."""
+        names_set = set(names)
+        project_key = self.projects[project].key
+        seen: set[str] = set()
+        result: list[Field] = []
+        for field in self.jira_client.fetch_project_issue_fields(project_key):
+            if field.name in names_set and field.name not in seen:
+                seen.add(field.name)
+                result.append(field)
+        return result
+
+    def _fetch_issue_map(
+        self,
+        requirement_keys: list[RequirementKey],
+        project: str,
+        baseline: str,
+        fields: list[Field],
+    ) -> dict[tuple[str, str], Issue]:
+        """Fetch issues and reconstruct each to its requested version.
+
+        Returns:
+            A mapping of ``(issue_key, version)`` to the reconstructed Issue,
+            ready for field extraction.
+        """
+        field_ids = [get_field_id(field) for field in fields]
+        issue_keys = [req_key.id for req_key in requirement_keys]
+        base_jql = self._build_issues_jql(project, baseline)
+        issues = self.jira_client.fetch_issues(
+            issue_keys,
+            base_jql,
+            fields=",".join(["key", "attachment", *field_ids]),
+            expand="renderedFields",
+        )
+
+        issue_changelogs = self.jira_client.fetch_changelog_histories(issues)
+        for issue in issues:
+            self._attach_changelog(issue, issue_changelogs.get(issue.key, []))
+
+        all_fields = self.jira_client.fetch_issue_fields()
+        issue_map: dict[str, Issue] = {issue.key: issue for issue in issues}
+        versioned_map: dict[tuple[str, str], Issue] = {}
+        for req_key in requirement_keys:
+            key = (req_key.id, req_key.version)
+            if key in versioned_map or req_key.id not in issue_map:
+                continue
+            versioned_map[key] = get_issue_version(
+                project, issue_map[req_key.id], req_key, self.config, all_fields
+            )
+        return versioned_map
 
     def _build_project_dict(self, projects: list[Project]) -> dict[str, Project]:
         return {f"{project.name} ({project.key})": project for project in projects}

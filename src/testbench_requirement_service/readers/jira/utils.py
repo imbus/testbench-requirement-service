@@ -1,9 +1,10 @@
 import copy
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any, Literal
 
 try:  # noqa: SIM105
-    from jira.resources import Field, Issue
+    from jira.resources import Field, Issue, Resource
 except ImportError:  # pragma: no cover
     pass
 from dateutil.parser import isoparse
@@ -80,8 +81,9 @@ def parse_jira_datetime(dt: str | float | datetime | None) -> datetime:
 
 
 def build_userdefinedattribute_object(
-    field: dict[str, Any], field_value: Any
+    field: dict[str, Any] | Field, field_value: Any
 ) -> UserDefinedAttribute:
+    name = field.get("name", "") if isinstance(field, dict) else getattr(field, "name", "")
     value_type = extract_valuetype_from_issue_field(field)
     if value_type == "ARRAY":
         string_values: list[str] | None = None
@@ -95,13 +97,13 @@ def build_userdefinedattribute_object(
                 else:
                     string_values.append(str(item))
         return UserDefinedAttribute(
-            name=field["name"],
+            name=name,
             valueType="ARRAY",
             stringValues=string_values,
         )
     if value_type == "BOOLEAN":
         return UserDefinedAttribute(
-            name=field["name"],
+            name=name,
             valueType="BOOLEAN",
             booleanValue=bool(field_value),
         )
@@ -113,17 +115,57 @@ def build_userdefinedattribute_object(
     else:
         string_value = str(field_value) if field_value else None
     return UserDefinedAttribute(
-        name=field["name"],
+        name=name,
         valueType="STRING",
         stringValue=string_value,
     )
 
 
+def build_userdefinedattribute_objects_for_issue(
+    issue: Issue,
+    uda_fields: list[Field],
+    project: str,
+    config: JiraRequirementReaderConfig,
+) -> list[UserDefinedAttribute]:
+    """Build UserDefinedAttribute objects for a single issue from the given field descriptors."""
+    rendered_fields_config = set(get_config_value(config, "rendered_fields", project) or [])
+    issue_fields = getattr(issue, "fields", None)
+    if not issue_fields:
+        logger.warning(f"Issue {issue.key} has no fields; skipping UDA extraction.")
+        return []
+    rendered_fields_obj = getattr(issue, "renderedFields", None)
+
+    udas = []
+    for field in uda_fields:
+        field_id = get_field_id(field)
+        if not hasattr(issue_fields, field_id):
+            continue
+        if (
+            rendered_fields_obj is not None
+            and hasattr(rendered_fields_obj, field_id)
+            and getattr(field, "name", None) in rendered_fields_config
+        ):
+            field_value = build_rendered_field_html(
+                issue,
+                field_id=field_id,
+                jira_server_url=config.server_url,
+                include_head=True,
+            )
+        else:
+            field_value = getattr(issue_fields, field_id)
+        udas.append(build_userdefinedattribute_object(field, field_value))
+    return udas
+
+
 def extract_valuetype_from_issue_field(
-    field: dict[str, Any],
+    field: dict[str, Any] | Field,
 ) -> Literal["STRING", "ARRAY", "BOOLEAN"]:
-    schema = field.get("schema", {})
-    field_type = schema.get("type")
+    if isinstance(field, dict):
+        schema = field.get("schema", {})
+        field_type = schema.get("type")
+    else:
+        schema = getattr(field, "schema", None)
+        field_type = getattr(schema, "type", None)
     if field_type == "array":
         return "ARRAY"
     if field_type == "boolean":
@@ -135,8 +177,9 @@ def get_field_id(field: Field) -> str:
     for attr in ("id", "key", "fieldId"):
         if hasattr(field, attr):
             return str(getattr(field, attr))
-    logger.warning(f"Field {field.name} has no id, key, or fieldId.")
-    return str(field.name)
+    field_name = getattr(field, "name", repr(field))
+    logger.warning(f"Field {field_name} has no id, key, or fieldId.")
+    return field_name
 
 
 def is_version_type_field(field: Field) -> bool:
@@ -164,8 +207,8 @@ def generate_requirement_versions(
     major = 1
 
     # Add creation as the initial version
-    creator = getattr(issue.fields.creator, "displayName", "Unknown")
-    created_dt = parse_jira_datetime(issue.fields.created)
+    creator = getattr(getattr(issue.fields, "creator", None), "displayName", "Unknown")
+    created_dt = parse_jira_datetime(getattr(issue.fields, "created", None))
     created_str = created_dt.strftime("%Y-%m-%d %H:%M:%S")
     versions.append(
         RequirementVersionObject(
@@ -181,7 +224,7 @@ def generate_requirement_versions(
 
     histories = sorted(
         getattr(issue.changelog, "histories", []),
-        key=lambda h: parse_jira_datetime(h.created),
+        key=lambda h: parse_jira_datetime(getattr(h, "created", None)),
     )
     for history in histories:
         changed_fields = extract_changed_fields(history)
@@ -198,8 +241,8 @@ def generate_requirement_versions(
         versions.append(
             RequirementVersionObject(
                 name=f"{major}.{minor}",
-                date=parse_jira_datetime(history.created),
-                author=getattr(history.author, "displayName", "Unknown"),
+                date=parse_jira_datetime(getattr(history, "created", None)),
+                author=getattr(getattr(history, "author", None), "displayName", "Unknown"),
                 comment=get_change_comment(history),
             )
         )
@@ -209,7 +252,11 @@ def generate_requirement_versions(
 
 def extract_changed_fields(history) -> set[str]:
     """Extract the set of changed field names from a Jira issue history entry."""
-    return {item.field for item in getattr(history, "items", [])}
+    return {
+        field
+        for item in getattr(history, "items", [])
+        if (field := getattr(item, "field", None)) is not None
+    }
 
 
 def get_change_comment(history) -> str:
@@ -217,7 +264,7 @@ def get_change_comment(history) -> str:
     for item in getattr(history, "items", []):
         from_val = getattr(item, "fromString", "")
         to_val = getattr(item, "toString", "")
-        changes.append(f"{item.field}: '{from_val}' → '{to_val}'")
+        changes.append(f"{getattr(item, 'field', '?')}: '{from_val}' → '{to_val}'")
     return "; ".join(changes) if changes else "Fields updated"
 
 
@@ -248,21 +295,48 @@ def format_description(description: str) -> str:
     return "<p>" + description.replace("\n\n", "</p><p>") + "</p>"
 
 
-def set_issue_field(issue: Issue, field_name: str, value: Any) -> None:
-    """
-    Helper to set a field value on the issue.fields object, handling nested attributes.
-    """
-    if hasattr(issue.renderedFields, field_name):
-        rendered_value = format_description(value) if field_name == "description" else value
-        setattr(issue.renderedFields, field_name, rendered_value)
+def _wrap_as_resource(value: str) -> SimpleNamespace:
+    return SimpleNamespace(name=value, displayName=value, value=value)
 
-    if hasattr(issue.fields, field_name):
-        attr = getattr(issue.fields, field_name)
-        if hasattr(attr, "name"):
-            attr.name = value
-        elif hasattr(attr, "displayName"):
-            attr.displayName = value
+
+def set_issue_field(issue: Issue, field_name: str, value: str | None):
+    """
+    Set a field value on the issue, replacing the entire field with ``value``.
+
+    ``value`` is always the plain ``fromString`` string from a Jira changelog item.
+    If the current field holds a resource object (i.e. not a plain string or None),
+    the value is stored in a SimpleNamespace so that downstream attribute accesses
+    like ``.name``, ``.displayName``, ``.value``, and ``.content`` keep working.
+    Plain string fields (e.g. summary, description) are set directly.
+    """
+    if value is None:
+        setattr(issue.fields, field_name, None)
+        return
+
+    rendered_fields_obj = getattr(issue, "renderedFields", None)
+    if rendered_fields_obj is not None and hasattr(rendered_fields_obj, field_name):
+        rendered_value = format_description(value) if field_name == "description" else value
+        setattr(rendered_fields_obj, field_name, rendered_value)
+
+    current = getattr(issue.fields, field_name, None)
+
+    if isinstance(current, list):
+        values = [v.strip() for v in value.split(",") if v.strip()]
+        if not values:
+            setattr(issue.fields, field_name, [])
+        elif current and isinstance(current[0], str):
+            # plain string list (labels)
+            setattr(issue.fields, field_name, values)
         else:
+            # resource list (fixVersions, components)
+            setattr(issue.fields, field_name, [_wrap_as_resource(v) for v in values])
+    elif isinstance(current, (Resource, SimpleNamespace)):
+        # Field holds a resource object — wrap to preserve dot-access
+        setattr(issue.fields, field_name, _wrap_as_resource(value))
+    elif isinstance(current, (int, float)):
+        try:
+            setattr(issue.fields, field_name, float(value))
+        except (ValueError, TypeError):
             setattr(issue.fields, field_name, value)
     else:
         setattr(issue.fields, field_name, value)
@@ -302,7 +376,7 @@ def get_issue_version(
     issue_copy = copy.deepcopy(issue, memo={id(issue._session): issue._session})
     histories = sorted(
         getattr(issue_copy.changelog, "histories", []),
-        key=lambda h: parse_jira_datetime(h.created),
+        key=lambda h: parse_jira_datetime(getattr(h, "created", None)),
     )
     major = 1
     minor = 0
@@ -317,10 +391,13 @@ def get_issue_version(
         # Once we've reached the target version, revert all subsequent changes.
         if (major > target_major) or (major == target_major and minor >= target_minor):
             for item in getattr(history, "items", []):
-                if item.field not in reverted_fields:
-                    field_id = _get_field_id(fields, item.field)
-                    set_issue_field(issue_copy, field_id, item.fromString)
-                    reverted_fields.add(item.field)
+                item_field = getattr(item, "field", None)
+                if item_field is None or item_field in reverted_fields:
+                    continue
+                field_id = getattr(item, "fieldId", None) or _get_field_id(fields, item_field)
+                previous_value: str | None = getattr(item, "fromString", None)
+                set_issue_field(issue_copy, field_id, previous_value)
+                reverted_fields.add(item_field)
 
         if is_major:
             major += 1
@@ -337,8 +414,10 @@ def get_issue_version(
 def _get_field_id(fields: list[dict[str, Any]], field_name: str) -> str:
     """Helper to get the field ID from the field name, using the list of Jira fields."""
     for field in fields:
-        if field["name"] == field_name:
-            return str(field["id"])
+        if field.get("name") == field_name:
+            field_id = field.get("id")
+            if field_id:
+                return str(field_id)
     return field_name
 
 
@@ -381,10 +460,10 @@ def build_requirementobjectnode_from_issue(
         )
 
     status_field = getattr(issue.fields, "status", None)
-    status = status_field.name if status_field else ""
+    status = getattr(status_field, "name", "") if status_field else ""
 
     priority_field = getattr(issue.fields, "priority", None)
-    priority = priority_field.name if priority_field else ""
+    priority = getattr(priority_field, "name", "") if priority_field else ""
 
     return RequirementObjectNode(
         name=getattr(issue.fields, "summary", ""),
@@ -405,7 +484,7 @@ def build_extendedrequirementobject_from_issue(
     jira_server_url: str,
 ) -> ExtendedRequirementObject:
     attachments_field = getattr(issue.fields, "attachment", None)
-    if attachments_field:
+    if isinstance(attachments_field, list):
         attachments = [attachment.content for attachment in attachments_field if attachment.content]
     else:
         attachments = []

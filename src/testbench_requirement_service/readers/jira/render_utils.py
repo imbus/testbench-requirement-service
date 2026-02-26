@@ -133,7 +133,7 @@ def process_del_tags(soup: BeautifulSoup):
             del_tag.decompose()
 
 
-def fetch_attachment_info(
+def fetch_attachment_info(  # noqa: PLR0911
     issue: Issue, attachment_id: str, attachment_cache: dict[str, dict[str, Any]]
 ) -> dict[str, Any] | None:
     """Fetch and encode a specific attachment by ID, with caching for duplicate references."""
@@ -141,6 +141,8 @@ def fetch_attachment_info(
         return attachment_cache[attachment_id]
 
     attachments = getattr(issue.fields, "attachment", []) or []
+    if not isinstance(attachments, list):
+        return None
 
     for attachment in attachments:
         if getattr(attachment, "id", None) != attachment_id:
