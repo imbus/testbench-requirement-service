@@ -7,10 +7,10 @@
 server_url = "https://your-company.atlassian.net/"
 
 # Authentication method (REQUIRED)
-# Options: "basic", "token", "oauth"
+# Options: "basic", "token", "oauth1"
 # - "basic": Username + API token (most common for Atlassian Cloud)
 # - "token": Personal Access Token (for Jira Server/Data Center)
-# - "oauth": OAuth 1.0a (for enterprise instances)
+# - "oauth1": OAuth 1.0a (for enterprise instances)
 auth_type = "basic"
 
 # Authentication credentials (OPTIONAL - prefer using .env file)

@@ -39,7 +39,7 @@ class JiraClient:
         self.jira = self._connect()
         self._fields_cache: TTLCache[list[dict[str, Any]]] = TTLCache(ttl=config.cache_ttl)
         # The following flags determine which Jira API endpoints to use
-        self.use_issuetypes_endpoint = self.jira._is_cloud or (self.jira._version >= (8, 4, 0))
+        self.use_issuetypes_endpoint = not self.jira._is_cloud and self.jira._version >= (8, 4, 0)
         self.use_manual_pagination = not self.jira._is_cloud
         # Parent link fields for Server/DC compatibility (lazy-loaded)
         self._epic_link_field_id: str | None = None
@@ -49,31 +49,38 @@ class JiraClient:
 
     def _connect(self) -> JIRA:
         try:
+            options: dict[str, Any] = {}
+            if self.config.client_cert is not None:
+                options["client_cert"] = self.config.client_cert
+
             if self.config.auth_type == "basic":
                 return JIRA(
                     server=self.config.server_url,
+                    options=options or None,
                     basic_auth=(self.config.username or "", self.config.api_token or ""),
-                    timeout=self.config.timeout,
                     max_retries=self.config.max_retries,
+                    timeout=self.config.timeout,
                 )
             if self.config.auth_type == "token":
                 return JIRA(
                     server=self.config.server_url,
+                    options=options or None,
                     token_auth=self.config.token,
-                    timeout=self.config.timeout,
                     max_retries=self.config.max_retries,
+                    timeout=self.config.timeout,
                 )
-            if self.config.auth_type == "oauth":
+            if self.config.auth_type == "oauth1":
                 return JIRA(
                     server=self.config.server_url,
+                    options=options or None,
                     oauth={
-                        "access_token": self.config.access_token,
-                        "access_token_secret": self.config.access_token_secret,
-                        "consumer_key": self.config.consumer_key,
-                        "key_cert": self.config.key_cert,
+                        "access_token": self.config.oauth1_access_token,
+                        "access_token_secret": self.config.oauth1_access_token_secret,
+                        "consumer_key": self.config.oauth1_consumer_key,
+                        "key_cert": self.config.oauth1_key_cert,
                     },
-                    timeout=self.config.timeout,
                     max_retries=self.config.max_retries,
+                    timeout=self.config.timeout,
                 )
             raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
         except Exception as e:

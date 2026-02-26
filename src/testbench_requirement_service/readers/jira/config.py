@@ -39,8 +39,11 @@ class JiraRequirementReaderConfig(BaseModel):
     server_url: str = Field(
         ..., description="Jira server URL (e.g., https://your-domain.atlassian.net)"
     )
-    auth_type: Literal["basic", "token", "oauth"] = Field(
-        "basic", description="Authentication type: basic (Cloud), token (Self-Hosted), or oauth"
+    auth_type: Literal["basic", "token", "oauth1"] = Field(
+        "basic",
+        description=(
+            "Authentication type: basic (Cloud), token (Self-Hosted), or oauth1 (OAuth 1.0a)"
+        ),
     )
 
     username: str | None = Field(
@@ -74,53 +77,69 @@ class JiraRequirementReaderConfig(BaseModel):
         },
     )
 
-    access_token: str | None = Field(
+    oauth1_access_token: str | None = Field(
         None,
-        description="OAuth access token",
+        description="OAuth1 access token",
         json_schema_extra={
             "sensitive": True,
-            "env_var": "JIRA_ACCESS_TOKEN",
-            "depends_on": {"auth_type": "oauth"},
+            "env_var": "JIRA_OAUTH1_ACCESS_TOKEN",
+            "depends_on": {"auth_type": "oauth1"},
             "required": True,
         },
     )
-    access_token_secret: str | None = Field(
+    oauth1_access_token_secret: str | None = Field(
         None,
-        description="OAuth access token secret",
+        description="OAuth1 access token secret",
         json_schema_extra={
             "sensitive": True,
-            "env_var": "JIRA_ACCESS_TOKEN_SECRET",
-            "depends_on": {"auth_type": "oauth"},
+            "env_var": "JIRA_OAUTH1_ACCESS_TOKEN_SECRET",
+            "depends_on": {"auth_type": "oauth1"},
             "required": True,
         },
     )
-    consumer_key: str | None = Field(
+    oauth1_consumer_key: str | None = Field(
         None,
-        description="OAuth consumer key",
+        description="OAuth1 consumer key",
         json_schema_extra={
-            "env_var": "JIRA_CONSUMER_KEY",
-            "depends_on": {"auth_type": "oauth"},
+            "env_var": "JIRA_OAUTH1_CONSUMER_KEY",
+            "depends_on": {"auth_type": "oauth1"},
             "required": True,
         },
     )
-    key_cert_path: str | None = Field(
+    oauth1_key_cert_path: str | None = Field(
         None,
-        description="Path to the OAuth private key certificate file (.pem)",
+        description="Path to the OAuth1 private key certificate file (.pem)",
         json_schema_extra={
-            "env_var": "JIRA_KEY_CERT_PATH",
-            "depends_on": {"auth_type": "oauth"},
+            "env_var": "JIRA_OAUTH1_KEY_CERT_PATH",
+            "depends_on": {"auth_type": "oauth1"},
             "required": True,
         },
     )
-    key_cert: str | None = Field(
+    oauth1_key_cert: str | None = Field(
         None,
-        description="OAuth private key certificate content (use key_cert_path instead)",
+        description="OAuth1 private key certificate content (use oauth1_key_cert_path instead)",
         json_schema_extra={
             "sensitive": True,
-            "env_var": "JIRA_KEY_CERT",
-            "depends_on": {"auth_type": "oauth"},
+            "env_var": "JIRA_OAUTH1_KEY_CERT",
+            "depends_on": {"auth_type": "oauth1"},
             "required": False,
             "skip_if_wizard": True,
+        },
+    )
+
+    client_cert_path: str | None = Field(
+        None,
+        description="Path to client certificate file for mutual TLS authentication (.pem or .crt)",
+        json_schema_extra={
+            "env_var": "JIRA_CLIENT_CERT_PATH",
+        },
+    )
+    client_key_path: str | None = Field(
+        None,
+        description="Path to client private key file for mutual TLS authentication (.key or .pem). "
+        "Only needed when the key is stored separately from the certificate.",
+        json_schema_extra={
+            "env_var": "JIRA_CLIENT_KEY_PATH",
         },
     )
 
@@ -179,12 +198,35 @@ class JiraRequirementReaderConfig(BaseModel):
         },
     )
 
-    @field_validator("key_cert_path")
+    @property
+    def client_cert(self) -> str | tuple[str, str] | None:
+        """Build the client_cert value expected by the jira package ``options`` dict.
+
+        Returns:
+        - ``str`` path when only ``client_cert_path`` is set (combined cert+key file).
+        - ``(cert, key)`` tuple when both ``client_cert_path`` and ``client_key_path`` are set.
+        - ``None`` when no client certificate is configured.
+        """
+        cert = self.client_cert_path or os.getenv("JIRA_CLIENT_CERT_PATH")
+        key = self.client_key_path or os.getenv("JIRA_CLIENT_KEY_PATH")
+        if cert and key:
+            return (cert, key)
+        return cert or None
+
+    @field_validator("oauth1_key_cert_path")
     @classmethod
-    def validate_key_cert_path_exists(cls, v: str | None) -> str | None:
-        """Validate that key_cert_path exists if provided."""
+    def validate_oauth1_key_cert_path_exists(cls, v: str | None) -> str | None:
+        """Validate that oauth1_key_cert_path exists if provided."""
         if v is not None and not Path(v).exists():
-            raise ValueError(f"OAuth private key file not found: '{v}'")
+            raise ValueError(f"OAuth1 private key file not found: '{v}'")
+        return v
+
+    @field_validator("client_cert_path", "client_key_path")
+    @classmethod
+    def validate_client_cert_files_exist(cls, v: str | None) -> str | None:
+        """Validate that client certificate/key files exist if provided."""
+        if v is not None and not Path(v).exists():
+            raise ValueError(f"Client certificate/key file not found: '{v}'")
         return v
 
     def _validate_basic_auth(self) -> None:
@@ -207,37 +249,44 @@ class JiraRequirementReaderConfig(BaseModel):
                 "(via config or JIRA_BEARER_TOKEN env)"
             )
 
-    def _validate_oauth(self) -> None:
-        self.access_token = self.access_token or os.getenv("JIRA_ACCESS_TOKEN")
-        self.access_token_secret = self.access_token_secret or os.getenv("JIRA_ACCESS_TOKEN_SECRET")
-        self.consumer_key = self.consumer_key or os.getenv("JIRA_CONSUMER_KEY")
-        self.key_cert_path = self.key_cert_path or os.getenv("JIRA_KEY_CERT_PATH")
-        if self.key_cert_path:
+    def _validate_oauth1(self) -> None:
+        self.oauth1_access_token = self.oauth1_access_token or os.getenv("JIRA_OAUTH1_ACCESS_TOKEN")
+        self.oauth1_access_token_secret = self.oauth1_access_token_secret or os.getenv(
+            "JIRA_OAUTH1_ACCESS_TOKEN_SECRET"
+        )
+        self.oauth1_consumer_key = self.oauth1_consumer_key or os.getenv("JIRA_OAUTH1_CONSUMER_KEY")
+        self.oauth1_key_cert_path = self.oauth1_key_cert_path or os.getenv(
+            "JIRA_OAUTH1_KEY_CERT_PATH"
+        )
+        if self.oauth1_key_cert_path:
             try:
-                self.key_cert = Path(self.key_cert_path).read_text(encoding="utf-8")
+                self.oauth1_key_cert = Path(self.oauth1_key_cert_path).read_text(encoding="utf-8")
             except OSError as e:
                 raise ValueError(
-                    f"Could not read OAuth private key from '{self.key_cert_path}': {e}"
+                    f"Could not read OAuth1 private key from '{self.oauth1_key_cert_path}': {e}"
                 ) from e
         else:
-            self.key_cert = self.key_cert or os.getenv("JIRA_KEY_CERT")
-        if not self.access_token:
+            self.oauth1_key_cert = self.oauth1_key_cert or os.getenv("JIRA_OAUTH1_KEY_CERT")
+        if not self.oauth1_access_token:
             raise ValueError(
-                "Jira Access Token must be provided for OAuth (via config or JIRA_ACCESS_TOKEN env)"
+                "Jira Access Token must be provided for OAuth1 "
+                "(via config or JIRA_OAUTH1_ACCESS_TOKEN env)"
             )
-        if not self.access_token_secret:
+        if not self.oauth1_access_token_secret:
             raise ValueError(
-                "Jira Access Token Secret must be provided for OAuth "
-                "(via config or JIRA_ACCESS_TOKEN_SECRET env)"
+                "Jira Access Token Secret must be provided for OAuth1 "
+                "(via config or JIRA_OAUTH1_ACCESS_TOKEN_SECRET env)"
             )
-        if not self.consumer_key:
+        if not self.oauth1_consumer_key:
             raise ValueError(
-                "Jira consumer key must be provided for OAuth (via config or JIRA_CONSUMER_KEY env)"
+                "Jira consumer key must be provided for OAuth1 "
+                "(via config or JIRA_OAUTH1_CONSUMER_KEY env)"
             )
-        if not self.key_cert:
+        if not self.oauth1_key_cert:
             raise ValueError(
-                "Jira Private Key must be provided for OAuth "
-                "(via key_cert_path / JIRA_KEY_CERT_PATH or key_cert / JIRA_KEY_CERT env)"
+                "Jira Private Key must be provided for OAuth1 "
+                "(via oauth1_key_cert_path / JIRA_OAUTH1_KEY_CERT_PATH "
+                "or oauth1_key_cert / JIRA_OAUTH1_KEY_CERT env)"
             )
 
     @model_validator(mode="after")
@@ -246,6 +295,6 @@ class JiraRequirementReaderConfig(BaseModel):
             self._validate_basic_auth()
         elif self.auth_type == "token":
             self._validate_token_auth()
-        elif self.auth_type == "oauth":
-            self._validate_oauth()
+        elif self.auth_type == "oauth1":
+            self._validate_oauth1()
         return self

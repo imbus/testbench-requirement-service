@@ -233,15 +233,14 @@ def is_sensitive_config_key(key: str) -> bool:
         "salt",
         "api_token",
         "token",
-        "access_token",
-        "access_token_secret",
-        "consumer_key",
-        "key_cert",
+        "oauth1_access_token",
+        "oauth1_access_token_secret",
+        "oauth1_key_cert",
         "jira_api_token",
         "jira_bearer_token",
-        "jira_access_token",
-        "jira_access_token_secret",
-        "jira_key_cert",
+        "jira_oauth1_access_token",
+        "jira_oauth1_access_token_secret",
+        "jira_oauth1_key_cert",
     }
     key_lower = key.lower()
     return any(sensitive in key_lower for sensitive in sensitive_keys)
