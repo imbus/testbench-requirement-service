@@ -690,7 +690,7 @@ When using a `.properties` file, the reader uses a global `.properties` file, bu
 >    ```
 > 
 
-**Dataframe buffering:** The Excel reader keeps a catalog of dataframes keyed by file path. A cached dataframe is reused if the source file modification time matches, and each access refreshes the entry age. Entries expire after `bufferMaxAgeMinutes`, and a background cleanup task runs every `bufferCleanupIntervalMinutes`. If the total buffer size exceeds `bufferMaxSizeMiB`, the reader evicts the least-recently accessed entries until the buffer is back to $80\%$ of the limit. Set `bufferMaxSizeMiB=0` to disable buffering entirely.
+**Dataframe buffering:** The Excel reader keeps a catalog of dataframes keyed by file path. A cached dataframe is reused if the source file modification time matches, and each access refreshes the entry age. Entries expire after `bufferMaxAgeMinutes`, and a background cleanup task runs every `bufferCleanupIntervalMinutes`. If the total buffer size exceeds `bufferMaxSizeMiB`, the reader evicts the least-recently accessed entries until the buffer is back to $80\%$ of the limit. Set `bufferMaxSizeMiB=0` or `bufferMaxAgeMinutes=0` to disable buffering entirely.
 - **Global Settings**:
   The global settings are mandatory. They can only be configured in the global configuration file.
 
@@ -710,13 +710,13 @@ When using a `.properties` file, the reader uses a global `.properties` file, bu
 
   | Optional Setting            | Description                                                                                                               | Example                            |
   | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-  | `useExcelDirectly`        | `true`: Use Microsoft Excel files `<br>false`: Use text files like specified in `baselineFileExtensions`            | `useExcelDirectly=false`         |
-  | `baselinesFromSubfolders` | `true`: Searches for baseline files in all subfolders `<br>false`: Does not search for baseline files in subfolders   | `baselinesFromSubfolders=true`   |
+  | `useExcelDirectly`        | `true`: Use Microsoft Excel files<br>`false`: Use text files like specified in `baselineFileExtensions`            | `useExcelDirectly=false`         |
+  | `baselinesFromSubfolders` | `true`: Searches for baseline files in all subfolders<br>`false`: Does not search for baseline files in subfolders   | `baselinesFromSubfolders=true`   |
   | `worksheetName`           | Name of the worksheet to be used in the Excel files. If there is no corresponding worksheet, the first worksheet is used. | `worksheetName=Tabelle1`         |
   | `dateFormat`              | Date format in documents as Javas SimpleDateFormat                                                                        | `dateFormat=yyyy-MM-dd HH:mm:ss` |
   | `header.rowIdx`           | Line number of the header line in the requirement documents. Numbering starts at 1.                                       | `header.rowIdx=1`                |
   | `data.rowIdx`             | Line number of the first requirement line. Numbering starts at 1.                                                         | `data.rowIdx=2`                  |
-  | `bufferMaxAgeMinutes`       | Maximum idle age (in minutes) before a buffered dataframe is evicted.                                                      | `bufferMaxAgeMinutes=1440`       |
+  | `bufferMaxAgeMinutes`       | Maximum idle age (in minutes) before a buffered dataframe is evicted. Set to `0` to disable buffering.                      | `bufferMaxAgeMinutes=1440`       |
   | `bufferMaxSizeMiB`          | Maximum total buffer size in MiB. When exceeded, least-recently accessed entries are evicted until $80\%$ of the limit is reached again. Set to $0$ to disable buffering. | `bufferMaxSizeMiB=1024`          |
   | `bufferCleanupIntervalMinutes` | Background cleanup interval in minutes for expiring cached dataframes.                                              | `bufferCleanupIntervalMinutes=1` |
 - **Column Mapping: Attributes**:
@@ -733,10 +733,10 @@ When using a `.properties` file, the reader uses a global `.properties` file, bu
   | `requirement.priority`             | Column containing the priority of the requirement                                                                                                                                                                                  | `requirement.priority=15`                                      |
   | `requirement.comment`              | Column containing the comment of the requirement                                                                                                                                                                                   | `requirement.comment=14`                                       |
   | `requirement.date`                 | Column containing the version date of the requirement                                                                                                                                                                              | `requirement.date=7`                                           |
-  | `requirement.description.<number>` | List of all columns that contain (parts of the) requirement description                                                                                                                                                            | `requirement.description.1=8<br>``requirement.description.2=9` |
-  | `requirement.references`           | Column containing the file references of the requirement.`<br>` File references are separated from each other with the `arrayValueSeparator`                                                                                   | `requirement.references=13`                                    |
+  | `requirement.description.<number>` | List of all columns that contain (parts of the) requirement description                                                                                                                                                            | `requirement.description.1=8`<br>`requirement.description.2=9` |
+  | `requirement.references`           | Column containing the file references of the requirement.<br>File references are separated from each other with the `arrayValueSeparator`                                                                                   | `requirement.references=13`                                    |
   | `requirement.type`                 | Column containing the information if entry is a folder or a requirement                                                                                                                                                            | `requirement.type=10`                                          |
-  | `requirement.folderPattern`        | Defines the regular expression pattern used to identify folders in the data.`<br>`Any value in the specified column (`requirement.type`) that matches this pattern will be considered a folder.`<br>`Default: `.*folder.*` | `requirement.folderPattern=.*folder.*`                         |
+  | `requirement.folderPattern`        | Defines the regular expression pattern used to identify folders in the data.<br>Any value in the specified column (`requirement.type`) that matches this pattern will be considered a folder.<br>Default: `.*folder.*` | `requirement.folderPattern=.*folder.*`                         |
 - **Settings for User defined fields**:
   The settings for user defined fields (UDF) can only be configured in the global configuration file.
 
@@ -847,20 +847,58 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
 
 ##### Configuration Settings
 
-| Setting                     | Type         | Description                                                                                                                                                                         | Required | Default                                                                                                                 |
-| --------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `server_url`              | String       | Base URL of the Jira REST API Server                                                                                                                                                | Yes      | -                                                                                                                       |
-| `auth_type`               | String       | Authentication method to use (`basic`, `token`, `oauth`). See [Authentication methods](#authentication-methods) to pick the right flow.                                   | Yes      | `basic`                                                                                                               |
-| `username`                | String       | Username for Jira authentication (only for `basic` auth when not using environment variables)                                                                                     | No       | -                                                                                                                       |
-| `api_token`               | String       | API token or password for Jira authentication (only for `basic` auth when not using environment variables)                                                                        | No       | -                                                                                                                       |
-| `baseline_field`          | String       | Field used to identify baselines in Jira                                                                                                                                            | No       | `fixVersions`                                                                                                         |
-| `baseline_jql`            | String       | JQL query template used to select issues that belong to a specific baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name | No       | `project = "{project}" AND fixVersion = "{baseline}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")` |
-| `current_baseline_jql`    | String       | JQL query template used to resolve the active/current baseline.<br />Available Placeholders:<br />• `{project}`: project name<br />• `{baseline}`: baseline name              | No       | `project = "{project}" AND issuetype in ("Epic", "Story", "User Story", "Task", "Bug")`                               |
-| `requirement_group_types` | List[String] | List of Jira issue types considered as requirement groups                                                                                                                           | No       | `["Epic"]`                                                                                                            |
-| `major_change_fields`     | List[String] | List of Jira fields where changes are treated as major changes (e.g. used for highlighting or reporting)                                                                   | No       | `["fixVersions"]`                                                                                                     |
-| `minor_change_fields`     | List[String] | List of Jira fields where changes are treated as minor changes                                                                                                             | No       | `["summary", "description", "affectsVersions", "status"]`                                                             |
-| `owner`                   | String       | Field used for the owner                                                                                                                                                            | No       | `assignee`                                                                                                            |
-| `rendered_fields`         | List[String] | List of UDF fields that should be shown as rendered fields in the TestBench Client.<br />*Note*: Field has to be of type multiline text in order to be shown rendered             | No       | `[]`                                                                                                                  |
+**Connection**
+
+| Setting        | Type    | Description                                                                                                                                               | Required | Default  |
+| -------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------- |
+| `server_url` | String  | Base URL of the Jira instance (e.g. `https://your-company.atlassian.net`)                                                                               | Yes      | -        |
+| `auth_type`  | String  | Authentication method to use (`basic`, `token`, `oauth1`). See [Authentication methods](#authentication-methods) to pick the right flow.               | No       | `basic`  |
+| `timeout`    | Integer | HTTP request timeout in seconds for Jira API calls (1–300)                                                                                               | No       | `30`     |
+| `max_retries`| Integer | Maximum number of retries for failed Jira API requests (0–10)                                                                                            | No       | `3`      |
+| `cache_ttl`  | Float   | Time-to-live in seconds for all internal caches. Set to `0` to disable caching.                                                                         | No       | `300.0`  |
+
+**Basic authentication** (`auth_type = "basic"` — Jira Cloud)
+
+| Setting      | Type   | Description                                                  | Required | Env var          |
+| ------------ | ------ | ------------------------------------------------------------ | -------- | ---------------- |
+| `username`   | String | Atlassian account e-mail address                             | Yes      | `JIRA_USERNAME`  |
+| `api_token`  | String | Atlassian API token (sensitive)                              | Yes      | `JIRA_API_TOKEN` |
+
+**Token authentication** (`auth_type = "token"` — Jira Server/Data Center)
+
+| Setting   | Type   | Description                                       | Required | Env var              |
+| --------- | ------ | ------------------------------------------------- | -------- | -------------------- |
+| `token`   | String | Personal Access Token (PAT) (sensitive)           | Yes      | `JIRA_BEARER_TOKEN`  |
+
+**OAuth1 authentication** (`auth_type = "oauth1"` — enterprise instances)
+
+| Setting                       | Type   | Description                                                                                           | Required | Env var                           |
+| ----------------------------- | ------ | ----------------------------------------------------------------------------------------------------- | -------- | --------------------------------- |
+| `oauth1_access_token`         | String | OAuth1 access token (sensitive)                                                                       | Yes      | `JIRA_OAUTH1_ACCESS_TOKEN`        |
+| `oauth1_access_token_secret`  | String | OAuth1 access token secret (sensitive)                                                                | Yes      | `JIRA_OAUTH1_ACCESS_TOKEN_SECRET` |
+| `oauth1_consumer_key`         | String | OAuth1 consumer key                                                                                   | Yes      | `JIRA_OAUTH1_CONSUMER_KEY`        |
+| `oauth1_key_cert_path`        | String | Path to the OAuth1 RSA private key file (`.pem`). The file content is read at startup.               | Yes     | `JIRA_OAUTH1_KEY_CERT_PATH`       |
+
+
+**Mutual TLS (mTLS) client certificate** (all auth types, optional)
+
+| Setting             | Type   | Description                                                                                                                      | Required | Env var                  |
+| ------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------ |
+| `client_cert_path`  | String | Path to the client certificate file for mutual TLS (`.pem` or `.crt`). Can be a combined cert+key file.                         | No       | `JIRA_CLIENT_CERT_PATH`  |
+| `client_key_path`   | String | Path to the client private key file (`.key` or `.pem`). Only required when the key is stored separately from the certificate.   | No       | `JIRA_CLIENT_KEY_PATH`   |
+
+**Requirements & baselines**
+
+| Setting                     | Type         | Description                                                                                                                                                                         | Required | Default                                                                                                                                  |
+| --------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseline_field`            | String       | Jira field used to identify baselines/versions (e.g. `fixVersions`, `sprint`, or a custom field ID)                                                                                | No       | `fixVersions`                                                                                                                            |
+| `baseline_jql`              | String       | JQL template for fetching issues of a specific baseline. Placeholders: `{project}`, `{baseline}`                                                                                   | No       | `project = "{project}" AND fixVersion = "{baseline}" AND issuetype in standardIssueTypes()`                                              |
+| `current_baseline_jql`      | String       | JQL template for fetching the current/active baseline. Placeholder: `{project}`                                                                                                     | No       | `project = "{project}" AND issuetype in standardIssueTypes()`                                                                            |
+| `requirement_group_types`   | List[String] | Issue types treated as requirement groups/folders (e.g. Epics)                                                                                                                      | No       | `["Epic"]`                                                                                                                               |
+| `major_change_fields`       | List[String] | Fields whose changes count as a major version bump                                                                                                                                  | No       | `["fixVersions"]`                                                                                                                        |
+| `minor_change_fields`       | List[String] | Fields whose changes count as a minor version bump                                                                                                                                  | No       | `["summary", "description", "affectsVersions", "status"]`                                                                               |
+| `owner_field`               | String       | Jira field used as the requirement owner                                                                                                                                            | No       | `assignee`                                                                                                                               |
+| `rendered_fields`           | List[String] | Fields to render as HTML in TestBench. The field must be of type *multiline text* in Jira.                                                                                          | No       | `[]`                                                                                                                                     |
 
 ##### Project-Specific Settings (`projects.<project>` subsection)
 
@@ -882,7 +920,7 @@ Pick the auth flow that matches your Jira deployment; the reader enforces the re
 | --- | --- | --- |
 | `basic` | Atlassian Cloud and most Jira Data Center instances that still allow username + API token (or password). This is typically the simplest option. | Set `username` and `api_token` in the `[jira]` section or export `JIRA_USERNAME` and `JIRA_API_TOKEN`. |
 | `token` | Jira Server/Data Center that issues Personal Access Tokens and disallows basic auth. | Set `token` in the `[jira]` section or export `JIRA_BEARER_TOKEN`.|
-| `oauth` | Locked-down enterprise instances that require OAuth 1.0a with consumer keys and certificates. | Set `access_token`, `access_token_secret`, `consumer_key`, `key_cert` in the `[jira]` section or export `JIRA_ACCESS_TOKEN`, `JIRA_ACCESS_TOKEN_SECRET`, `JIRA_CONSUMER_KEY`, `JIRA_KEY_CERT`. |
+| `oauth1` | Locked-down enterprise instances that require OAuth 1.0a with consumer keys and certificates. | Set `oauth1_access_token`, `oauth1_access_token_secret`, `oauth1_consumer_key`, `oauth1_key_cert_path` in the `[jira]` section or export `JIRA_OAUTH1_ACCESS_TOKEN`, `JIRA_OAUTH1_ACCESS_TOKEN_SECRET`, `JIRA_OAUTH1_CONSUMER_KEY`, `JIRA_OAUTH1_KEY_CERT_PATH`. |
 
 #### Example Configuration:
 
@@ -894,27 +932,45 @@ reader_class = "JiraRequirementReader"
 
 [testbench-requirement-service.reader_config]
 server_url = "https://example.atlassian.net/"
-auth_type = "basic"          # or "token" / "oauth"
+auth_type = "basic"          # or "token" / "oauth1"
 
-# Optional authentication directly in config (alternative to env vars)
+# Basic auth credentials (alternative to env vars JIRA_USERNAME / JIRA_API_TOKEN)
 # username = "my-user@example.com"
 # api_token = "my-apitoken"
 
-# Optional: global JQL / field configuration
+# Token auth credential (alternative to env var JIRA_BEARER_TOKEN)
+# token = "my-personal-access-token"
+
+# OAuth1 auth credentials (alternative to env vars)
+# oauth1_access_token        = "my-access-token"
+# oauth1_access_token_secret = "my-access-token-secret"
+# oauth1_consumer_key        = "my-consumer-key"
+# oauth1_key_cert_path       = "/path/to/private-key.pem"
+
+# Mutual TLS client certificate (optional, all auth types)
+# client_cert_path = "/path/to/client.crt"
+# client_key_path  = "/path/to/client.key"
+
+# Connection tuning (optional)
+# timeout     = 30
+# max_retries = 3
+# cache_ttl   = 300.0
+
+# Requirement & baseline configuration (optional)
 baseline_field = "fixVersions"
-baseline_jql = "project = '{project}' AND fixVersion = '{baseline}' AND issuetype in (\"Epic\", \"Story\", \"User Story\", \"Task\", \"Bug\")"
-current_baseline_jql = "project = '{project}' AND issuetype in (\"Epic\", \"Story\", \"User Story\", \"Task\", \"Bug\")"
+baseline_jql = 'project = "{project}" AND fixVersion = "{baseline}" AND issuetype in standardIssueTypes()'
+current_baseline_jql = 'project = "{project}" AND issuetype in standardIssueTypes()'
 requirement_group_types = ["Epic"]
 major_change_fields = ["fixVersions"]
 minor_change_fields = ["summary", "description", "affectsVersions", "status"]
-owner = "assignee"
-rendered_fields = ["Support Ticket", "Technical criteria", "Acceptance criteria"]
+owner_field = "assignee"
+rendered_fields = ["Acceptance Criteria", "Technical Specification"]
 
 [testbench-requirement-service.reader_config.projects."Project A"]
-# Project specific overrides (all optional)
+# Project-specific overrides (all optional, inherit from global config when omitted)
 baseline_field = "fixVersions"
-baseline_jql = "fixVersion = '{baseline}'"
-current_baseline_jql = "project = '{project}' AND fixVersion = '{baseline}'"
+baseline_jql = 'fixVersion = "{baseline}"'
+current_baseline_jql = 'project = "{project}" AND fixVersion = "{baseline}"'
 requirement_group_types = ["Initiative"]
 owner = "creator"
 ```
@@ -932,22 +988,36 @@ reader_config_path = "jira_config.toml"
 # jira_config.toml (no section prefix needed)
 server_url = "https://example.atlassian.net/"
 auth_type = "basic"
-# ... same settings as above
+# ... same settings as Option 1 above
 
 [projects."Project A"]
-# Project specific overrides (all optional)
+# Project-specific overrides (all optional)
 baseline_field = "fixVersions"
-baseline_jql = "fixVersion = '{baseline}'"
-current_baseline_jql = "project = '{project}' AND fixVersion = '{baseline}'"
+baseline_jql = 'fixVersion = "{baseline}"'
+current_baseline_jql = 'project = "{project}" AND fixVersion = "{baseline}"'
 requirement_group_types = ["Initiative"]
 owner = "creator"
 ```
 
-#### Example `.env` file for basic authentication:
+#### Example `.env` file:
 
 ```text
+# Basic authentication (Jira Cloud)
 JIRA_USERNAME=my-user@example.com
 JIRA_API_TOKEN=my-apitoken
+
+# Token authentication (Jira Server/Data Center)
+# JIRA_BEARER_TOKEN=my-personal-access-token
+
+# OAuth1 authentication
+# JIRA_OAUTH1_ACCESS_TOKEN=my-access-token
+# JIRA_OAUTH1_ACCESS_TOKEN_SECRET=my-access-token-secret
+# JIRA_OAUTH1_CONSUMER_KEY=my-consumer-key
+# JIRA_OAUTH1_KEY_CERT_PATH=/path/to/private-key.pem
+
+# Mutual TLS client certificate (optional, all auth types)
+# JIRA_CLIENT_CERT_PATH=/path/to/client.crt
+# JIRA_CLIENT_KEY_PATH=/path/to/client.key
 ```
 
 ## Custom RequirementReader Classes
