@@ -268,7 +268,7 @@ class JiraClient:
             for issue_type in issue_types_chunk:
                 try:
                     for field in self._fetch_fields_for_issue_type(project_key, issue_type.id):
-                        fields_dict[field.id] = field
+                        fields_dict[field.fieldId] = field
                 except Exception as e:
                     logger.warning(
                         f"Error fetching issue fields for issue type {issue_type.id}: {e}"
