@@ -835,6 +835,15 @@ Reads requirement data from a Jira instance using the Jira REST API.
 
 **When to use**: Your requirements are managed in Jira issues (Stories, Epics, Tasks, etc.).
 
+**Tested Jira instances**: Compatibility is ensured for the following Jira deployments. Other versions may work but are not officially supported.
+
+| Deployment       | Version |
+| ---------------- | ------- |
+| Jira Cloud       | latest  |
+| Jira Data Center | 11.3    |
+| Jira Data Center | 10.3    |
+| Jira Data Center | 9.4     |
+
 **Installation**: Requires Jira extras:
 ```powershell
 pip install testbench-requirement-service[jira]
