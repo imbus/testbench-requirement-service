@@ -20,8 +20,8 @@ from testbench_requirement_service.utils.dependencies import (
 
 def register_middlewares(app: Sanic) -> None:
     """Register application middlewares."""
-    app.register_middleware(check_request_auth, "request")
     app.register_middleware(log_request, "request")
+    app.register_middleware(check_request_auth, "request")
     app.register_middleware(log_response, "response")  # type: ignore
 
 
