@@ -72,8 +72,8 @@ class AppConfig(Config):
         self.READER_CONFIG = self._validate_reader_config()
 
         # Load credentials
-        self.PASSWORD_HASH = service_config.password_hash or os.getenv("PASSWORD_HASH") or ""
-        self.SALT = service_config.salt or os.getenv("SALT") or ""
+        self.PASSWORD_HASH = service_config.password_hash or os.getenv("PASSWORD_HASH")
+        self.SALT = service_config.salt or os.getenv("SALT")
 
         # SSL/TLS configuration
         self.SSL_CERT = ssl_cert or service_config.ssl_cert
