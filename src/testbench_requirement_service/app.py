@@ -3,7 +3,10 @@ from pathlib import Path
 from sanic import Sanic
 
 from testbench_requirement_service.config import AppConfig
-from testbench_requirement_service.exceptions import handle_jira_error
+from testbench_requirement_service.exceptions import (
+    AppErrorHandler,
+    handle_jira_error,
+)
 from testbench_requirement_service.log import get_logging_dict
 from testbench_requirement_service.middlewares import check_request_auth, log_request, log_response
 from testbench_requirement_service.routes import router
@@ -57,7 +60,7 @@ def create_app(name: str, config: AppConfig | None = None) -> Sanic:
     log_config = get_logging_dict(service_config.logging, debug=debug)
 
     # Create Sanic app
-    app = Sanic(name, log_config=log_config)
+    app = Sanic(name, log_config=log_config, error_handler=AppErrorHandler())
 
     # Apply configuration after Sanic initialization
     app.update_config(config)
