@@ -31,9 +31,11 @@ from testbench_requirement_service.readers.excel.config import (
 )
 from testbench_requirement_service.readers.excel.utils import (
     build_extendedrequirementobject_from_row_data,
+    build_placeholder_extendedrequirementobject,
     build_requirement_tree_from_dataframe,
     build_requirementversionobject_from_row_data,
     get_config_for_user_defined_attribute,
+    is_placeholder_node,
     read_data_frame_from_file_path,
 )
 from testbench_requirement_service.readers.utils import load_reader_config_from_path
@@ -176,6 +178,9 @@ class ExcelRequirementReader(AbstractRequirementReader):
     def get_extended_requirement(
         self, project: str, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
+        if is_placeholder_node(key):
+            return build_placeholder_extendedrequirementobject(key, baseline)
+
         baseline_path = self._get_baseline_path(project, baseline)
         config = self._get_config_for_project(project)
         extended_requirement = self._find_extended_requirement_in_file(
@@ -196,13 +201,15 @@ class ExcelRequirementReader(AbstractRequirementReader):
     def get_requirement_versions(
         self, project: str, baseline: str, key: RequirementKey
     ) -> list[RequirementVersionObject]:
+        if is_placeholder_node(key):
+            return []
+
         config = self._get_config_for_project(project)
         requirement_versions: list[RequirementVersionObject] = []
         seen_versions: set[str] = set()
 
         for baseline_file in self._iter_baseline_files(project):
             df = self._get_dataframe(baseline_file, config)
-            df = df.loc[:, ~df.columns.duplicated()]
             filtered_df = df[df["id"] == key.id]
             for row in filtered_df.to_dict(orient="records"):
                 requirement_version = build_requirementversionobject_from_row_data(row, config)
