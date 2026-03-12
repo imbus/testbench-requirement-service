@@ -83,57 +83,107 @@ def _load_dataframe(file_path: Path, config: ExcelRequirementReaderConfig) -> pd
     return df.fillna("")  # type: ignore[no-any-return]
 
 
-def _apply_column_mapping(
-    df: pd.DataFrame,
+def _validate_column_mapping(
     column_mapping: dict[int, list[str]],
-    config: ExcelRequirementReaderConfig,
-) -> pd.DataFrame:
-    """Rename physical columns to their logical field names.
+    total_columns: int,
+    udf_names: set[str],
+) -> dict[int, list[str]]:
+    """Validate every entry in *column_mapping* against the available column count.
 
-    Validates that every configured index exists in the DataFrame.  When multiple
-    field names share the same column index, the column is renamed to the first
-    name and copied under each additional name so all fields are addressable.
-
-    If ``config.requirement_description`` is set, an additional ``description``
-    column is created by joining the values of the listed (1-based) columns.
+    Returns a filtered mapping that contains only entries whose index is within
+    range.  Raises ``ValueError`` immediately for out-of-range *required* columns
+    (id, version, name); logs a warning and drops out-of-range optional / UDF
+    columns so the import can still proceed without them.
     """
-    columns_count = len(df.columns)
-
-    def _assert_column_exists(idx: int, label: str) -> None:
-        if idx >= columns_count:
+    valid_mapping: dict[int, list[str]] = {}
+    for idx, names in column_mapping.items():
+        primary_name = names[0]
+        if idx < total_columns:
+            if len(names) > 1:
+                logger.warning(
+                    "Column index %d is mapped to multiple fields (%s); "
+                    "the same value will be applied to all of them.",
+                    idx + 1,
+                    ", ".join(f"'{n}'" for n in names),
+                )
+            valid_mapping[idx] = names
+        elif primary_name in _REQUIRED_DATA_COLUMNS:
             raise ValueError(
-                f"Column '{label}' (index {idx + 1}) not found in the file. "
-                f"The file has {columns_count} column{'s' if columns_count != 1 else ''}, "
-                "but the configuration specifies a higher index. "
+                f"Required column '{primary_name}' (index {idx + 1}) not found "
+                f"in the file ({total_columns} "
+                f"column{'s' if total_columns != 1 else ''}). "
                 "Check your configuration and make sure the index is within range."
             )
-
-    for idx, names in column_mapping.items():
-        _assert_column_exists(idx, names[0])
-        if len(names) > 1:
+        else:
+            kind = "UDF" if primary_name in udf_names else "Optional"
             logger.warning(
-                "Column index %d is mapped to multiple fields (%s); "
-                "the same value will be applied to all of them.",
+                "%s column '%s' (index %d) not found in the file (%d columns); "
+                "it will be absent from the imported data.",
+                kind,
+                primary_name,
                 idx + 1,
-                ", ".join(f"'{n}'" for n in names),
+                total_columns,
             )
 
-    rename_map = {
-        col: column_mapping[idx][0] for idx, col in enumerate(df.columns) if idx in column_mapping
-    }
-    df = df.rename(columns=rename_map)
+    return valid_mapping
 
-    for names in column_mapping.values():
+
+def _build_description_series(
+    df: pd.DataFrame,
+    config: ExcelRequirementReaderConfig,
+) -> "pd.Series | None":
+    """Build the composite description column from the original (pre-filter) DataFrame.
+
+    Returns ``None`` when description is not configured or all configured indices
+    are out of range.
+    """
+    if not config.requirement_description:
+        return None
+
+    total_columns = len(df.columns)
+    valid_indices = []
+    for config_idx in config.requirement_description:
+        col_idx = config_idx - 1
+        if col_idx < total_columns:
+            valid_indices.append(col_idx)
+        else:
+            logger.warning(
+                "Optional column 'description' (index %d) not found in the file "
+                "(%d columns); it will be skipped.",
+                config_idx,
+                total_columns,
+            )
+
+    if not valid_indices:
+        return None
+
+    return df.iloc[:, valid_indices].apply(  # type: ignore[no-any-return]
+        lambda row: " ".join(str(x) for x in row if x),
+        axis=1,
+    )
+
+
+def _apply_column_mapping(
+    df: pd.DataFrame,
+    valid_mapping: dict[int, list[str]],
+    description_series: pd.Series | None,
+) -> pd.DataFrame:
+    """Apply a pre-validated column mapping to the DataFrame.
+
+    Filters the DataFrame to only the mapped columns (by position), renames
+    them to their logical field names, copies any alias fields for multi-field
+    entries, and attaches the pre-built description column if provided.
+    """
+    ordered_indices = sorted(valid_mapping.keys())
+    df = df.iloc[:, ordered_indices].copy()
+    df.columns = pd.Index([valid_mapping[idx][0] for idx in ordered_indices])
+
+    for names in valid_mapping.values():
         for alias in names[1:]:
             df[alias] = df[names[0]]
 
-    if config.requirement_description:
-        description_columns = [idx - 1 for idx in config.requirement_description]
-        for idx in description_columns:
-            _assert_column_exists(idx, "description")
-        df["description"] = df.iloc[:, description_columns].apply(
-            lambda row: " ".join(x for x in row if x), axis=1
-        )
+    if description_series is not None:
+        df["description"] = description_series.values
 
     return df
 
@@ -143,7 +193,12 @@ def _validate_required_column_values(
     file_path: Path,
     config: ExcelRequirementReaderConfig,
 ) -> None:
-    """Raise ``ValueError`` if any required column contains blank values.
+    """Raise ``ValueError`` if any required column is missing or contains blank values.
+
+    Checks:
+    - The column is present in the DataFrame at all (i.e. ``requirement.<col>``
+      was configured and its index was in range).
+    - Every row has a non-blank value in that column.
 
     Reports 1-based file row numbers so the user can locate the offending rows
     directly, taking ``header.rowIdx`` and ``data.rowIdx`` into account.
@@ -155,6 +210,10 @@ def _validate_required_column_values(
     errors: list[str] = []
     for col in _REQUIRED_DATA_COLUMNS:
         if col not in df.columns:
+            errors.append(
+                f"  - 'requirement.{col}': column is not configured or could not be found. "
+                "Set a valid 'requirement." + col + "' column index in your configuration."
+            )
             continue
         blank_indices = df.index[df[col].str.strip() == ""].tolist()
         if not blank_indices:
@@ -173,6 +232,58 @@ def _validate_required_column_values(
         )
 
 
+def _validate_unique_constraints(
+    df: pd.DataFrame,
+    file_path: Path,
+    config: ExcelRequirementReaderConfig,
+) -> None:
+    """Raise ``ValueError`` if uniqueness constraints are violated.
+
+    Checks:
+    - ``hierarchyID`` values must be unique.
+    - ``(id, version)`` tuples must be unique across all rows.
+
+    Reports 1-based file row numbers and collects all violations before raising
+    so the user can fix everything in one pass.
+    """
+    first_data_file_row = config.data_rowIdx or 2
+    max_displayed_rows = 10
+
+    errors: list[str] = []
+
+    if "hierarchyID" in df.columns:
+        non_empty_mask = df["hierarchyID"].astype(str).str.strip() != ""
+        non_empty = df[non_empty_mask]
+        duplicated_mask = non_empty.duplicated(subset=["hierarchyID"], keep=False)
+        duplicate_values = non_empty.loc[duplicated_mask, "hierarchyID"].unique()
+        for dup_value in duplicate_values:
+            indices = non_empty.index[non_empty["hierarchyID"] == dup_value].tolist()
+            displayed = [str(first_data_file_row + i) for i in indices[:max_displayed_rows]]
+            overflow = len(indices) - max_displayed_rows
+            suffix = f" (and {overflow} more)" if overflow > 0 else ""
+            errors.append(
+                f"  - 'requirement.hierarchyID': duplicate value {dup_value!r} at "
+                f"rows {', '.join(displayed)}{suffix}"
+            )
+
+    if "id" in df.columns and "version" in df.columns:
+        duplicated_mask = df.duplicated(subset=["id", "version"], keep=False)
+        duplicate_pairs = df.loc[duplicated_mask, ["id", "version"]].drop_duplicates()
+        for _, pair_row in duplicate_pairs.iterrows():
+            dup_id, dup_version = pair_row["id"], pair_row["version"]
+            indices = df.index[(df["id"] == dup_id) & (df["version"] == dup_version)].tolist()
+            displayed = [str(first_data_file_row + i) for i in indices[:max_displayed_rows]]
+            overflow = len(indices) - max_displayed_rows
+            suffix = f" (and {overflow} more)" if overflow > 0 else ""
+            errors.append(
+                f"  - '(requirement.id, requirement.version)': duplicate tuple "
+                f"({dup_id!r}, {dup_version!r}) at rows {', '.join(displayed)}{suffix}"
+            )
+
+    if errors:
+        raise ValueError(f"Uniqueness constraints violated in '{file_path}':\n" + "\n".join(errors))
+
+
 def read_data_frame_from_file_path(
     file_path: Path, config: ExcelRequirementReaderConfig
 ) -> pd.DataFrame:
@@ -184,9 +295,15 @@ def read_data_frame_from_file_path(
     start = time.monotonic()
 
     df = _load_dataframe(file_path, config)
+
     column_mapping = get_column_mapping_for_config(config)
-    df = _apply_column_mapping(df, column_mapping, config)
+    udf_names = {udf_cfg.name for udf_cfg in config.udf_configs}
+    valid_mapping = _validate_column_mapping(column_mapping, len(df.columns), udf_names)
+
+    description_series = _build_description_series(df, config)
+    df = _apply_column_mapping(df, valid_mapping, description_series)
     _validate_required_column_values(df, file_path, config)
+    _validate_unique_constraints(df, file_path, config)
 
     bytes_used = df.memory_usage(index=True, deep=True).sum()
     logger.debug(
