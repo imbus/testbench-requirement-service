@@ -65,7 +65,8 @@ class ExcelRequirementReader(AbstractRequirementReader):
     def baseline_exists(self, project: str, baseline: str) -> bool:
         try:
             return self._get_baseline_path(project, baseline).exists()
-        except Exception:
+        except Exception as e:
+            logger.debug("Could not resolve baseline path for '%s/%s': %s", project, baseline, e)
             return False
 
     def get_projects(self) -> list[str]:
@@ -77,14 +78,13 @@ class ExcelRequirementReader(AbstractRequirementReader):
         baselines = []
         for file in self._iter_baseline_files(project):
             stat_result = file.stat()
-            creation_timestamp = getattr(stat_result, "st_birthtime", stat_result.st_ctime)
             baseline = BaselineObject(
                 name=file.stem,
-                date=datetime.fromtimestamp(creation_timestamp, timezone.utc),
+                date=datetime.fromtimestamp(stat_result.st_mtime, timezone.utc),
                 type="UNLOCKED",
             )
             baselines.append(baseline)
-        return baselines
+        return sorted(baselines, key=lambda b: b.date, reverse=True)
 
     def _iter_baseline_files(self, project: str):
         allowed_suffixes = self._get_allowed_suffixes_for_project(project)
@@ -104,10 +104,9 @@ class ExcelRequirementReader(AbstractRequirementReader):
         requirement_tree = build_requirement_tree_from_dataframe(df, config)
 
         stat_result = baseline_path.stat()
-        creation_timestamp = getattr(stat_result, "st_birthtime", stat_result.st_ctime)
         return BaselineObjectNode(
             name=baseline,
-            date=datetime.fromtimestamp(creation_timestamp, timezone.utc),
+            date=datetime.fromtimestamp(stat_result.st_mtime, timezone.utc),
             type="CURRENT",
             children=requirement_tree,
         )

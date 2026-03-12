@@ -42,15 +42,16 @@ class JsonlRequirementReader(AbstractRequirementReader):
         return [p.name for p in self.config.requirements_path.iterdir() if p.is_dir()]
 
     def get_baselines(self, project: str) -> list[BaselineObject]:
-        return [
+        baselines = [
             BaselineObject(
                 name=f.stem,
-                date=datetime.fromtimestamp(f.stat().st_ctime).astimezone(),
+                date=datetime.fromtimestamp(f.stat().st_mtime, timezone.utc),
                 type="UNLOCKED",
             )
             for f in self._get_project_path(project).iterdir()
             if f.suffix == ".jsonl"
         ]
+        return sorted(baselines, key=lambda b: b.date, reverse=True)
 
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         baseline_path = self._get_baseline_path(project, baseline)
@@ -77,9 +78,10 @@ class JsonlRequirementReader(AbstractRequirementReader):
                         parent.children.append(requirement_node)
                 else:
                     requirement_tree[file_node.key.id] = requirement_node
+        stat_result = baseline_path.stat()
         return BaselineObjectNode(
             name=baseline,
-            date=datetime.now(timezone.utc),
+            date=datetime.fromtimestamp(stat_result.st_mtime, timezone.utc),
             type="CURRENT",
             children=list(requirement_tree.values()),
         )
