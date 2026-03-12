@@ -68,8 +68,8 @@ dev = [
   "pandas-stubs>=2.2.0",
   "types-python-dateutil>=2.9.0",
   "types-requests>=2.32.4",
-]
-test = [
+  "pytest>=9.0",
+  "pytest-mock>=3.15",
   "robotframework>=7.3.2",
   "robotframework-assertion-engine>=3.0.3",
   "robotframework-robocop>=6.7.0",
@@ -137,6 +137,9 @@ select = [
   "RUF",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/unit/**" = ["PLR2004"]
+
 [tool.robocop]
 include = ["."]
 exclude = ["ignore_me.robot"]
@@ -145,3 +148,10 @@ exclude = ["ignore_me.robot"]
 select = ["LEN04", "NAME02"]
 ignore = ["DOC01", "DOC02", "DOC03", "LEN04"]
 reports = ["rules_by_id", "scan_timer"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

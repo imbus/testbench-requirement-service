@@ -123,7 +123,16 @@ class ExcelRequirementReaderProjectConfig(BaseModel, ExcelRequirementReaderConfi
         None, alias="worksheetName", description="Worksheet name (for Excel files)"
     )
     dateFormat: str | None = Field(
-        None, alias="dateFormat", description="Date format string (e.g., %Y-%m-%d)"
+        None,
+        alias="dateFormat",
+        description=(
+            "Date format for requirement version dates. "
+            "Accepts Java SimpleDateFormat strings (e.g. 'yyyy-MM-dd HH:mm:ss') "
+            "for backwards compatibility, as well as Python strftime strings "
+            "(e.g. '%Y-%m-%d %H:%M:%S'). "
+            "The format type is detected automatically. "
+            "Falls back to dateutil automatic detection if the format cannot parse the value."
+        ),
     )
     header_rowIdx: int | None = Field(
         None, alias="header.rowIdx", description="Row index for header (1-based)"
@@ -227,7 +236,16 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
         None, alias="worksheetName", description="Worksheet name (for Excel files)"
     )
     dateFormat: str | None = Field(
-        None, alias="dateFormat", description="Date format string (e.g., %Y-%m-%d)"
+        None,
+        alias="dateFormat",
+        description=(
+            "Date format for requirement version dates. "
+            "Accepts Java SimpleDateFormat strings (e.g. 'yyyy-MM-dd HH:mm:ss') "
+            "for backwards compatibility, as well as Python strftime strings "
+            "(e.g. '%Y-%m-%d %H:%M:%S'). "
+            "The format type is detected automatically. "
+            "Falls back to dateutil automatic detection if the format cannot parse the value."
+        ),
     )
     header_rowIdx: int | None = Field(
         None, alias="header.rowIdx", description="Row index for header (1-based)"
@@ -551,7 +569,7 @@ def _build_single_udf_config(config: dict[str, Any], i: int) -> UserDefinedAttri
 
     for udf_setting in required_udf_settings:
         if udf_config[udf_setting] is None:
-            raise KeyError(
+            raise ValueError(
                 f"Missing required setting in reader config: 'udf.attr{i}.{udf_setting}'."
             )
         if not udf_config[udf_setting]:
