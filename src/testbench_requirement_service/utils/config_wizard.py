@@ -31,7 +31,10 @@ from testbench_requirement_service.utils.config import (
     update_config_files,
 )
 from testbench_requirement_service.utils.dependencies import check_reader_dependencies
-from testbench_requirement_service.utils.wizard import prompt_model_fields
+from testbench_requirement_service.utils.wizard import (
+    get_env_sourced_field_names,
+    prompt_model_fields,
+)
 
 MAX_PORT = 65535
 READER_CLASSES = {
@@ -140,6 +143,8 @@ def merge_with_defaults(
 
     This ensures all fields (including defaults) are written to config files,
     eliminating 'magic' values that only exist in code.
+    Fields whose values are sourced from environment variables are excluded so
+    that sensitive values are not persisted to the config file.
 
     Args:
         config_dict: User-provided configuration values
@@ -150,9 +155,10 @@ def merge_with_defaults(
         Complete configuration dict with all fields (user values + defaults), TOML-serializable
     """
     config_obj = config_class.model_validate(config_dict)
-    return config_obj.model_dump(
-        mode="json", by_alias=True, exclude_none=True, exclude=exclude_fields
-    )
+    env_sourced = get_env_sourced_field_names(config_class)
+    merged_exclude = (exclude_fields or set()) | env_sourced
+    exclude: set[str] | None = merged_exclude if merged_exclude else None
+    return config_obj.model_dump(mode="json", by_alias=True, exclude_none=True, exclude=exclude)
 
 
 def configure_reader(

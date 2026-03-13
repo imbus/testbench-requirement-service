@@ -263,6 +263,16 @@ def get_env_value(field_info: FieldInfo) -> tuple[str | None, Any]:
     return None, None
 
 
+def get_env_sourced_field_names(config_class: type[BaseModel]) -> set[str]:
+    """Return field names whose values come from environment variables that are currently set."""
+    env_sourced: set[str] = set()
+    for field_name, field_info in config_class.model_fields.items():
+        _, env_value = get_env_value(field_info)
+        if env_value is not None:
+            env_sourced.add(field_name)
+    return env_sourced
+
+
 def resolve_field_default(
     field_name: str,
     field_info: FieldInfo,
@@ -845,7 +855,6 @@ def prompt_model_fields(  # noqa: C901, PLR0912, PLR0913
                 field_value = get_field_value(field_name, field_info, existing)
                 env_var, env_value = get_env_value(field_info)
                 if env_value is not None:
-                    config_dict[field_name] = env_value
                     click.echo(f"✓ Using {env_var} from environment for {field_name}")
                     continue
 
