@@ -17,8 +17,10 @@ from testbench_requirement_service.readers.excel.config import (
 )
 from testbench_requirement_service.utils.date_format import parse_date_string
 
-try:  # noqa: SIM105
+try:
+    import openpyxl
     import pandas as pd
+    import xlrd
 except ImportError:
     pass
 
@@ -54,6 +56,49 @@ def get_column_mapping_for_config(config: ExcelRequirementReaderConfig) -> dict[
     return column_mapping
 
 
+def _get_visible_sheets(file_path: Path) -> list[str]:
+    """Return a list of visible sheet names in the given Excel file."""
+    suffix = file_path.suffix.lower()
+
+    if suffix == ".xlsx":
+        wb_xlsx = openpyxl.load_workbook(file_path, data_only=True, keep_links=False)
+        try:
+            return [ws.title for ws in wb_xlsx.worksheets if ws.sheet_state == "visible"]
+        finally:
+            wb_xlsx.close()
+
+    elif suffix == ".xls":
+        wb_xls = xlrd.open_workbook(str(file_path), on_demand=True)
+        try:
+            return [s.name for s in wb_xls.sheets() if s.visibility == 0]
+        finally:
+            wb_xls.release_resources()
+
+    raise ValueError(f"Unsupported Excel file format: '{suffix}'. Expected '.xlsx' or '.xls'.")
+
+
+def _resolve_sheet_name(
+    sheet_name: str | None,
+    visible_sheets: list[str],
+    file_name: str,
+) -> str:
+    """Determine the sheet name to read based on the requested name and available visible sheets."""
+    if not sheet_name:
+        return visible_sheets[0]
+
+    if sheet_name in visible_sheets:
+        return sheet_name
+
+    logger.warning(
+        "Worksheet '%s' not found or hidden in '%s'. Visible worksheets: %s. Falling back to '%s'.",
+        sheet_name,
+        file_name,
+        visible_sheets,
+        visible_sheets[0],
+    )
+    return visible_sheets[0]
+
+
 def _load_dataframe(file_path: Path, config: ExcelRequirementReaderConfig) -> pd.DataFrame:
     """Read raw file data into a DataFrame with all values coerced to strings."""
     header_row_idx = (config.header_rowIdx or 1) - 1
@@ -65,12 +110,17 @@ def _load_dataframe(file_path: Path, config: ExcelRequirementReaderConfig) -> pd
     }
 
     if file_path.suffix in (".xls", ".xlsx"):
-        sheet_name = config.worksheetName or 0
-        engine: Literal["openpyxl", "xlrd"] = "openpyxl" if file_path.suffix == ".xlsx" else "xlrd"
         try:
-            df = pd.read_excel(file_path, sheet_name=sheet_name, engine=engine, **read_params)
-        except ValueError:
-            df = pd.read_excel(file_path, sheet_name=0, engine=engine, **read_params)
+            visible_sheets = _get_visible_sheets(file_path)
+        except Exception as e:
+            raise ValueError(f"Could not open Excel file '{file_path.name}': {e}") from e
+
+        if not visible_sheets:
+            raise ValueError(f"No visible worksheets found in '{file_path.name}'.")
+
+        sheet_name = _resolve_sheet_name(config.worksheetName, visible_sheets, file_path.name)
+        engine: Literal["openpyxl", "xlrd"] = "openpyxl" if file_path.suffix == ".xlsx" else "xlrd"
+        df = pd.read_excel(file_path, sheet_name=sheet_name, engine=engine, **read_params)
     elif file_path.suffix in (".csv", ".tsv", ".txt"):
         sep = "\t" if file_path.suffix == ".tsv" else config.columnSeparator
         try:
@@ -117,8 +167,8 @@ def _validate_column_mapping(
         else:
             kind = "UDF" if primary_name in udf_names else "Optional"
             logger.warning(
-                "%s column '%s' (index %d) not found in the file (%d columns); "
-                "it will be absent from the imported data.",
+                "%s column '%s' (index %d) not found in the file (%d columns). "
+                "It will be absent from the imported data.",
                 kind,
                 primary_name,
                 idx + 1,
