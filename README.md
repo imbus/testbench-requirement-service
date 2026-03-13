@@ -870,8 +870,8 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
 
 | Setting      | Type   | Description                                                  | Required | Env var          |
 | ------------ | ------ | ------------------------------------------------------------ | -------- | ---------------- |
-| `username`   | String | Atlassian account e-mail address                             | Yes      | `JIRA_USERNAME`  |
-| `api_token`  | String | Atlassian API token (sensitive)                              | Yes      | `JIRA_API_TOKEN` |
+| `username`   | String | Jira account username (e-mail for Jira Cloud)                                                               | Yes      | `JIRA_USERNAME`  |
+| `password`   | String | Password for basic auth. Use an API token on Jira Cloud, account password on Jira Data Center.       | Yes      | `JIRA_PASSWORD`  |
 
 **Token authentication** (`auth_type = "token"` — Jira Server/Data Center)
 
@@ -927,7 +927,7 @@ Pick the auth flow that matches your Jira deployment; the reader enforces the re
 
 | auth_type | When to use it | Required values |
 | --- | --- | --- |
-| `basic` | Atlassian Cloud and most Jira Data Center instances that still allow username + API token (or password). This is typically the simplest option. | Set `username` and `api_token` in the `[jira]` section or export `JIRA_USERNAME` and `JIRA_API_TOKEN`. |
+| `basic` | Jira Cloud and Jira Data Center instances using username + password. On Jira Cloud the password must be an API token. | Set `username` and `password` in the `[jira]` section or export `JIRA_USERNAME` and `JIRA_PASSWORD`. |
 | `token` | Jira Server/Data Center that issues Personal Access Tokens and disallows basic auth. | Set `token` in the `[jira]` section or export `JIRA_BEARER_TOKEN`.|
 | `oauth1` | Locked-down enterprise instances that require OAuth 1.0a with consumer keys and certificates. | Set `oauth1_access_token`, `oauth1_access_token_secret`, `oauth1_consumer_key`, `oauth1_key_cert_path` in the `[jira]` section or export `JIRA_OAUTH1_ACCESS_TOKEN`, `JIRA_OAUTH1_ACCESS_TOKEN_SECRET`, `JIRA_OAUTH1_CONSUMER_KEY`, `JIRA_OAUTH1_KEY_CERT_PATH`. |
 
@@ -943,9 +943,10 @@ reader_class = "JiraRequirementReader"
 server_url = "https://example.atlassian.net/"
 auth_type = "basic"          # or "token" / "oauth1"
 
-# Basic auth credentials (alternative to env vars JIRA_USERNAME / JIRA_API_TOKEN)
+# Basic auth credentials (alternative to env vars JIRA_USERNAME / JIRA_PASSWORD)
+# On Jira Cloud the password is an API token (generate at id.atlassian.com).
 # username = "my-user@example.com"
-# api_token = "my-apitoken"
+# password = "my-api-token-or-password"
 
 # Token auth credential (alternative to env var JIRA_BEARER_TOKEN)
 # token = "my-personal-access-token"
@@ -1013,7 +1014,7 @@ owner = "creator"
 ```text
 # Basic authentication (Jira Cloud)
 JIRA_USERNAME=my-user@example.com
-JIRA_API_TOKEN=my-apitoken
+JIRA_PASSWORD=my-api-token
 
 # Token authentication (Jira Server/Data Center)
 # JIRA_BEARER_TOKEN=my-personal-access-token

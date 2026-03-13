@@ -14,10 +14,10 @@ server_url = "https://your-company.atlassian.net/"
 auth_type = "basic"
 
 # Authentication credentials (OPTIONAL - prefer using .env file)
-# For basic auth, you can set these directly in config or use environment variables:
-# JIRA_USERNAME and JIRA_API_TOKEN
+# For basic auth, set these directly or use environment variables JIRA_USERNAME / JIRA_PASSWORD.
+# On Jira Cloud the password is an API token (generate at id.atlassian.com).
 # username = "user@example.com"
-# api_token = "your-api-token-here"
+# password = "your-api-token-or-password-here"
 
 # Field used to identify baselines/versions in Jira (OPTIONAL)
 # Default: "fixVersions"

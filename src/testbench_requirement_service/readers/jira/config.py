@@ -55,12 +55,15 @@ class JiraRequirementReaderConfig(BaseModel):
             "required": True,
         },
     )
-    api_token: str | None = Field(
+    password: str | None = Field(
         None,
-        description="API token for basic authentication (Jira Cloud)",
+        description=(
+            "Password for basic auth. "
+            "Use an API token on Jira Cloud, account password on Jira Data Center."
+        ),
         json_schema_extra={
             "sensitive": True,
-            "env_var": "JIRA_API_TOKEN",
+            "env_var": "JIRA_PASSWORD",
             "depends_on": {"auth_type": "basic"},
             "required": True,
         },
@@ -235,10 +238,10 @@ class JiraRequirementReaderConfig(BaseModel):
             raise ValueError(
                 "Jira username must be provided for basic auth (via config or JIRA_USERNAME env)"
             )
-        self.api_token = self.api_token or os.getenv("JIRA_API_TOKEN")
-        if not self.api_token:
+        self.password = self.password or os.getenv("JIRA_PASSWORD")
+        if not self.password:
             raise ValueError(
-                "Jira API token must be provided for basic auth (via config or JIRA_API_TOKEN env)"
+                "Jira password must be provided for basic auth (via config or JIRA_PASSWORD env)"
             )
 
     def _validate_token_auth(self) -> None:

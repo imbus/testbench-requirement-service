@@ -57,7 +57,7 @@ class JiraClient:
                 return JIRA(
                     server=self.config.server_url,
                     options=options or None,
-                    basic_auth=(self.config.username or "", self.config.api_token or ""),
+                    basic_auth=(self.config.username or "", self.config.password or ""),
                     max_retries=self.config.max_retries,
                     timeout=self.config.timeout,
                 )
