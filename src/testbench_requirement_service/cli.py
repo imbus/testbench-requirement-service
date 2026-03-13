@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
-from testbench_requirement_service import __version__
+from testbench_requirement_service import __title__, __version__
 from testbench_requirement_service.app import AppConfig, create_app
+from testbench_requirement_service.log import logger
 from testbench_requirement_service.utils.config_wizard import (
     configure_credentials_only,
     configure_reader_only,
@@ -37,9 +38,7 @@ def print_wizard_banner():
 
 
 @click.group()
-@click.version_option(
-    version=__version__, prog_name="TestBench Requirement Service", message="%(prog)s %(version)s"
-)
+@click.version_option(version=__version__, prog_name=__title__, message="%(prog)s %(version)s")
 @click.pass_context
 def cli(ctx):
     ctx.max_content_width = 120
@@ -189,7 +188,7 @@ def start(  # noqa: PLR0913
     ssl_ca_cert: Path | None = None,
 ):
     """Start the TestBench Requirement Service."""
-    app_name = "TestBenchRequirementService"
+    app_name = __title__
     app_config = AppConfig(
         config_path=config_path,
         reader_class=reader_class,
@@ -207,6 +206,9 @@ def start(  # noqa: PLR0913
     factory = partial(create_app, app_name, app_config)
     loader = AppLoader(factory=factory)
     app = loader.load()
+
+    logger.info("Starting %s v%s", app_name, __version__)
+
     if not host:
         host = getattr(app.config, "HOST", None)
     if not port:
