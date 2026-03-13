@@ -402,7 +402,7 @@ def build_requirementversionobject_from_row_data(
     row_data: dict, config: ExcelRequirementReaderConfig
 ) -> RequirementVersionObject:
     now_string = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    date_string = row_data.get("date", now_string)
+    date_string = row_data.get("date") or now_string
     date_format = config.dateFormat or "dd/MM/yyyy"
     date = parse_date_string(date_string, date_format)
 
