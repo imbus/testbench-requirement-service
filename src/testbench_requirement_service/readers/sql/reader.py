@@ -199,8 +199,8 @@ class SqlRequirementReader(AbstractRequirementReader):
                 RequirementVersionObject(
                     name=req.version_name,
                     date=self._normalize_dt(req.version_date),
-                    author=req.version_author,
-                    comment=req.version_comment,
+                    author=req.version_author or "",
+                    comment=req.version_comment or "",
                 )
                 for req in requirements
             ]
