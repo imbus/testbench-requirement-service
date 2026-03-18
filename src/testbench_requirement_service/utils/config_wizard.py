@@ -83,7 +83,7 @@ def backup_config_file(config_path: Path) -> bool:
     return True
 
 
-def ask_for_separate_config(reader_type: str, existing_path: str | None = None) -> str | None:
+def ask_for_separate_config(reader_type: str, existing_path: Path | None = None) -> str | None:
     """Ask user if they want to use a separate configuration file.
 
     Args:
@@ -100,7 +100,7 @@ def ask_for_separate_config(reader_type: str, existing_path: str | None = None) 
         ).ask()
 
         if not change_location:
-            return existing_path
+            return str(existing_path)
 
     use_separate = questionary.confirm(
         "Do you want to use a separate configuration file?", default=False
@@ -313,7 +313,7 @@ def view_reader_config(service_config: RequirementServiceConfig):
     """Display reader configuration (separate file or inline)."""
 
     reader_config_path = service_config.reader_config_path
-    if reader_config_path and Path(reader_config_path).exists():
+    if reader_config_path and reader_config_path.exists():
         click.echo(f"⚙️  Reader Configuration ({reader_config_path})")
         click.echo("─" * 50)
     elif reader_config_path:

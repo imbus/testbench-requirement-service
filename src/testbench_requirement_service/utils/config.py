@@ -1,4 +1,3 @@
-import runpy
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,7 +45,9 @@ def create_config_file(
         )
         sys.exit(1)
 
-    config_data = config.model_dump() if isinstance(config, RequirementServiceConfig) else config
+    config_data = (
+        config.model_dump(mode="json") if isinstance(config, RequirementServiceConfig) else config
+    )
     to_serialize = {config_prefix: config_data}
     toml_str = tomli_w.dumps(to_serialize)
     output_path.write_text(toml_str, encoding="utf-8")
@@ -96,28 +97,6 @@ def print_config_errors(
         if detail:
             print(f"  Detail: {detail}")
         print()
-
-
-def load_config_from_python_file(config_path: Path) -> RequirementServiceConfig:
-    """Load legacy config from a Python config module (config.py)."""
-
-    if not config_path.exists():
-        print(f"Configuration file not found at: '{config_path.resolve()}'.")
-        sys.exit(1)
-
-    try:
-        config_dict = runpy.run_path(str(config_path))
-    except Exception as e:
-        print(f"Configuration Error: Failed to read config file.\nDetails: {e}")
-        sys.exit(1)
-
-    config_dict = {k.lower(): v for k, v in config_dict.items()}
-
-    try:
-        return RequirementServiceConfig(**config_dict)
-    except ValidationError as e:
-        print_config_errors(e, config_path)
-        sys.exit(1)
 
 
 def load_config_from_toml_file(
@@ -182,9 +161,6 @@ def load_config(config_path: Path | str | None = None) -> RequirementServiceConf
         config_file_path = resolve_config_file_path(config_path)
     else:
         config_file_path = Path(config_path)
-
-    if config_file_path.suffix.lower() == ".py":
-        return load_config_from_python_file(config_file_path)
     return load_config_from_toml_file(config_file_path)
 
 
@@ -252,7 +228,7 @@ def get_reader_config(service_config: RequirementServiceConfig) -> dict:
     2. Otherwise, use reader_config dict from service_config
     """
     if service_config.reader_config_path:
-        reader_config_file = Path(service_config.reader_config_path)
+        reader_config_file = service_config.reader_config_path
         if reader_config_file.exists():
             return load_reader_config_from_file(reader_config_file)
         return {}
@@ -292,7 +268,7 @@ def update_config_files(
 
     if reader_config is not None:
         if updated_config.reader_config_path:
-            save_reader_config(reader_config, Path(updated_config.reader_config_path))
+            save_reader_config(reader_config, updated_config.reader_config_path)
             updated_config.reader_config = {}
         else:
             updated_config.reader_config = reader_config

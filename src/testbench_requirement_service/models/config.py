@@ -11,13 +11,13 @@ DEFAULT_PORT = 8020
 
 
 class RequirementServiceConfig(BaseModel):
-    """Validated service config loaded from TOML or legacy Python config."""
+    """Validated service config loaded from TOML config file."""
 
     reader_class: str = Field(
         "testbench_requirement_service.readers.JsonlRequirementReader",
         description="Class path of the active requirement reader",
     )
-    reader_config_path: str | None = Field(
+    reader_config_path: Path | None = Field(
         default=None,
         description="Optional path to a separate reader configuration file",
     )
@@ -46,15 +46,15 @@ class RequirementServiceConfig(BaseModel):
         default_factory=dict,
         description="Inline reader configuration when no separate file is used",
     )
-    ssl_cert: str | None = Field(
+    ssl_cert: Path | None = Field(
         default=None,
         description="Path to SSL/TLS certificate file for HTTPS support (.crt or .pem)",
     )
-    ssl_key: str | None = Field(
+    ssl_key: Path | None = Field(
         default=None,
         description="Path to SSL/TLS private key file for HTTPS support (.key)",
     )
-    ssl_ca_cert: str | None = Field(
+    ssl_ca_cert: Path | None = Field(
         default=None,
         description="Optional path to CA certificate file for client verification",
     )
@@ -73,16 +73,16 @@ class RequirementServiceConfig(BaseModel):
 
     @field_validator("reader_config_path")
     @classmethod
-    def validate_reader_config_exists(cls, v: str | None) -> str | None:
+    def validate_reader_config_exists(cls, v: Path | None) -> Path | None:
         """Validate that reader_config_path exists if provided."""
-        if v is not None and not Path(v).exists():
+        if v is not None and not v.exists():
             raise ValueError(f"Reader config file not found: '{v}'")
         return v
 
     @field_validator("ssl_cert", "ssl_key", "ssl_ca_cert")
     @classmethod
-    def validate_ssl_files_exist(cls, v: str | None) -> str | None:
+    def validate_ssl_files_exist(cls, v: Path | None) -> Path | None:
         """Validate that SSL certificate files exist if provided."""
-        if v is not None and not Path(v).exists():
+        if v is not None and not v.exists():
             raise ValueError(f"SSL certificate file not found: '{v}'")
         return v

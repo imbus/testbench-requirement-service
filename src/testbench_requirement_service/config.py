@@ -11,8 +11,9 @@ from sanic.http.tls.context import CIPHERS_TLS12
 
 from testbench_requirement_service.readers.utils import get_reader_config_class
 from testbench_requirement_service.utils.config import (
-    get_reader_config,
+    CONFIG_PREFIX,
     load_config,
+    load_reader_config_from_file,
     print_config_errors,
     resolve_config_file_path,
 )
@@ -29,9 +30,9 @@ class AppConfig(Config):
         host: str | None = None,
         port: int | None = None,
         debug: bool | None = None,
-        ssl_cert: Path | str | None = None,
-        ssl_key: Path | str | None = None,
-        ssl_ca_cert: Path | str | None = None,
+        ssl_cert: Path | None = None,
+        ssl_key: Path | None = None,
+        ssl_ca_cert: Path | None = None,
         *args,
         **kwargs,
     ):
@@ -46,16 +47,30 @@ class AppConfig(Config):
             (Path(__file__).parent / "static/swagger-ui/index.html").resolve().as_posix()
         )
 
-        # Load config from config file
+        # Load and validate config from file
         self.CONFIG_PATH = resolve_config_file_path(config_path)
         service_config = load_config(self.CONFIG_PATH)
-        self.SERVICE_CONFIG = service_config
 
-        # Map validated settings to uppercase Sanic config
+        # Map all validated settings to uppercase Sanic config attributes
         self.READER_CLASS = service_config.reader_class
-        self.READER_CONFIG_PATH = service_config.reader_config_path or self.CONFIG_PATH
+        self.READER_CONFIG_PATH = service_config.reader_config_path
         self.HOST = service_config.host
         self.PORT = service_config.port
+        self.DEBUG = service_config.debug
+        self.LOG_CONFIG = service_config.logging
+        # Auth credentials
+        self.PASSWORD_HASH = service_config.password_hash or os.getenv("PASSWORD_HASH")
+        self.SALT = service_config.salt or os.getenv("SALT")
+        # SSL/TLS configuration
+        self.SSL_CERT = service_config.ssl_cert
+        self.SSL_KEY = service_config.ssl_key
+        self.SSL_CA_CERT = service_config.ssl_ca_cert
+        # Reverse proxy configuration
+        self.PROXIES_COUNT = service_config.proxies_count
+        self.REAL_IP_HEADER = service_config.real_ip_header
+        self.FORWARDED_SECRET = service_config.forwarded_secret
+
+        self._reader_config_inline = service_config.reader_config
 
         # Override with CLI parameters (highest priority)
         if reader_class:
@@ -66,24 +81,17 @@ class AppConfig(Config):
             self.HOST = host
         if port:
             self.PORT = port
-        self.DEBUG = debug or service_config.debug
+        if debug is not None:
+            self.DEBUG = debug
+        if ssl_cert:
+            self.SSL_CERT = ssl_cert
+        if ssl_key:
+            self.SSL_KEY = ssl_key
+        if ssl_ca_cert:
+            self.SSL_CA_CERT = ssl_ca_cert
 
         # Validate and store reader config
         self.READER_CONFIG = self._validate_reader_config()
-
-        # Load credentials
-        self.PASSWORD_HASH = service_config.password_hash or os.getenv("PASSWORD_HASH")
-        self.SALT = service_config.salt or os.getenv("SALT")
-
-        # SSL/TLS configuration
-        self.SSL_CERT = ssl_cert or service_config.ssl_cert
-        self.SSL_KEY = ssl_key or service_config.ssl_key
-        self.SSL_CA_CERT = ssl_ca_cert or service_config.ssl_ca_cert
-
-        # Reverse Proxy configuration
-        self.PROXIES_COUNT = service_config.proxies_count
-        self.REAL_IP_HEADER = service_config.real_ip_header
-        self.FORWARDED_SECRET = service_config.forwarded_secret
 
     def get_ssl_context(self) -> ssl.SSLContext | dict | None:
         """Get SSL configuration for HTTPS if certificates are configured.
@@ -99,8 +107,8 @@ class AppConfig(Config):
         # If no CA cert specified, return simple dict (Sanic's built-in handling)
         if not self.SSL_CA_CERT:
             return {
-                "cert": self.SSL_CERT,
-                "key": self.SSL_KEY,
+                "cert": str(self.SSL_CERT),
+                "key": str(self.SSL_KEY),
             }
 
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -114,25 +122,24 @@ class AppConfig(Config):
         return context
 
     def _validate_reader_config(self):
-        """Validate reader_config dict against the reader's CONFIG_CLASS.
+        """Validate reader_config dict against the reader's CONFIG_CLASS."""
+        reader_config_class = get_reader_config_class(self.READER_CLASS)
+        if reader_config_class is None:
+            return {}
 
-        Priority:
-        1. If reader_config_path points to a separate file, load from there
-        2. Otherwise, use reader_config from the main service config
-        """
+        separate_file = self.READER_CONFIG_PATH is not None
         try:
-            config_class = get_reader_config_class(self.READER_CLASS)
-            if config_class is None:
-                return {}
-            reader_config = get_reader_config(self.SERVICE_CONFIG)
-            return config_class.model_validate(reader_config)
-        except ValidationError as e:
-            config_path = Path(self.CONFIG_PATH) if self.CONFIG_PATH else None
-            reader_config_path = Path(self.READER_CONFIG_PATH) if self.READER_CONFIG_PATH else None
-            if reader_config_path and reader_config_path != config_path:
-                print_config_errors(e, config_path=reader_config_path, config_prefix=None)
+            if separate_file:
+                reader_config = load_reader_config_from_file(self.READER_CONFIG_PATH)
             else:
-                print_config_errors(e, config_path=reader_config_path)
+                reader_config = self._reader_config_inline
+            return reader_config_class.model_validate(reader_config)
+        except ValidationError as e:
+            if separate_file:
+                print_config_errors(e, config_path=self.READER_CONFIG_PATH, config_prefix=None)
+            else:
+                config_prefix = f"{CONFIG_PREFIX}.reader_config"
+                print_config_errors(e, config_path=self.CONFIG_PATH, config_prefix=config_prefix)
             sys.exit(1)
         except Exception as e:
             raise ValueError(f"Failed to validate reader configuration: {e}") from e
