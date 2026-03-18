@@ -53,3 +53,30 @@ def generate_schemas(c: Context) -> None:
     run_command(
         c, "python src/testbench_requirement_service/readers/jsonl/schemas/generate_schemas.py"
     )
+
+
+@task
+def download_deps(  # noqa: PLR0913
+    c: Context,
+    extras: str = "excel,jira,sql,dev",
+    platform: str = "win_amd64",
+    python_versions: str = "310,311,312,313",
+    dest: str = "downloads",
+    zip: bool = False,  # noqa: A002
+) -> None:
+    """Download dependency wheels for offline installation.
+
+    invoke download-deps
+    invoke download-deps --platform manylinux_2_17_x86_64 --zip
+    invoke download-deps --python-versions 310,311 --extras excel,jira
+    """
+    cmd = (
+        f"python download_dependencies.py"
+        f" --extras {extras}"
+        f" --platform {platform}"
+        f" --python-versions {python_versions}"
+        f" --dest {dest}"
+    )
+    if zip:
+        cmd += " --zip"
+    run_command(c, cmd)
