@@ -212,7 +212,6 @@ class JiraRequirementReaderConfig(BaseModel):
         default_factory=dict,
         description="Project-specific configuration overrides",
         json_schema_extra={
-            "prompt_as_dict": True,
             "item_label": "Project Configuration",
             "key_label": "Project Key",
             "add_prompt": "Would you like to add a project-specific configuration?",

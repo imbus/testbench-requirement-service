@@ -325,7 +325,6 @@ class ExcelRequirementReaderConfig(BaseModel, ExcelRequirementReaderConfigValida
         default_factory=list,
         description="User-defined attribute configurations for custom fields in your requirements",
         json_schema_extra={
-            "prompt_as_list": True,
             "item_label": "User Defined Attribute",
             "add_prompt": "Would you like to add a user-defined attribute?",
             "add_another_prompt": "Add another user-defined attribute?",

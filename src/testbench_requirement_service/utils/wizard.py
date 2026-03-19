@@ -10,18 +10,19 @@ from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 from questionary import Choice
 
+_MISSING = object()
+
 # Constants for json_schema_extra keys
 SCHEMA_KEYS = {
     "ENV_VAR": "env_var",
     "DEPENDS_ON": "depends_on",
     "SENSITIVE": "sensitive",
     "SKIP_IF_WIZARD": "skip_if_wizard",
-    "PROMPT_AS_LIST": "prompt_as_list",
-    "PROMPT_AS_DICT": "prompt_as_dict",
     "ITEM_LABEL": "item_label",
     "KEY_LABEL": "key_label",
     "LABEL": "label",
     "REQUIRED": "required",
+    "PATH_TYPE": "path_type",  # "file" or "directory" (default: "directory")
 }
 
 
@@ -84,9 +85,12 @@ def dependency_matches(
         return True
 
     for field, expected in dependency.items():
-        actual = (provided_values or {}).get(field)
-        if actual is None and fallback_values is not None:
-            actual = fallback_values.get(field)
+        provided = provided_values or {}
+        actual = provided.get(field, _MISSING)
+        if actual is _MISSING and fallback_values is not None:
+            actual = fallback_values.get(field, _MISSING)
+        if actual is _MISSING:
+            actual = None
         if isinstance(expected, (list, tuple, set)):
             if actual not in expected:
                 return False
@@ -96,7 +100,7 @@ def dependency_matches(
     return True
 
 
-def parse_value_from_input(value_str: str, field_type: type) -> Any:  # noqa: C901, PLR0911
+def parse_value_from_input(value_str: str, field_type: type) -> Any:  # noqa: C901, PLR0911, PLR0912
     """Parse user input string to the appropriate Python type."""
     if not value_str:
         return None
@@ -121,6 +125,12 @@ def parse_value_from_input(value_str: str, field_type: type) -> Any:  # noqa: C9
                 return [int(item.strip()) for item in value_str.split(",") if item.strip()]
             except ValueError as e:
                 raise ValueError(f"List must contain only integers, got: {value_str}") from e
+        if args and args[0] is float:
+            # Comma-separated float list
+            try:
+                return [float(item.strip()) for item in value_str.split(",") if item.strip()]
+            except ValueError as e:
+                raise ValueError(f"List must contain only numbers, got: {value_str}") from e
 
     if field_type is bool:
         return value_str.lower() in ("true", "yes", "1", "y")
@@ -130,6 +140,12 @@ def parse_value_from_input(value_str: str, field_type: type) -> Any:  # noqa: C9
             return int(value_str)
         except ValueError as e:
             raise ValueError(f"Expected an integer, got: '{value_str}'") from e
+
+    if field_type is float:
+        try:
+            return float(value_str)
+        except ValueError as e:
+            raise ValueError(f"Expected a number, got: '{value_str}'") from e
 
     return value_str
 
@@ -198,7 +214,7 @@ def get_field_default(field_info: FieldInfo) -> Any:
         return field_info.default
     if field_info.default_factory is not None and callable(field_info.default_factory):
         factory_result = field_info.default_factory()  # type: ignore[call-arg]
-        if isinstance(factory_result, (list, dict)):
+        if isinstance(factory_result, (list, dict)) and not factory_result:
             return None
         return factory_result
     return None
@@ -304,8 +320,8 @@ def format_default_value(default_value: Any) -> str:
         return ""
     if isinstance(default_value, Path):
         return str(default_value)
-    if isinstance(default_value, list) and all(isinstance(x, str) for x in default_value):
-        return ",".join(default_value)
+    if isinstance(default_value, list):
+        return ",".join(str(x) for x in default_value)
     if isinstance(default_value, bool):
         return str(default_value).lower()
     return str(default_value)
@@ -542,13 +558,13 @@ def handle_existing_dict_of_models(
     return result
 
 
-def prompt_for_new_unique_key(key_label: str, existing: dict[str, dict]) -> str | None:
+def prompt_for_new_unique_key(key_label: str, existing: dict[str, Any]) -> str | None:
     """Prompt user for a unique key for the new item."""
 
     key = None
 
     while key is None:
-        key_input = questionary.text(f"\n{key_label}:").ask()
+        key_input = questionary.text(f"{key_label}:").ask()
         if key_input is None:
             return None
 
@@ -622,40 +638,180 @@ def prompt_dict_of_models(
     return result
 
 
-def is_list_of_models(field_info: FieldInfo) -> bool:
-    """Check if field is a list[BaseModel] with prompt_as_list metadata."""
-    schema_extra = get_field_extra(field_info)
-    if not schema_extra.get(SCHEMA_KEYS["PROMPT_AS_LIST"]):
-        return False
+def prompt_plain_dict_value(
+    key: str,
+    value_type: type,
+    value_hint: str,
+    existing_value: Any,
+) -> Any | None:
+    """Prompt for the value of a single key in a plain dict field, retrying on empty/invalid input.
 
+    Returns:
+        The parsed value, or None if the user cancelled (Ctrl+C)
+    """
+    default = format_default_value(existing_value) if existing_value is not None else ""
+    while True:
+        raw = questionary.text(f"Value for '{key}' ({value_hint}):", default=default).ask()
+        if raw is None:
+            return None
+        if not raw and existing_value is not None:
+            return existing_value
+        if not raw:
+            click.echo("\u274c Value cannot be empty")
+            continue
+        try:
+            return parse_value_from_input(raw, value_type)
+        except (ValueError, TypeError) as e:
+            click.echo(f"\u274c Invalid value: {e}")
+
+
+def handle_existing_plain_dict(
+    existing: dict[str, Any],
+    value_type: type,
+    value_hint: str,
+    item_label: str,
+) -> dict[str, Any] | None:
+    """Handle existing plain dict entries for editing/removal.
+
+    Returns:
+        Updated dict, or None if user cancelled
+    """
+    result: dict[str, Any] = {}
+
+    entry_word = "entry" if len(existing) == 1 else "entries"
+    click.echo(f"\n\U0001f4cb Found {len(existing)} existing {item_label} {entry_word}\n")
+    for key, value in existing.items():
+        click.echo(f"  {key}: {value}")
+
+    click.echo()
+    action = prompt_for_existing_items_action(item_label)
+    if action is None:
+        return None
+
+    if action == "remove_all":
+        return result
+
+    if action == "keep_all":
+        return dict(existing)
+
+    items_info = [(key, f"{key}: {value}") for key, value in existing.items()]
+    selected_keys = select_items_for_action(items_info, action, item_label)
+    if selected_keys is None:
+        return None
+
+    for key, value in existing.items():
+        if key not in selected_keys:
+            result[key] = value
+            continue
+        if action == "remove":
+            continue
+
+        click.echo(f"\n--- Editing: {key} ---")
+        new_value = prompt_plain_dict_value(key, value_type, value_hint, value)
+        if new_value is None:
+            click.echo("\n\u26a0\ufe0f  Edit cancelled. Keeping original value.")
+            result[key] = value
+        else:
+            result[key] = new_value
+
+    return result
+
+
+def prompt_key_value_dict(
+    value_type: type,
+    item_label: str,
+    key_label: str = "Key",
+    existing: dict[str, Any] | None = None,
+    schema_extra: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Prompt user to configure a dict[str, X] field interactively.
+
+    Args:
+        value_type: The type of each dict value (e.g., list[str], str, int)
+        item_label: Display label for the dict entries (e.g., "Control Field")
+        key_label: Display label for keys (e.g., "Field Name")
+        existing: Existing dict from config
+        schema_extra: json_schema_extra metadata for custom prompts
+
+    Returns:
+        Dictionary of configured entries, or None if cancelled
+    """
+    schema_extra = schema_extra or {}
+    value_origin = get_origin(value_type)
+    value_args = get_args(value_type)
+
+    if value_origin is list and value_args:
+        inner_name = getattr(value_args[0], "__name__", str(value_args[0]))
+        value_hint = f"comma-separated {inner_name}s"
+    else:
+        value_hint = getattr(value_type, "__name__", str(value_type))
+
+    result: dict[str, Any] = {}
+
+    if existing:
+        existing_result = handle_existing_plain_dict(existing, value_type, value_hint, item_label)
+        if existing_result is None:
+            return None
+        result = existing_result
+
+    add_prompt = schema_extra.get("add_prompt", f"Would you like to add a {item_label} entry?")
+    add_another_prompt = schema_extra.get("add_another_prompt", f"Add another {item_label} entry?")
+    prompt_text = add_prompt if not result else add_another_prompt
+
+    while True:
+        click.echo()
+        should_add = questionary.confirm(prompt_text, default=False).ask()
+        if should_add is None:
+            return None
+        if not should_add:
+            break
+
+        key = prompt_for_new_unique_key(key_label, result)
+        if key is None:
+            return None
+
+        value = prompt_plain_dict_value(key, value_type, value_hint, None)
+        if value is None:
+            return None
+
+        result[key] = value
+        prompt_text = add_another_prompt
+
+    return result
+
+
+def is_list_of_models(field_info: FieldInfo) -> bool:
+    """Check if field is a list[BaseModel] (auto-detected by type)."""
     field_type = get_field_type(field_info)
     if get_origin(field_type) is not list:
         return False
-
     args = get_args(field_type)
     return len(args) > 0 and is_basemodel_subclass(args[0])
 
 
 def is_dict_of_models(field_info: FieldInfo) -> bool:
-    """Check if field is a dict[str, BaseModel] with prompt_as_dict metadata."""
-    schema_extra = get_field_extra(field_info)
-    if not schema_extra.get(SCHEMA_KEYS["PROMPT_AS_DICT"]):
-        return False
-
+    """Check if field is a dict[str, BaseModel] (auto-detected by type)."""
     field_type = get_field_type(field_info)
     if get_origin(field_type) is not dict:
         return False
-
     args = get_args(field_type)
     # Dict requires exactly 2 type arguments: dict[key_type, value_type]
     return len(args) == 2 and args[0] is str and is_basemodel_subclass(args[1])  # noqa: PLR2004
+
+
+def is_nested_model(field_info: FieldInfo) -> bool:
+    """Check if field is a direct BaseModel subclass (not wrapped in list or dict)."""
+    field_type = get_field_type(field_info)
+    if get_origin(field_type) is not None:
+        return False  # It's a generic (list, dict, Union, etc.)
+    return is_basemodel_subclass(field_type)
 
 
 def handle_list_of_models(
     field_info: FieldInfo,
     field_value: Any,
 ) -> list[dict] | None:
-    """Handle list[BaseModel] fields with prompt_as_list metadata.
+    """Handle list[BaseModel] fields (auto-detected by type).
 
     Returns:
         The configured list, or None if cancelled
@@ -672,7 +828,7 @@ def handle_dict_of_models(
     field_info: FieldInfo,
     field_value: Any,
 ) -> dict[str, dict] | None:
-    """Handle dict[str, BaseModel] fields with prompt_as_dict metadata.
+    """Handle dict[str, BaseModel] fields (auto-detected by type).
 
     Returns:
         The configured dict, or None if cancelled
@@ -686,6 +842,63 @@ def handle_dict_of_models(
     return prompt_dict_of_models(value_class, item_label, key_label, field_value, schema_extra)
 
 
+def handle_nested_model(
+    field_name: str,
+    field_info: FieldInfo,
+    field_value: Any,
+) -> dict[str, Any] | None:
+    """Handle a direct BaseModel field by recursing into prompt_model_fields.
+
+    For optional fields, asks the user whether to configure the nested section.
+    Returns the configured dict, an empty sentinel (skip), or None if cancelled.
+    """
+    field_type = get_field_type(field_info)
+    is_optional = not field_info.is_required()
+    description = field_info.description or field_name.replace("_", " ").title()
+
+    if is_optional:
+        click.echo()
+        configure_it = questionary.confirm(
+            f"Configure '{description}'? (optional — press N to skip)", default=False
+        ).ask()
+        if configure_it is None:
+            return None
+        if not configure_it:
+            return {}  # sentinel: field will not be added to config_dict
+
+    click.echo(f"\n--- {description} ---")
+    return prompt_model_fields(field_type, existing_config=field_value or {})
+
+
+def is_plain_dict(field_info: FieldInfo) -> bool:
+    """Check if field is a dict[str, X] where X is not a BaseModel subclass."""
+    field_type = get_field_type(field_info)
+    if get_origin(field_type) is not dict:
+        return False
+    args = get_args(field_type)
+    if len(args) != 2 or args[0] is not str:  # noqa: PLR2004
+        return False
+    return not is_basemodel_subclass(args[1])
+
+
+def handle_plain_dict(
+    field_info: FieldInfo,
+    field_value: Any,
+) -> dict[str, Any] | None:
+    """Handle dict[str, X] fields interactively where X is not a BaseModel.
+
+    Returns:
+        The configured dict, or None if cancelled
+    """
+    field_type = get_field_type(field_info)
+    args = get_args(field_type)
+    value_type = args[1]
+    schema_extra = get_field_extra(field_info)
+    item_label = schema_extra.get(SCHEMA_KEYS["ITEM_LABEL"]) or field_info.description or "Entry"
+    key_label = schema_extra.get(SCHEMA_KEYS["KEY_LABEL"], "Key")
+    return prompt_key_value_dict(value_type, item_label, key_label, field_value, schema_extra)
+
+
 def prompt_literal_field(field_type: type, description: str, default: Any) -> Any:
     choices = list(get_args(field_type))
     default_val = default if default in choices else choices[0]
@@ -693,12 +906,14 @@ def prompt_literal_field(field_type: type, description: str, default: Any) -> An
 
 
 def prompt_bool_field(description: str, default: Any) -> Any:
-    default_bool = bool(default) if default else False
+    default_bool = bool(default) if default is not None else False
     return questionary.confirm(f"{description}:", default=default_bool).ask()
 
 
-def prompt_path_field(description: str, default: Any) -> Any:
-    return questionary.path(f"{description}:", default=default, only_directories=True).ask()
+def prompt_path_field(description: str, default: Any, only_directories: bool = True) -> Any:
+    return questionary.path(
+        f"{description}:", default=default, only_directories=only_directories
+    ).ask()
 
 
 def prompt_password_field(description: str, default: Any) -> Any:
@@ -741,7 +956,9 @@ def prompt_single_field(  # noqa: C901, PLR0912, PLR0913
             elif field_type is bool:
                 raw_answer = prompt_bool_field(description, default_value)
             elif field_type is Path:
-                raw_answer = prompt_path_field(description, default_display)
+                schema_extra = get_field_extra(field_info)
+                only_dirs = schema_extra.get(SCHEMA_KEYS["PATH_TYPE"], "directory") != "file"
+                raw_answer = prompt_path_field(description, default_display, only_dirs)
             elif is_sensitive_field(field_name, field_info):
                 raw_answer = prompt_password_field(description, default_display)
             else:
@@ -817,7 +1034,7 @@ def validate_field_value(
         return True, None
 
 
-def prompt_model_fields(  # noqa: C901, PLR0912, PLR0913
+def prompt_model_fields(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915
     config_class: type[BaseModel],
     *,
     existing_config: dict[str, Any] | None = None,
@@ -874,6 +1091,23 @@ def prompt_model_fields(  # noqa: C901, PLR0912, PLR0913
                     config_dict[field_name] = dict_result
                     continue
 
+                if is_plain_dict(field_info):
+                    plain_dict_result: dict[str, Any] | None = handle_plain_dict(
+                        field_info, field_value
+                    )
+                    if plain_dict_result is None:
+                        return None
+                    config_dict[field_name] = plain_dict_result
+                    continue
+
+                if is_nested_model(field_info):
+                    nested_result = handle_nested_model(field_name, field_info, field_value)
+                    if nested_result is None:
+                        return None
+                    if nested_result:  # empty dict {} means user skipped optional field
+                        config_dict[field_name] = nested_result
+                    continue
+
                 answer = prompt_single_field(
                     field_name,
                     field_info,
@@ -885,6 +1119,13 @@ def prompt_model_fields(  # noqa: C901, PLR0912, PLR0913
                 if answer is not None:
                     config_dict[field_name] = answer
                 elif is_field_required(field_name, field_info, field_overrides):
+                    field_description = get_field_description(
+                        field_name, field_info, field_overrides
+                    )
+                    click.echo(
+                        f"\n⚠️  Required field '{field_description}' was not provided. "
+                        "Configuration cancelled."
+                    )
                     return None
 
             try:
@@ -900,6 +1141,8 @@ def prompt_model_fields(  # noqa: C901, PLR0912, PLR0913
                     else:
                         click.echo(f"  • {error_msg}")
                 click.echo("\n🔄 Re-running configuration wizard...\n")
+                existing = {**existing, **config_dict}
+                config_dict = {}
 
         except KeyboardInterrupt:
             return None

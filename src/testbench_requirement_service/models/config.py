@@ -49,14 +49,17 @@ class RequirementServiceConfig(BaseModel):
     ssl_cert: Path | None = Field(
         default=None,
         description="Path to SSL/TLS certificate file for HTTPS support (.crt or .pem)",
+        json_schema_extra={"path_type": "file"},
     )
     ssl_key: Path | None = Field(
         default=None,
         description="Path to SSL/TLS private key file for HTTPS support (.key)",
+        json_schema_extra={"path_type": "file"},
     )
     ssl_ca_cert: Path | None = Field(
         default=None,
         description="Optional path to CA certificate file for client verification",
+        json_schema_extra={"path_type": "file"},
     )
     proxies_count: int | None = Field(
         default=None,
