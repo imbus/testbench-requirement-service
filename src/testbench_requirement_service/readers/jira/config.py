@@ -130,6 +130,25 @@ class JiraRequirementReaderConfig(BaseModel):
         },
     )
 
+    verify_ssl: bool = Field(
+        True,
+        description=(
+            "Enable SSL certificate verification for the Jira HTTPS connection. "
+            "Set to False only in development/test environments with self-signed certificates "
+            "when providing a CA cert file is not possible."
+        ),
+        json_schema_extra={"env_var": "JIRA_VERIFY_SSL"},
+    )
+    ssl_ca_cert_path: str | None = Field(
+        None,
+        description=(
+            "Path to a CA certificate or bundle file (.pem/.crt) used to verify the "
+            "Jira server's SSL certificate."
+        ),
+        json_schema_extra={
+            "env_var": "JIRA_SSL_CA_CERT_PATH",
+        },
+    )
     client_cert_path: str | None = Field(
         None,
         description="Path to client certificate file for mutual TLS authentication (.pem or .crt)",
@@ -202,6 +221,20 @@ class JiraRequirementReaderConfig(BaseModel):
     )
 
     @property
+    def ssl_verify(self) -> str | bool:
+        """Return the value for SSL verification passed to the jira package ``options`` dict.
+
+        Returns:
+        - ``False`` when ``verify_ssl`` is explicitly disabled.
+        - Path string to the CA cert/bundle when ``ssl_ca_cert_path`` is configured.
+        - ``True`` (default certifi verification) otherwise.
+        """
+        if not self.verify_ssl:
+            return False
+        ca_cert = self.ssl_ca_cert_path or os.getenv("JIRA_SSL_CA_CERT_PATH")
+        return ca_cert if ca_cert else True
+
+    @property
     def client_cert(self) -> str | tuple[str, str] | None:
         """Build the client_cert value expected by the jira package ``options`` dict.
 
@@ -224,12 +257,12 @@ class JiraRequirementReaderConfig(BaseModel):
             raise ValueError(f"OAuth1 private key file not found: '{v}'")
         return v
 
-    @field_validator("client_cert_path", "client_key_path")
+    @field_validator("ssl_ca_cert_path", "client_cert_path", "client_key_path")
     @classmethod
-    def validate_client_cert_files_exist(cls, v: str | None) -> str | None:
-        """Validate that client certificate/key files exist if provided."""
+    def validate_cert_files_exist(cls, v: str | None) -> str | None:
+        """Validate that certificate/key files exist if provided."""
         if v is not None and not Path(v).exists():
-            raise ValueError(f"Client certificate/key file not found: '{v}'")
+            raise ValueError(f"Certificate/key file not found: '{v}'")
         return v
 
     def _validate_basic_auth(self) -> None:

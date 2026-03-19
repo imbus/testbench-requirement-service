@@ -1,5 +1,16 @@
 from http import HTTPStatus
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from jira import JIRA
+    from jira.resources import (
+        Board,
+        Field,
+        Issue,
+        Project,
+        Sprint,
+        dict2resource,
+    )
 
 try:
     from jira import JIRA, JIRAError  # type: ignore[import-not-found]
@@ -49,14 +60,14 @@ class JiraClient:
 
     def _connect(self) -> JIRA:
         try:
-            options: dict[str, Any] = {}
+            options: dict[str, Any] = {"verify": self.config.ssl_verify}
             if self.config.client_cert is not None:
                 options["client_cert"] = self.config.client_cert
 
             if self.config.auth_type == "basic":
                 return JIRA(
                     server=self.config.server_url,
-                    options=options or None,
+                    options=options,
                     basic_auth=(self.config.username or "", self.config.password or ""),
                     max_retries=self.config.max_retries,
                     timeout=self.config.timeout,
@@ -64,7 +75,7 @@ class JiraClient:
             if self.config.auth_type == "token":
                 return JIRA(
                     server=self.config.server_url,
-                    options=options or None,
+                    options=options,
                     token_auth=self.config.token,
                     max_retries=self.config.max_retries,
                     timeout=self.config.timeout,
@@ -72,7 +83,7 @@ class JiraClient:
             if self.config.auth_type == "oauth1":
                 return JIRA(
                     server=self.config.server_url,
-                    options=options or None,
+                    options=options,
                     oauth={
                         "access_token": self.config.oauth1_access_token,
                         "access_token_secret": self.config.oauth1_access_token_secret,

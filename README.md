@@ -888,6 +888,12 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
 | `oauth1_consumer_key`         | String | OAuth1 consumer key                                                                                   | Yes      | `JIRA_OAUTH1_CONSUMER_KEY`        |
 | `oauth1_key_cert_path`        | String | Path to the OAuth1 RSA private key file (`.pem`). The file content is read at startup.               | Yes     | `JIRA_OAUTH1_KEY_CERT_PATH`       |
 
+**SSL verification** (all auth types, optional)
+
+| Setting            | Type    | Description                                                                                                                                                          | Required | Default | Env var                  |
+| ------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------- | ------------------------ |
+| `verify_ssl`       | Boolean | Enable SSL certificate verification. Set to `false` only in dev/test environments when a CA cert file cannot be provided. Disabling exposes the connection to MITM attacks. | No | `true`  | `JIRA_VERIFY_SSL`        |
+| `ssl_ca_cert_path` | String  | Path to a CA certificate or bundle file (`.pem`/`.crt`) used to verify the Jira server's SSL certificate. Use this when Jira uses a self-signed or corporate CA certificate. | No | -       | `JIRA_SSL_CA_CERT_PATH`  |
 
 **Mutual TLS (mTLS) client certificate** (all auth types, optional)
 
