@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-try:  # noqa: SIM105
-    from jira.resources import Field, Issue, Project, PropertyHolder
-except ImportError:
-    pass
+from jira.resources import Field, Issue, Project, PropertyHolder
 from sanic import NotFound
 
 from testbench_requirement_service.log import logger

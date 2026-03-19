@@ -1,29 +1,15 @@
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from jira import JIRA
-    from jira.resources import (
-        Board,
-        Field,
-        Issue,
-        Project,
-        Sprint,
-        dict2resource,
-    )
-
-try:
-    from jira import JIRA, JIRAError  # type: ignore[import-not-found]
-    from jira.resources import (  # type: ignore[import-not-found]
-        Board,
-        Field,
-        Issue,
-        Project,
-        Sprint,
-        dict2resource,
-    )
-except ImportError:
-    pass
+from jira import JIRA, JIRAError
+from jira.resources import (
+    Board,
+    Field,
+    Issue,
+    Project,
+    Sprint,
+    dict2resource,
+)
 
 from testbench_requirement_service.log import logger
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig

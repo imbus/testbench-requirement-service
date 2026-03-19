@@ -4,6 +4,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+import openpyxl
+import pandas as pd
+import xlrd
+
 from testbench_requirement_service.log import logger
 from testbench_requirement_service.models.requirement import (
     ExtendedRequirementObject,
@@ -16,13 +20,6 @@ from testbench_requirement_service.readers.excel.config import (
     UserDefinedAttributeConfig,
 )
 from testbench_requirement_service.utils.date_format import parse_date_string
-
-try:
-    import openpyxl
-    import pandas as pd
-    import xlrd
-except ImportError:
-    pass
 
 # Data column names that must have a non-blank value in every data row.
 _REQUIRED_DATA_COLUMNS: tuple[str, ...] = ("id", "version", "name")

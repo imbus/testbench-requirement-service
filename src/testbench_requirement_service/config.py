@@ -123,7 +123,10 @@ class AppConfig(Config):
 
     def _validate_reader_config(self):
         """Validate reader_config dict against the reader's CONFIG_CLASS."""
-        reader_config_class = get_reader_config_class(self.READER_CLASS)
+        try:
+            reader_config_class = get_reader_config_class(self.READER_CLASS)
+        except ImportError:
+            reader_config_class = None
         if reader_config_class is None:
             return {}
 

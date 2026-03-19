@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import (  # type: ignore[import-not-found]
+from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
@@ -10,7 +10,7 @@ from sqlalchemy import (  # type: ignore[import-not-found]
     String,
     Text,
 )
-from sqlalchemy.orm import (  # type: ignore[import-not-found]
+from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
     mapped_column,

@@ -7,10 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-try:  # noqa: SIM105
-    import pandas as pd  # type: ignore
-except ImportError:
-    pass
+import pandas as pd
 from sanic.exceptions import NotFound
 
 from testbench_requirement_service.log import logger

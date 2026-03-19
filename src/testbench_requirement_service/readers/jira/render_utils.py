@@ -5,12 +5,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-try:
-    from bs4 import BeautifulSoup
-    from jira.resilientsession import ResilientSession  # type: ignore[import-not-found]
-    from jira.resources import Issue  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover
-    pass
+from bs4 import BeautifulSoup
+from jira.resilientsession import ResilientSession
+from jira.resources import Issue
 
 from testbench_requirement_service.log import logger
 

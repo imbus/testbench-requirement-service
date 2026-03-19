@@ -205,7 +205,10 @@ def start(  # noqa: PLR0913
 
     factory = partial(create_app, app_name, app_config)
     loader = AppLoader(factory=factory)
-    app = loader.load()
+    try:
+        app = loader.load()
+    except ImportError as e:
+        raise click.ClickException(str(e)) from e
 
     logger.info("Starting %s v%s", app_name, __version__)
 

@@ -3,12 +3,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Literal
 
-try:  # noqa: SIM105
-    from jira.resources import Field, Issue, Resource
-except ImportError:  # pragma: no cover
-    pass
 from dateutil.parser import isoparse
 from dateutil.parser import parse as dateutil_parse
+from jira.resources import Field, Issue, Resource
 
 from testbench_requirement_service.log import logger
 from testbench_requirement_service.models.requirement import (
