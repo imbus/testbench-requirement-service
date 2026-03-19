@@ -43,7 +43,7 @@ class Colors:
 
 
 venv_dir = Path() / ".venv"
-if not platform.platform().startswith("Windows"):
+if platform.system() != "Windows":
     venv_bin = venv_dir / "bin"
     venv_python = venv_bin / "python"
     venv_pre_commit = venv_bin / "pre-commit"
@@ -56,12 +56,19 @@ if not venv_dir.exists():
     print(f"Creating virtualenv in {venv_dir}")
     EnvBuilder(with_pip=True).create(venv_dir)
 
-subprocess.run([venv_python, "-m", "pip", "install", "-U", "pip"], check=False)
-subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[excel]"], check=False)
-subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[jira]"], check=False)
-subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[dev]"], check=False)
-subprocess.run([venv_python, "-m", "pip", "install", "-e", ".[test]"], check=False)
-subprocess.run([venv_pre_commit, "install"], check=False)
+
+def run(cmd: list) -> None:
+    result = subprocess.run(cmd, check=False)
+    if result.returncode != 0:
+        print(
+            f"{Colors.LIGHT_RED}WARNING: command failed (exit {result.returncode}): "
+            f"{' '.join(str(c) for c in cmd)}{Colors.END}"
+        )
+
+
+run([venv_python, "-m", "pip", "install", "-U", "pip"])
+run([venv_python, "-m", "pip", "install", "-e", ".[excel,jira,sql,dev]"])
+run([venv_pre_commit, "install"])
 
 activate_script = (
     "source .venv/bin/activate"
