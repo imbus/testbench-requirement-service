@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime
+import json
+import re
 from typing import Literal, cast
 
 from sanic.exceptions import NotFound
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import create_engine, select, tuple_  # type: ignore[import-not-found]
+from sqlalchemy.orm import Session, joinedload, sessionmaker  # type: ignore[import-not-found]
 
 from testbench_requirement_service.models.requirement import (
     BaselineObject,
@@ -19,7 +21,10 @@ from testbench_requirement_service.models.requirement import (
     UserDefinedAttributeResponse,
 )
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
-from testbench_requirement_service.readers.sql.config import SqlRequirementReaderConfig
+from testbench_requirement_service.readers.sql.config import (
+    SqlRequirementReaderConfig,
+    SqlUserDefinedAttributeConfig,
+)
 from testbench_requirement_service.readers.sql.orm import (
     Baseline,
     Project,
@@ -28,20 +33,43 @@ from testbench_requirement_service.readers.sql.orm import (
 )
 
 
+_LOCAL_TZ = datetime.now().astimezone().tzinfo
+
+_BATCH_SIZE = 450
+
+
 class SqlRequirementReader(AbstractRequirementReader):
     CONFIG_CLASS = SqlRequirementReaderConfig
 
     def __init__(self, config: SqlRequirementReaderConfig):
         self.config = config
+        engine_kwargs: dict = {
+            "echo": self.config.echo,
+            "pool_pre_ping": self.config.pool_pre_ping,
+        }
+        is_sqlite = self.config.database_url.strip().lower().startswith("sqlite")
+        if not is_sqlite:
+            engine_kwargs.update(
+                {
+                    "pool_size": self.config.pool_size,
+                    "max_overflow": self.config.max_overflow,
+                    "pool_recycle": self.config.pool_recycle_seconds,
+                }
+            )
+
+        if self.config.connect_timeout_seconds is not None:
+            timeout_key = "timeout" if is_sqlite else "connect_timeout"
+            engine_kwargs["connect_args"] = {timeout_key: self.config.connect_timeout_seconds}
+
         self._engine = create_engine(
             self.config.database_url,
-            echo=self.config.echo,
-            pool_pre_ping=self.config.pool_pre_ping,
+            **engine_kwargs,
         )
+        self._session_factory = sessionmaker(bind=self._engine)
 
     @contextmanager
     def _session(self):
-        session = Session(self._engine)
+        session = self._session_factory()
         try:
             yield session
         finally:
@@ -123,7 +151,10 @@ class SqlRequirementReader(AbstractRequirementReader):
             )
 
     def get_user_defined_attributes(self) -> list[UserDefinedAttribute]:
-        return []
+        return [
+            UserDefinedAttribute(name=uda.name, valueType=uda.type)
+            for uda in self.config.user_defined_attributes
+        ]
 
     def get_all_user_defined_attributes(
         self,
@@ -135,30 +166,37 @@ class SqlRequirementReader(AbstractRequirementReader):
         if not requirement_keys:
             return []
 
-        with self._session() as session:
-            baseline_obj = self._get_baseline(session, project, baseline)
-            if baseline_obj is None:
-                raise NotFound("Baseline not found")
+        selected_udas = self._resolve_selected_udas(attribute_names)
 
-            stmt = select(Requirement.internal_id, Requirement.version_name).where(
-                Requirement.baseline == baseline_obj.name
+        if selected_udas:
+            with self._session() as session:
+                row_map = self._load_requirement_row_map(session, requirement_keys)
+        else:
+            row_map = {(k.id, k.version): {} for k in requirement_keys}
+
+        responses: list[UserDefinedAttributeResponse] = []
+        for key in requirement_keys:
+            row = row_map.get((key.id, key.version))
+            if row is None:
+                continue
+
+            attributes: list[UserDefinedAttribute] = []
+            for udf in selected_udas:
+                value = self._extract_uda_value(udf, row)
+                attr = self._to_user_defined_attribute(udf, value)
+                if attr is not None:
+                    attributes.append(attr)
+
+            responses.append(
+                UserDefinedAttributeResponse(key=key, userDefinedAttributes=attributes)
             )
-            existing = set(session.execute(stmt).all())
 
-        return [
-            UserDefinedAttributeResponse(key=key, userDefinedAttributes=[])
-            for key in requirement_keys
-            if (key.id, key.version) in existing
-        ]
+        return responses
 
     def get_extended_requirement(
         self, project: str, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
         with self._session() as session:
-            baseline_obj = self._get_baseline(session, project, baseline)
-            if baseline_obj is None:
-                raise NotFound("Baseline not found")
-
             stmt = select(Requirement).where(
                 Requirement.internal_id == key.id,
                 Requirement.version_name == key.version,
@@ -177,17 +215,13 @@ class SqlRequirementReader(AbstractRequirementReader):
                 requirement=requirement.requirement,
                 description=requirement.description,
                 documents=requirement.documents or [],
-                baseline=requirement.baseline,
+                baseline=baseline,
             )
 
     def get_requirement_versions(
         self, project: str, baseline: str, key: RequirementKey
     ) -> list[RequirementVersionObject]:
         with self._session() as session:
-            baseline_obj = self._get_baseline(session, project, baseline)
-            if baseline_obj is None:
-                raise NotFound("Baseline not found")
-
             stmt = (
                 select(Requirement)
                 .where(Requirement.internal_id == key.id)
@@ -236,8 +270,7 @@ class SqlRequirementReader(AbstractRequirementReader):
     @staticmethod
     def _normalize_dt(value: datetime) -> datetime:
         if value.tzinfo is None:
-            local_tz = datetime.now().astimezone().tzinfo
-            return value.replace(tzinfo=local_tz)
+            return value.replace(tzinfo=_LOCAL_TZ)
         return value
 
     @staticmethod
@@ -260,3 +293,112 @@ class SqlRequirementReader(AbstractRequirementReader):
             .where(Project.name == project, Baseline.name == baseline)
         )
         return session.scalar(stmt)  # type: ignore[no-any-return]
+
+    def _resolve_selected_udas(
+        self, attribute_names: list[str]
+    ) -> list[SqlUserDefinedAttributeConfig]:
+        if not self.config.user_defined_attributes:
+            return []
+
+        if not attribute_names:
+            return self.config.user_defined_attributes
+
+        requested = {name.casefold() for name in attribute_names}
+        return [
+            uda for uda in self.config.user_defined_attributes if uda.name.casefold() in requested
+        ]
+
+    def _load_requirement_row_map(
+        self,
+        session: Session,
+        requirement_keys: list[RequirementKey],
+    ) -> dict[tuple[str, str], dict[str, object]]:
+        pairs = [(key.id, key.version) for key in requirement_keys]
+        row_map: dict[tuple[str, str], dict[str, object]] = {}
+
+        for i in range(0, len(pairs), _BATCH_SIZE):
+            batch = pairs[i : i + _BATCH_SIZE]
+            stmt = select(Requirement).where(
+                tuple_(Requirement.internal_id, Requirement.version_name).in_(batch)
+            )
+            for row in session.scalars(stmt):
+                key = (str(row.internal_id), str(row.version_name))
+                udf_values = (
+                    row.user_defined_fields if isinstance(row.user_defined_fields, dict) else {}
+                )
+                row_map[key] = dict(udf_values)
+
+        return row_map
+
+    @staticmethod
+    def _normalize_column_name(value: str) -> str:
+        normalized = re.sub(r"[^a-zA-Z0-9]+", "_", value.strip()).strip("_")
+        return normalized.lower()
+
+    def _extract_uda_value(
+        self, udf: SqlUserDefinedAttributeConfig, row: dict[str, object]
+    ) -> object:
+        candidates = [udf.name, self._normalize_column_name(udf.name)]
+        key_map = {str(key).casefold(): str(key) for key in row}
+        for candidate in candidates:
+            resolved = key_map.get(candidate.casefold())
+            if resolved:
+                return row.get(resolved)
+        return None
+
+    @staticmethod
+    def _to_bool(value: object, true_value: str) -> bool | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            return value.strip().casefold() == true_value.strip().casefold()
+        return bool(value)
+
+    @staticmethod
+    def _to_array(value: object, separator: str) -> list[str] | None:
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return [str(item) for item in value if item is not None]
+        if isinstance(value, tuple | set):
+            return [str(item) for item in value if item is not None]
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("[") and stripped.endswith("]"):
+                try:
+                    parsed = json.loads(stripped)
+                    if isinstance(parsed, list):
+                        return [str(item) for item in parsed if item is not None]
+                except json.JSONDecodeError:
+                    pass
+            return [part.strip() for part in stripped.split(separator) if part.strip()]
+        return [str(value)]
+
+    def _to_user_defined_attribute(
+        self, udf: SqlUserDefinedAttributeConfig, value: object
+    ) -> UserDefinedAttribute | None:
+        if udf.type == "STRING":
+            if value is None:
+                return None
+            return UserDefinedAttribute(name=udf.name, valueType="STRING", stringValue=str(value))
+
+        if udf.type == "ARRAY":
+            string_values = self._to_array(value, udf.array_separator)
+            if string_values is None:
+                return None
+            return UserDefinedAttribute(
+                name=udf.name,
+                valueType="ARRAY",
+                stringValues=string_values,
+            )
+
+        boolean_value = self._to_bool(value, udf.true_value)
+        if boolean_value is None:
+            return None
+        return UserDefinedAttribute(name=udf.name, valueType="BOOLEAN", booleanValue=boolean_value)

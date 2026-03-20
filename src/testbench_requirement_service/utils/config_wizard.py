@@ -41,6 +41,7 @@ READER_CLASSES = {
     "jsonl": "testbench_requirement_service.readers.JsonlRequirementReader",
     "excel": "testbench_requirement_service.readers.ExcelRequirementReader",
     "jira": "testbench_requirement_service.readers.JiraRequirementReader",
+    "sql": "testbench_requirement_service.readers.SqlRequirementReader",
 }
 SERVICE_WIZARD_SKIP_FIELDS = {
     "reader_class",
@@ -426,6 +427,7 @@ def configure_reader_only(config_path: Path):
                 Choice("📄 JSONL Files", "jsonl"),
                 Choice("📊 Excel/CSV Files", "excel"),
                 Choice("🔗 Jira", "jira"),
+                Choice("🗄️  SQL Database", "sql"),
                 Choice("⚙️  Custom Reader", "custom"),
             ],
         ).ask()
@@ -553,6 +555,7 @@ def run_full_wizard(config_path: Path):  # noqa: C901, PLR0912, PLR0915
             questionary.Choice("📄 JSONL Files (lightweight, file-based storage)", "jsonl"),
             questionary.Choice("📊 Excel/CSV Files (spreadsheet-based storage)", "excel"),
             questionary.Choice("🔗 Jira (connect to Atlassian Jira)", "jira"),
+            questionary.Choice("🗄️ SQL Database (relational database storage)", "sql"),
             questionary.Choice("⚙️  Custom Reader (your own implementation)", "custom"),
         ],
     ).ask()

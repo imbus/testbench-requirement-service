@@ -1,21 +1,39 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    String,
-    Text,
-)
-from sqlalchemy.orm import (
-    DeclarativeBase,
-    Mapped,
-    mapped_column,
-    relationship,
-)
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy.dialects import mysql
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
+
+
+class JsonCompat(TypeDecorator[Any]):
+    """Store JSON as TEXT on all databases for identical cross-db behavior."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value: Any, dialect: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            # Keep valid JSON strings unchanged to avoid double encoding.
+            try:
+                json.loads(value)
+                return value
+            except ValueError:
+                pass
+        return json.dumps(value, ensure_ascii=False)
+
+    def process_result_value(self, value: Any, dialect: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
 
 
 class Base(DeclarativeBase):
@@ -60,14 +78,18 @@ class Requirement(Base):
     status: Mapped[str] = mapped_column(String(64))
     priority: Mapped[str] = mapped_column(String(64))
     requirement: Mapped[bool] = mapped_column(Boolean)
-    description: Mapped[str] = mapped_column(Text)
-    documents: Mapped[list[str]] = mapped_column(JSON)
-    baseline: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(
+        Text().with_variant(mysql.LONGTEXT(), "mysql").with_variant(mysql.LONGTEXT(), "mariadb")
+    )
+    documents: Mapped[list[str]] = mapped_column(JsonCompat)
     version_name: Mapped[str] = mapped_column(String(255))
     version_date: Mapped[datetime] = mapped_column(DateTime)
     version_author: Mapped[str] = mapped_column(String(255))
     version_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     version_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_defined_fields: Mapped[dict[str, Any]] = mapped_column(JsonCompat, default=dict)
+
+    __table_args__ = (Index("ix_requirements_internal_id_version", "internal_id", "version_name"),)
 
     nodes: Mapped[list[RequirementNode]] = relationship(back_populates="requirement")
 

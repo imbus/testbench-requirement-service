@@ -227,3 +227,4 @@ requirements/
 *.crt
 *.pem
 *.key
+etl.db
