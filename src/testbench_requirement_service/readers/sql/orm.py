@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, LargeBinary, String, Text
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -38,6 +38,18 @@ class JsonCompat(TypeDecorator[Any]):
 
 class Base(DeclarativeBase):
     pass
+
+
+class RequirementImage(Base):
+    __tablename__ = "requirement_images"
+
+    hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    data: Mapped[bytes] = mapped_column(
+        LargeBinary()
+        .with_variant(mysql.LONGBLOB(), "mysql")
+        .with_variant(mysql.LONGBLOB(), "mariadb")
+    )
+    mime_type: Mapped[str] = mapped_column(String(64))
 
 
 class Project(Base):
@@ -86,12 +98,36 @@ class Requirement(Base):
     version_date: Mapped[datetime] = mapped_column(DateTime)
     version_author: Mapped[str] = mapped_column(String(255))
     version_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    version_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    user_defined_fields: Mapped[dict[str, Any]] = mapped_column(JsonCompat, default=dict)
+    major_version_hash: Mapped[str] = mapped_column(String(64), index=True)
+    minor_version_hash: Mapped[str] = mapped_column(String(64), index=True)
 
-    __table_args__ = (Index("ix_requirements_internal_id_version", "internal_id", "version_name"),)
+    __table_args__ = (
+        Index(
+            "ix_requirements_internal_id_version",
+            "internal_id",
+            "version_name",
+            unique=True,
+        ),
+    )
 
+    udfs: Mapped[list[RequirementUdf]] = relationship(
+        back_populates="requirement", cascade="all, delete-orphan"
+    )
     nodes: Mapped[list[RequirementNode]] = relationship(back_populates="requirement")
+
+
+class RequirementUdf(Base):
+    __tablename__ = "requirement_udfs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    requirement_id: Mapped[int] = mapped_column(ForeignKey("requirements.id"), index=True)
+    udf_name: Mapped[str] = mapped_column(String(255))
+    udf_type: Mapped[str] = mapped_column(String(16))
+    udf_value: Mapped[str] = mapped_column(Text)
+
+    requirement: Mapped[Requirement] = relationship(back_populates="udfs")
+
+    __table_args__ = (Index("ix_requirement_udfs_req_name", "requirement_id", "udf_name"),)
 
 
 class RequirementNode(Base):

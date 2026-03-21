@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from datetime import datetime
+import base64
 import json
 import re
+from contextlib import contextmanager
+from datetime import datetime
 from typing import Literal, cast
 
 from sanic.exceptions import NotFound
@@ -29,13 +30,15 @@ from testbench_requirement_service.readers.sql.orm import (
     Baseline,
     Project,
     Requirement,
+    RequirementImage,
     RequirementNode,
+    RequirementUdf,
 )
-
 
 _LOCAL_TZ = datetime.now().astimezone().tzinfo
 
 _BATCH_SIZE = 450
+_IMAGE_REF_PATTERN = re.compile(r"image://([0-9a-f]{64})")
 
 
 class SqlRequirementReader(AbstractRequirementReader):
@@ -205,6 +208,8 @@ class SqlRequirementReader(AbstractRequirementReader):
             if requirement is None:
                 raise NotFound("Requirement not found")
 
+            description = self._reembed_images(requirement.description, session)
+
             return ExtendedRequirementObject(
                 name=requirement.name,
                 extendedID=requirement.extended_id,
@@ -213,7 +218,7 @@ class SqlRequirementReader(AbstractRequirementReader):
                 status=requirement.status,
                 priority=requirement.priority,
                 requirement=requirement.requirement,
-                description=requirement.description,
+                description=description,
                 documents=requirement.documents or [],
                 baseline=baseline,
             )
@@ -268,6 +273,29 @@ class SqlRequirementReader(AbstractRequirementReader):
         )
 
     @staticmethod
+    def _reembed_images(description: str, session: Session) -> str:
+        hashes = set(_IMAGE_REF_PATTERN.findall(description))
+        if not hashes:
+            return description
+
+        images = {
+            row.hash: row
+            for row in session.query(RequirementImage)
+            .filter(RequirementImage.hash.in_(hashes))
+            .all()
+        }
+
+        def replace_ref(match: re.Match[str]) -> str:
+            h = match.group(1)
+            img = images.get(h)
+            if img is None:
+                return match.group(0)
+            b64 = base64.b64encode(img.data).decode("ascii")
+            return f"data:{img.mime_type};base64,{b64}"
+
+        return _IMAGE_REF_PATTERN.sub(replace_ref, description)
+
+    @staticmethod
     def _normalize_dt(value: datetime) -> datetime:
         if value.tzinfo is None:
             return value.replace(tzinfo=_LOCAL_TZ)
@@ -318,33 +346,46 @@ class SqlRequirementReader(AbstractRequirementReader):
 
         for i in range(0, len(pairs), _BATCH_SIZE):
             batch = pairs[i : i + _BATCH_SIZE]
-            stmt = select(Requirement).where(
+            stmt = (
+                select(
+                    Requirement.internal_id,
+                    Requirement.version_name,
+                    RequirementUdf.udf_name,
+                    RequirementUdf.udf_type,
+                    RequirementUdf.udf_value,
+                )
+                .join(RequirementUdf, Requirement.id == RequirementUdf.requirement_id)
+                .where(tuple_(Requirement.internal_id, Requirement.version_name).in_(batch))
+            )
+            for internal_id, version_name, udf_name, udf_type, udf_value in session.execute(stmt):
+                key = (str(internal_id), str(version_name))
+                if key not in row_map:
+                    row_map[key] = {}
+                row_map[key][udf_name] = self._decode_udf_value(udf_type, udf_value)
+
+        # Ensure keys with no UDF rows still appear in the map
+        for i in range(0, len(pairs), _BATCH_SIZE):
+            batch = pairs[i : i + _BATCH_SIZE]
+            key_stmt = select(Requirement.internal_id, Requirement.version_name).where(
                 tuple_(Requirement.internal_id, Requirement.version_name).in_(batch)
             )
-            for row in session.scalars(stmt):
-                key = (str(row.internal_id), str(row.version_name))
-                udf_values = (
-                    row.user_defined_fields if isinstance(row.user_defined_fields, dict) else {}
-                )
-                row_map[key] = dict(udf_values)
+            for internal_id, version_name in session.execute(key_stmt):
+                key = (str(internal_id), str(version_name))
+                row_map.setdefault(key, {})
 
         return row_map
 
     @staticmethod
-    def _normalize_column_name(value: str) -> str:
-        normalized = re.sub(r"[^a-zA-Z0-9]+", "_", value.strip()).strip("_")
-        return normalized.lower()
+    def _decode_udf_value(udf_type: str, udf_value: str) -> object:
+        if udf_type == "boolean":
+            return udf_value == "true"
+        if udf_type == "string_array":
+            return json.loads(udf_value)
+        return udf_value
 
-    def _extract_uda_value(
-        self, udf: SqlUserDefinedAttributeConfig, row: dict[str, object]
-    ) -> object:
-        candidates = [udf.name, self._normalize_column_name(udf.name)]
-        key_map = {str(key).casefold(): str(key) for key in row}
-        for candidate in candidates:
-            resolved = key_map.get(candidate.casefold())
-            if resolved:
-                return row.get(resolved)
-        return None
+    @staticmethod
+    def _extract_uda_value(udf: SqlUserDefinedAttributeConfig, row: dict[str, object]) -> object:
+        return row.get(udf.name)
 
     @staticmethod
     def _to_bool(value: object, true_value: str) -> bool | None:
@@ -362,9 +403,7 @@ class SqlRequirementReader(AbstractRequirementReader):
     def _to_array(value: object, separator: str) -> list[str] | None:
         if value is None:
             return None
-        if isinstance(value, list):
-            return [str(item) for item in value if item is not None]
-        if isinstance(value, tuple | set):
+        if isinstance(value, (list, tuple, set)):
             return [str(item) for item in value if item is not None]
         if isinstance(value, str):
             stripped = value.strip()
