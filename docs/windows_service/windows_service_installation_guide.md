@@ -1,4 +1,7 @@
-# Windows Service Installation Guide
+---
+sidebar_position: 1
+title: Windows service installation
+---
 
 ## Prerequisites
 
@@ -41,7 +44,7 @@ Before installing the service, ensure the following requirements are met:
 2. **Configure YAJSW:**
    - Navigate to `<YAJSW_INSTALL_DIR>\conf\` and open (or create) `wrapper.conf`
    - Update the configuration with the following values:
-   
+
    ```ini
    # Java executable for YAJSW (adjust path to your Java installation)
    wrapper.java.command=C:/Program Files/Eclipse Adoptium/jre-8.0.472.8-hotspot/bin/java.exe
