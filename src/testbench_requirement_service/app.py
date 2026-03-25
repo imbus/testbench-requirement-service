@@ -1,11 +1,13 @@
 from pathlib import Path
 
+from pydantic import ValidationError
 from sanic import Sanic
 
 from testbench_requirement_service.config import AppConfig
 from testbench_requirement_service.exceptions import (
     AppErrorHandler,
     handle_jira_error,
+    handle_validation_error,
 )
 from testbench_requirement_service.log import get_logging_dict
 from testbench_requirement_service.middlewares import check_request_auth, log_request, log_response
@@ -26,6 +28,7 @@ def register_middlewares(app: Sanic) -> None:
 
 def register_exception_handlers(app: Sanic) -> None:
     """Register application exception handlers."""
+    app.exception(ValidationError)(handle_validation_error)
     try:
         from jira import JIRAError  # noqa: PLC0415 # type: ignore[import-not-found]
 

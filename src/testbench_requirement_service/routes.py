@@ -1,6 +1,5 @@
-from urllib.parse import unquote
+from typing import Any
 
-from pydantic import ValidationError
 from sanic import Blueprint, response
 from sanic.exceptions import BadRequest, NotFound
 from sanic.request import Request
@@ -14,6 +13,13 @@ from testbench_requirement_service.readers.utils import get_requirement_reader
 from testbench_requirement_service.utils.auth import protected
 
 router = Blueprint("requirement")
+
+
+def _require_json(request: Request) -> Any:
+    body = request.json
+    if body is None:
+        raise BadRequest("Missing request body. Request body must be valid JSON.")
+    return body
 
 
 @router.route("/", methods=["GET"])
@@ -46,7 +52,6 @@ async def get_projects(request: Request):
 @router.route("/projects/<project:str>/baselines", methods=["GET"], unquote=True)
 @protected
 async def get_baselines(request: Request, project: str):
-    project = unquote(project)
     requirement_reader = get_requirement_reader(request.app)
 
     if not requirement_reader.project_exists(project):
@@ -64,8 +69,6 @@ async def get_baselines(request: Request, project: str):
 )
 @protected
 async def get_requirements_root(request: Request, project: str, baseline: str):
-    project = unquote(project)
-    baseline = unquote(baseline)
     requirement_reader = get_requirement_reader(request.app)
 
     if not requirement_reader.project_exists(project):
@@ -85,8 +88,7 @@ async def get_requirements_root(request: Request, project: str, baseline: str):
 )
 @protected
 async def post_all_user_defined_attributes(request: Request, project: str, baseline: str):
-    project = unquote(project)
-    baseline = unquote(baseline)
+    body = _require_json(request)
     requirement_reader = get_requirement_reader(request.app)
 
     if not requirement_reader.project_exists(project):
@@ -94,18 +96,13 @@ async def post_all_user_defined_attributes(request: Request, project: str, basel
     if not requirement_reader.baseline_exists(project, baseline):
         raise NotFound("Baseline not found")
 
-    if request.json is None:
-        raise BadRequest("Missing request body")
-    try:
-        request_body = UserDefinedAttributeRequest.model_validate(request.json)
-    except ValidationError as e:
-        raise BadRequest("Invalid request body") from e
+    uda_request = UserDefinedAttributeRequest.model_validate(body)
 
     return response.json(
         [
             udas.model_dump()
             for udas in requirement_reader.get_all_user_defined_attributes(
-                project, baseline, request_body.keys, request_body.attributeNames
+                project, baseline, uda_request.keys, uda_request.attributeNames
             )
         ]
     )
@@ -118,8 +115,7 @@ async def post_all_user_defined_attributes(request: Request, project: str, basel
 )
 @protected
 async def post_extended_requirement(request: Request, project: str, baseline: str):
-    project = unquote(project)
-    baseline = unquote(baseline)
+    body = _require_json(request)
     requirement_reader = get_requirement_reader(request.app)
 
     if not requirement_reader.project_exists(project):
@@ -127,12 +123,7 @@ async def post_extended_requirement(request: Request, project: str, baseline: st
     if not requirement_reader.baseline_exists(project, baseline):
         raise NotFound("Baseline not found")
 
-    if request.json is None:
-        raise BadRequest("Missing request body")
-    try:
-        key = RequirementKey(**request.json)
-    except ValidationError as e:
-        raise BadRequest("Invalid request body") from e
+    key = RequirementKey.model_validate(body)
 
     return response.json(
         requirement_reader.get_extended_requirement(project, baseline, key).model_dump()
@@ -146,8 +137,7 @@ async def post_extended_requirement(request: Request, project: str, baseline: st
 )
 @protected
 async def post_requirement_versions(request: Request, project: str, baseline: str):
-    project = unquote(project)
-    baseline = unquote(baseline)
+    body = _require_json(request)
     requirement_reader = get_requirement_reader(request.app)
 
     if not requirement_reader.project_exists(project):
@@ -155,12 +145,7 @@ async def post_requirement_versions(request: Request, project: str, baseline: st
     if not requirement_reader.baseline_exists(project, baseline):
         raise NotFound("Baseline not found")
 
-    if request.json is None:
-        raise BadRequest("Missing request body")
-    try:
-        key = RequirementKey(**request.json)
-    except ValidationError as e:
-        raise BadRequest("Invalid request body") from e
+    key = RequirementKey.model_validate(body)
 
     return response.json(
         [

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from pydantic import ValidationError
+
+from testbench_requirement_service.utils.validation import format_validation_error_details
+
 try:  # noqa: SIM105
     from jira import JIRAError  # type: ignore[import-not-found]
 except ImportError:
     pass
-from sanic import Forbidden, NotFound, SanicException, ServerError
+from sanic import Forbidden, NotFound, SanicException, ServerError, response
 from sanic.errorpages import exception_response
 from sanic.handlers import ErrorHandler
 from sanic.request import Request
@@ -49,6 +53,19 @@ class AppErrorHandler(ErrorHandler):
             base=self.base,
             fallback=fallback,
         )
+
+
+async def handle_validation_error(request: Request, exception: ValidationError):
+    errors = format_validation_error_details(exception)
+    return response.json(
+        {
+            "description": "Bad Request",
+            "status": 400,
+            "message": "Validation error",
+            "errors": errors,
+        },
+        status=400,
+    )
 
 
 async def handle_jira_error(request: Request, exception: JIRAError):
