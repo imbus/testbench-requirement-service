@@ -3,7 +3,7 @@ import importlib.util
 
 EXCEL_PACKAGES = ["pandas", "openpyxl", "xlrd", "javaproperties"]
 JIRA_PACKAGES = ["jira", "beautifulsoup4"]
-SQL_PACKAGES = ["sqlalchemy"]
+SQL_PACKAGES = ["sqlalchemy", "pymysql"]
 
 
 def _missing_packages(packages: list[str]) -> list[str]:

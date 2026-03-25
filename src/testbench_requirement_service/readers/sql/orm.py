@@ -1,25 +1,55 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    String,
-    Text,
-)
-from sqlalchemy.orm import (
-    DeclarativeBase,
-    Mapped,
-    mapped_column,
-    relationship,
-)
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, LargeBinary, String, Text
+from sqlalchemy.dialects import mysql
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
+
+
+class JsonCompat(TypeDecorator[Any]):
+    """Store JSON as TEXT on all databases for identical cross-db behavior."""
+
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value: Any, dialect: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            # Keep valid JSON strings unchanged to avoid double encoding.
+            try:
+                json.loads(value)
+                return value
+            except ValueError:
+                pass
+        return json.dumps(value, ensure_ascii=False)
+
+    def process_result_value(self, value: Any, dialect: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class RequirementImage(Base):
+    __tablename__ = "requirement_images"
+
+    hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    data: Mapped[bytes] = mapped_column(
+        LargeBinary()
+        .with_variant(mysql.LONGBLOB(), "mysql")
+        .with_variant(mysql.LONGBLOB(), "mariadb")
+    )
+    mime_type: Mapped[str] = mapped_column(String(64))
 
 
 class Project(Base):
@@ -60,16 +90,44 @@ class Requirement(Base):
     status: Mapped[str] = mapped_column(String(64))
     priority: Mapped[str] = mapped_column(String(64))
     requirement: Mapped[bool] = mapped_column(Boolean)
-    description: Mapped[str] = mapped_column(Text)
-    documents: Mapped[list[str]] = mapped_column(JSON)
-    baseline: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(
+        Text().with_variant(mysql.LONGTEXT(), "mysql").with_variant(mysql.LONGTEXT(), "mariadb")
+    )
+    documents: Mapped[list[str]] = mapped_column(JsonCompat)
     version_name: Mapped[str] = mapped_column(String(255))
     version_date: Mapped[datetime] = mapped_column(DateTime)
     version_author: Mapped[str] = mapped_column(String(255))
     version_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    version_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    major_version_hash: Mapped[str] = mapped_column(String(64), index=True)
+    minor_version_hash: Mapped[str] = mapped_column(String(64), index=True)
 
+    __table_args__ = (
+        Index(
+            "ix_requirements_internal_id_version",
+            "internal_id",
+            "version_name",
+            unique=True,
+        ),
+    )
+
+    udfs: Mapped[list[RequirementUdf]] = relationship(
+        back_populates="requirement", cascade="all, delete-orphan"
+    )
     nodes: Mapped[list[RequirementNode]] = relationship(back_populates="requirement")
+
+
+class RequirementUdf(Base):
+    __tablename__ = "requirement_udfs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    requirement_id: Mapped[int] = mapped_column(ForeignKey("requirements.id"), index=True)
+    udf_name: Mapped[str] = mapped_column(String(255))
+    udf_type: Mapped[str] = mapped_column(String(16))
+    udf_value: Mapped[str] = mapped_column(Text)
+
+    requirement: Mapped[Requirement] = relationship(back_populates="udfs")
+
+    __table_args__ = (Index("ix_requirement_udfs_req_name", "requirement_id", "udf_name"),)
 
 
 class RequirementNode(Base):

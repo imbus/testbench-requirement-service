@@ -11,7 +11,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-# dist/
+dist/
 downloads/
 eggs/
 .eggs/
@@ -227,3 +227,4 @@ requirements/
 *.crt
 *.pem
 *.key
+etl.db
