@@ -3,39 +3,51 @@ sidebar_position: 1
 title: Installation
 ---
 
+# Installation
+
 ## Requirements
 
-- Python >= 3.10
-- `pip`
+- **Python 3.10** or higher
+- **pip** (included with Python)
 
 ## Install from PyPI
 
 ```bash
-python -m pip install testbench-requirement-service
+pip install testbench-requirement-service
 ```
 
-## Optional: install extras
+This installs the base package with the [JSONL reader](../readers/jsonl.md), with no extra dependencies needed.
 
-Excel/text-file reader dependencies:
+## Optional extras
+
+Install additional dependency groups for the reader you need:
+
+| Reader | Data source | Install command |
+|--------|-------------|-----------------|
+| [JSONL](../readers/jsonl.md) *(default)* | `.jsonl` files | Included in base install |
+| [Excel](../readers/excel.md) | `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` | `pip install testbench-requirement-service[excel]` |
+| [Jira](../readers/jira.md) | Jira REST API | `pip install testbench-requirement-service[jira]` |
+
+Install multiple extras at once:
 
 ```bash
-python -m pip install "testbench-requirement-service[excel]"
+pip install testbench-requirement-service[excel,jira]
 ```
 
-Jira reader dependencies:
+## Verify the installation
 
 ```bash
-python -m pip install "testbench-requirement-service[jira]"
+testbench-requirement-service --version
 ```
 
-Both:
+If the installation was successful, this prints the installed version.
 
-```bash
-python -m pip install "testbench-requirement-service[excel,jira]"
-```
-
-## Verify installation
+You can also run:
 
 ```bash
 testbench-requirement-service --help
 ```
+
+## Next steps
+
+Head to the [Quickstart](quickstart.md) to configure and start the service.

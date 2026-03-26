@@ -1,6 +1,6 @@
 ---
-sidebar_position: 1
-title: Windows service installation
+sidebar_position: 6
+title: Windows Service Installation
 ---
 
 ## Prerequisites
