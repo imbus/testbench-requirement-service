@@ -112,6 +112,6 @@ Use `testbench-requirement-service configure` to update specific parts of your c
 ## Next steps
 
 - Customize the service → [Configuration](../configuration.md)
-- Learn about readers → [Readers overview](../readers/overview.md)
+- Learn about readers → [Readers overview](../readers/index.md)
 - Connect TestBench → [TestBench Integration](../testbench-integration.md)
-- Explore all CLI options → [CLI commands](../cli/commands.md)
+- Explore all CLI options → [CLI commands](../cli-commands.md)
