@@ -10,6 +10,19 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8020
 
 
+class ServerConfig(BaseModel):
+    """Sanic server process/worker configuration."""
+
+    single_process: bool = Field(
+        default=True,
+        description="Run server in single-process mode (required for Windows services and mTLS)",
+    )
+    run_kwargs: dict = Field(
+        default_factory=dict,
+        description="Additional keyword arguments passed verbatim to Sanic's run/prepare call.",
+    )
+
+
 class RequirementServiceConfig(BaseModel):
     """Validated service config loaded from TOML config file."""
 
@@ -38,14 +51,6 @@ class RequirementServiceConfig(BaseModel):
         default=None,
         description="Base64-encoded salt stored alongside the password hash",
     )
-    logging: LoggingConfig = Field(
-        default_factory=LoggingConfig,
-        description="Structured logging configuration for the service runtime",
-    )
-    reader_config: dict = Field(
-        default_factory=dict,
-        description="Inline reader configuration when no separate file is used",
-    )
     ssl_cert: Path | None = Field(
         default=None,
         description="Path to SSL/TLS certificate file for HTTPS support (.crt or .pem)",
@@ -72,6 +77,18 @@ class RequirementServiceConfig(BaseModel):
     forwarded_secret: str | None = Field(
         default=None,
         description="Secret token for validating Forwarded header (security measure)",
+    )
+    server: ServerConfig = Field(
+        default_factory=lambda: ServerConfig(),  # noqa: PLW0108
+        description="Sanic server process and worker configuration",
+    )
+    logging: LoggingConfig = Field(
+        default_factory=LoggingConfig,
+        description="Structured logging configuration for the service runtime",
+    )
+    reader_config: dict = Field(
+        default_factory=dict,
+        description="Inline reader configuration when no separate file is used",
     )
 
     @field_validator("reader_config_path")

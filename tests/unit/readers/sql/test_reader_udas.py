@@ -57,7 +57,7 @@ def sqlite_db(tmp_path: Path) -> str:
         )
         """,
         "INSERT INTO projects (id, name) VALUES (1, 'TB')",
-        "INSERT INTO baselines (id, name, date, type, project_id) VALUES (1, 'BL1', '2026-01-01T00:00:00', 'CURRENT', 1)",
+        "INSERT INTO baselines (id, name, date, type, project_id) VALUES (1, 'BL1', '2026-01-01T00:00:00', 'CURRENT', 1)",  # noqa: E501
         """
         INSERT INTO requirements (
             id, name, extended_id, internal_id, owner, status, priority, requirement, description,
@@ -67,9 +67,9 @@ def sqlite_db(tmp_path: Path) -> str:
             '[]', '1', '2026-01-01T00:00:00', 'author', ''
         )
         """,
-        "INSERT INTO requirement_udfs (requirement_id, udf_name, udf_type, udf_value) VALUES (1, 'Safety Relevant', 'boolean', 'true')",
-        "INSERT INTO requirement_udfs (requirement_id, udf_name, udf_type, udf_value) VALUES (1, 'Divisions', 'string_array', '[\"A\", \"B\"]')",
-        "INSERT INTO requirement_udfs (requirement_id, udf_name, udf_type, udf_value) VALUES (1, 'Feature Planned', 'string_array', '[\"X\", \"Y\"]')",
+        "INSERT INTO requirement_udfs (requirement_id, udf_name, udf_type, udf_value) VALUES (1, 'Safety Relevant', 'boolean', 'true')",  # noqa: E501
+        "INSERT INTO requirement_udfs (requirement_id, udf_name, udf_type, udf_value) VALUES (1, 'Divisions', 'string_array', '[\"A\", \"B\"]')",  # noqa: E501
+        "INSERT INTO requirement_udfs (requirement_id, udf_name, udf_type, udf_value) VALUES (1, 'Feature Planned', 'string_array', '[\"X\", \"Y\"]')",  # noqa: E501
     ]
 
     with engine.begin() as conn:
@@ -135,6 +135,7 @@ class TestSqlReaderUdas:
 
         assert len(result) == 1
         assert result[0].key.id == "REQ-1"
+        assert result[0].userDefinedAttributes is not None
         assert len(result[0].userDefinedAttributes) == 3
 
         attrs = {attr.name: attr for attr in result[0].userDefinedAttributes}
@@ -207,7 +208,7 @@ class TestSqlReaderUdas:
             for req_id, name, udf_type, value in udf_rows:
                 session.execute(
                     text(
-                        "INSERT INTO requirement_udfs (requirement_id, udf_name, udf_type, udf_value) "
+                        "INSERT INTO requirement_udfs (requirement_id, udf_name, udf_type, udf_value) "  # noqa: E501
                         "VALUES (:req_id, :name, :udf_type, :value)"
                     ),
                     {"req_id": req_id, "name": name, "udf_type": udf_type, "value": value},
@@ -233,6 +234,7 @@ class TestSqlReaderUdas:
         )
 
         assert len(result) == 1
+        assert result[0].userDefinedAttributes is not None
         attrs = {attr.name: attr for attr in result[0].userDefinedAttributes}
         assert attrs["Feature Planned"].stringValues == [
             "C0_Sample@EV$MnM_GEN4_ESCL",

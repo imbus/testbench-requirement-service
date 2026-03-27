@@ -69,6 +69,8 @@ class AppConfig(Config):
         self.PROXIES_COUNT = service_config.proxies_count
         self.REAL_IP_HEADER = service_config.real_ip_header
         self.FORWARDED_SECRET = service_config.forwarded_secret
+        # Server process/worker configuration
+        self.SERVER_CONFIG = service_config.server
 
         self._reader_config_inline = service_config.reader_config
 

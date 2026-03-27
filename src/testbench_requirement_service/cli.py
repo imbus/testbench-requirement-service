@@ -217,36 +217,40 @@ def start(  # noqa: PLR0913
     if not port:
         port = getattr(app.config, "PORT", None)
 
+    server_config = app_config.SERVER_CONFIG
     ssl_context = app_config.get_ssl_context()
 
-    use_single_process = isinstance(ssl_context, SSLContext)
-    if use_single_process:
-        # SSLContext cannot be pickled, so we must use app.run() directly (single-process)
-        # instead of Sanic.serve() with AppLoader (which uses multiprocessing)
-        try:
-            app.run(
-                host=host,
-                port=port,
-                debug=app_config.DEBUG,
-                access_log=True,
-                ssl=ssl_context,
-                single_process=True,
-            )
-        except Exception as e:
-            raise click.ClickException("Server could not start.") from e
-    else:
-        app.prepare(
-            host=host,
-            port=port,
-            dev=dev,
-            debug=app_config.DEBUG,
-            access_log=True,
-            ssl=ssl_context,
+    use_single_process = server_config.single_process
+    if dev and use_single_process:
+        logger.info(
+            "Dev mode enabled: switching to multi-process mode to support auto-reload. "
+            "Set 'server.single_process = false' explicitly to suppress this message."
         )
-        try:
+        use_single_process = False
+    if isinstance(ssl_context, SSLContext) and not use_single_process:
+        logger.warning(
+            "mTLS (ssl_ca_cert) requires single-process mode. "
+            "Ignoring 'single_process = false' and running in single-process mode."
+        )
+        use_single_process = True
+
+    common_kwargs: dict = {
+        "host": host,
+        "port": port,
+        "debug": app_config.DEBUG,
+        "access_log": True,
+        "ssl": ssl_context,
+        **server_config.run_kwargs,
+    }
+
+    try:
+        if use_single_process:
+            app.run(**common_kwargs, single_process=True)
+        else:
+            app.prepare(**common_kwargs, dev=dev)
             Sanic.serve(primary=app, app_loader=loader)
-        except Exception as e:
-            raise click.ClickException("Server could not start.") from e
+    except Exception as e:
+        raise click.ClickException(f"Server could not start: {e}") from e
 
 
 @click.command()
