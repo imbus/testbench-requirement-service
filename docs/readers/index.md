@@ -5,9 +5,9 @@ title: Readers
 
 # Readers
 
-A **reader** is a pluggable component that fetches projects, baselines, and requirements from a specific data source. The service ships with three built-in readers and supports [custom readers](custom-readers.md).
+A **reader** is a pluggable component that fetches projects, baselines, and requirements from a specific data source. The service ships with three built-in readers and supports [custom readers](custom.md).
 
-## Built-in readers at a glance
+## Built-in readers
 
 | Reader | Data source | Extra dependencies | Best for |
 |--------|------------|-------------------|----------|
@@ -58,7 +58,7 @@ Supports multiple authentication methods (Basic, PAT, OAuth1) and SSL/mTLS.
 
 None of the built-in readers fit? You can create your own by subclassing `AbstractRequirementReader`.
 
-**Learn how:** [Custom Readers](custom-readers.md)
+**Learn how:** [Custom Readers](custom.md)
 
 ## Configuring a reader
 

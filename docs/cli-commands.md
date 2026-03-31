@@ -7,23 +7,54 @@ title: CLI Commands
 
 The executable is `testbench-requirement-service`. All commands support `--help` for detailed usage.
 
-## `init`
-
-Initialize a new configuration file with an interactive wizard.
-
 ```bash
-testbench-requirement-service init [--path PATH]
+testbench-requirement-service [COMMAND] [OPTIONS]
 ```
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--path PATH` | Path to the configuration file to create | `config.toml` |
+---
+
+## Commands Overview
+
+| Command | Description |
+|---|---|
+| [`init`](#init) | Interactive wizard to create a new configuration file from scratch. |
+| [`configure`](#configure) | Create or update an existing configuration interactively. |
+| [`set-credentials`](#set-credentials) | Set the service username and password. |
+| [`start`](#start) | Start the requirement service. |
+
+---
+
+## `init`
+
+Create a new configuration file with an interactive wizard.
 
 The wizard guides you through:
 1. Service settings (host, port, debug mode)
 2. Credential setup (username, password)
 3. Reader selection (JSONL, Excel, Jira, or Custom)
 4. Reader-specific configuration
+
+```bash
+testbench-requirement-service init [--path PATH]
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--path PATH` | Path to the configuration file to create | `config.toml` |
+
+### Examples
+
+```bash
+# Create config.toml in the current directory
+testbench-requirement-service init
+
+# Create config at a custom path
+testbench-requirement-service init --path /etc/requirement-service/config.toml
+```
+
+---
 
 ## `configure`
 
@@ -32,6 +63,8 @@ Update an existing configuration file interactively.
 ```bash
 testbench-requirement-service configure [OPTIONS]
 ```
+
+### Options
 
 | Option | Description |
 |--------|-------------|
@@ -42,7 +75,7 @@ testbench-requirement-service configure [OPTIONS]
 | `--reader-only` | Configure reader settings only |
 | `--view` | View the current configuration |
 
-**Examples:**
+### Examples
 
 ```bash
 # Interactive menu (default)
@@ -55,13 +88,18 @@ testbench-requirement-service configure --service-only
 testbench-requirement-service configure --view
 ```
 
+---
+
 ## `set-credentials`
 
-Set or update the HTTP Basic Auth credentials used to protect API endpoints.
+Set or update the HTTP Basic Auth credentials used to protect API endpoints. 
+This command generates a secure password hash and salt and stores them in your configuration file.
 
 ```bash
 testbench-requirement-service set-credentials [OPTIONS]
 ```
+
+### Options
 
 | Option | Description |
 |--------|-------------|
@@ -69,9 +107,7 @@ testbench-requirement-service set-credentials [OPTIONS]
 | `--username TEXT` | Username (prompts interactively if not provided) |
 | `--password TEXT` | Password (prompts interactively if not provided) |
 
-This command generates a secure password hash and salt and stores them in your configuration file.
-
-**Examples:**
+### Examples
 
 ```bash
 # Interactive (prompts for credentials)
@@ -81,6 +117,8 @@ testbench-requirement-service set-credentials
 testbench-requirement-service set-credentials --username admin --password mypassword
 ```
 
+---
+
 ## `start`
 
 Start the TestBench Requirement Service.
@@ -88,6 +126,8 @@ Start the TestBench Requirement Service.
 ```bash
 testbench-requirement-service start [OPTIONS]
 ```
+
+### Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
@@ -100,7 +140,7 @@ testbench-requirement-service start [OPTIONS]
 
 Command-line arguments take **precedence** over configuration file settings.
 
-**Examples:**
+### Examples
 
 ```bash
 # Start with defaults
@@ -119,13 +159,16 @@ testbench-requirement-service start --reader-class JiraRequirementReader --reade
 testbench-requirement-service start --reader-class custom_reader.CustomRequirementReader
 ```
 
-## Quick reference
+---
 
-| Command | Purpose |
-|---------|---------|
-| `init` | Create a new config from scratch |
-| `configure` | Update parts of an existing config |
-| `set-credentials` | Set HTTP Basic Auth username & password |
-| `start` | Run the service |
-| `--version` | Print the installed version |
-| `--help` | Show top-level help |
+## Getting Help
+
+```bash
+# General help
+testbench-requirement-service --help
+
+# Help for a specific command
+testbench-requirement-service start --help
+testbench-requirement-service configure --help
+```
+
