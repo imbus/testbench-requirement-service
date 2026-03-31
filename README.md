@@ -13,7 +13,7 @@ A lightweight REST API service for [imbus TestBench](https://www.imbus.de/en/tes
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.10–3.14
 
 ## Installation
 
@@ -57,7 +57,6 @@ The service runs at `http://127.0.0.1:8020` by default. Open `/docs` for the int
 | `configure` | Update an existing config interactively |
 | `set-credentials` | Set HTTP Basic Auth username & password |
 | `start` | Run the service |
-| `--version` | Print the installed version |
 
 Run any command with `--help` for full usage details.
 
