@@ -19,7 +19,8 @@ After forking, clone your forked version of the repository to your local machine
 We provide a script to automatically set up the virtual environment and install all the necessary dependencies.
 
 Run the following command from the project’s root directory:
-```powershell
+
+```bash
 python bootstrap.py
 ```
 
@@ -36,34 +37,75 @@ Once the setup is complete, activate the virtual environment:
     ```powershell
     .venv\Scripts\activate
     ```
- 
 ## Running Tests
 
 If you want to contribute code, it's important to ensure that everything works correctly. You can run the tests to make sure the code passes all the required checks.
 
-**Run the Robot Framework Tests**
+**Run the unit tests (pytest):**
+```bash
+pytest tests/unit
+```
 
-To run the tests, execute the following from the project's root directory:
-```powershell
+**Run the Robot Framework tests:**
+
+To run the tests, simply execute the following from the project’s root directory:
+
+```bash
 robot --pythonpath tests/robot tests/robot/tests
 ```
 
 This uses `--pythonpath tests/robot` to enable clean import paths in test files.
 
-**Run specific test suites:**
-```powershell
-# Excel tests only
-robot --pythonpath tests/robot tests/robot/tests/excel_tests
+## Code Style & Linting
 
-# JSONL tests only
-robot --pythonpath tests/robot tests/robot/tests/jsonl_tests
+This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting, and [mypy](https://mypy-lang.org/) for static type checking.
 
-# Generic tests only
-robot --pythonpath tests/robot tests/robot/tests/generic_tests
+**Check linting:**
+```bash
+ruff check src/
 ```
 
-**Run from test directory:**
-```powershell
-cd tests/robot
-robot --pythonpath . tests
+**Check types:**
+```bash
+mypy src/
 ```
+
+**Pre-commit hooks** (run automatically on each commit after setup):
+```bash
+pre-commit install
+```
+
+Please ensure `ruff` and `mypy` pass with no errors before opening a pull request.
+
+## Branching & Pull Requests
+
+1. **Create a branch** from `main` with a descriptive name:
+   - `feature/<short-description>` for new features
+   - `fix/<short-description>` for bug fixes
+   - `docs/<short-description>` for documentation changes
+
+2. **Commit** your changes with clear, concise commit messages.
+
+3. **Push** your branch and open a pull request against `main`.
+
+4. Fill in the pull request description, referencing any related issues (e.g. `Closes #42`).
+
+5. Ensure all CI checks pass before requesting a review.
+
+## Reporting Bugs
+
+Please open a [GitHub Issue](https://github.com/imbus/testbench-requirement-service/issues) and include:
+
+- **Version** — output of `testbench-requirement-service --version`
+- **Python version** — output of `python --version`
+- **Operating system**
+- **Steps to reproduce** the problem (for bugs)
+- **Expected vs actual behavior**
+
+## Requesting Features
+
+Open a [GitHub Issue](https://github.com/imbus/testbench-defect-service/issues) and describe:
+
+- The use case you are trying to solve.
+- How you imagine the feature working.
+- Any alternatives you have considered.
