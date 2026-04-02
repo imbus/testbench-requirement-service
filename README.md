@@ -1,5 +1,9 @@
 # TestBench Requirement Service
 
+[![PyPI version](https://img.shields.io/pypi/v/testbench-requirement-service)](https://pypi.org/project/testbench-requirement-service/)
+[![Python versions](https://img.shields.io/pypi/pyversions/testbench-requirement-service)](https://pypi.org/project/testbench-requirement-service/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
 A lightweight REST API service for [imbus TestBench](https://www.imbus.de/en/testbench) that provides unified access to requirements from multiple data sources — Jira, Excel, and JSONL.
 
 ## Features
@@ -76,6 +80,10 @@ Full documentation is available in the [`docs/`](docs/) folder:
 ## Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a history of notable changes.
 
 ## License
 
