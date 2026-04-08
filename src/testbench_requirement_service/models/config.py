@@ -11,11 +11,21 @@ DEFAULT_PORT = 8020
 
 
 class ServerConfig(BaseModel):
-    """Sanic server process/worker configuration."""
+    """Sanic server configuration."""
 
     single_process: bool = Field(
         default=True,
         description="Run server in single-process mode (required for Windows services and mTLS)",
+    )
+    keep_alive_timeout: int = Field(
+        default=5,
+        description=(
+            "Seconds an idle HTTP keep-alive connection is kept open waiting for the next request "
+            "before being closed. A shorter value reduces the number of open connections "
+            "that block clean shutdown."
+        ),
+        ge=1,
+        le=120,
     )
     run_kwargs: dict = Field(
         default_factory=dict,
@@ -80,7 +90,7 @@ class RequirementServiceConfig(BaseModel):
     )
     server: ServerConfig = Field(
         default_factory=lambda: ServerConfig(),  # noqa: PLW0108
-        description="Sanic server process and worker configuration",
+        description="Sanic server configuration",
     )
     logging: LoggingConfig = Field(
         default_factory=LoggingConfig,

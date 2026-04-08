@@ -71,6 +71,7 @@ class AppConfig(Config):
         self.FORWARDED_SECRET = service_config.forwarded_secret
         # Server process/worker configuration
         self.SERVER_CONFIG = service_config.server
+        self.KEEP_ALIVE_TIMEOUT = self.SERVER_CONFIG.keep_alive_timeout
 
         self._reader_config_inline = service_config.reader_config
 
