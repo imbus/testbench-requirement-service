@@ -56,6 +56,19 @@ def generate_schemas(c: Context) -> None:
 
 
 @task
+def build_binary(c: Context, no_clean: bool = False) -> None:
+    """Build a self-contained binary using PyInstaller.
+
+    invoke build-binary
+    invoke build-binary --no-clean
+    """
+    cmd = "python build_binary.py"
+    if no_clean:
+        cmd += " --no-clean"
+    run_command(c, cmd)
+
+
+@task
 def download_deps(  # noqa: PLR0913
     c: Context,
     extras: str = "excel,jira,sql,dev",

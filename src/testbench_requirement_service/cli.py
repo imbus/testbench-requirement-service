@@ -1,3 +1,4 @@
+import sys
 from functools import partial
 from pathlib import Path
 from ssl import SSLContext
@@ -227,6 +228,11 @@ def start(  # noqa: PLR0913
             "Set 'server.single_process = false' explicitly to suppress this message."
         )
         use_single_process = False
+    if getattr(sys, "frozen", False) and not use_single_process:
+        logger.warning(
+            "Auto-reload is not supported in the executable. Falling back to single-process mode."
+        )
+        use_single_process = True
     if isinstance(ssl_context, SSLContext) and not use_single_process:
         logger.warning(
             "mTLS (ssl_ca_cert) requires single-process mode. "
