@@ -109,6 +109,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    contents_directory="lib",
 )
 
 coll = COLLECT(
@@ -120,4 +121,5 @@ coll = COLLECT(
     upx=False,
     upx_exclude=[],
     name="testbench-requirement-service",
+    contents_directory="lib",
 )
