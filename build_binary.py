@@ -195,11 +195,7 @@ def main() -> None:
     print(f"Archive:        {archive}")
 
     binary_path = bundle_dir / _binary_name()
-    print(
-        f"\nTo test the executable, run:\n"
-        f"  {binary_path} --version\n"
-        f"  {binary_path} start --config config.toml\n"
-    )
+    print(f"\nTo test the executable, run:\n  {binary_path} --version\n")
 
 
 if __name__ == "__main__":
