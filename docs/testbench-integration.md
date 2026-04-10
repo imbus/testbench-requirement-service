@@ -4,7 +4,7 @@ title: TestBench Integration
 ---
 # TestBench Integration
 
-This page explains how to connect TestBench to the running Testbench Requirement Service.
+This page explains how to connect TestBench to the running TestBench Requirement Service.
 
 ---
 
@@ -14,9 +14,9 @@ TestBench communicates with the Requirement Service through the **RMProxy** (Req
 
 ---
 
-## Prerequisites
+## Requirements
 
-- Testbench Requirement Service is installed and running (see [Quick Start](getting-started/quickstart)).
+- TestBench Requirement Service is installed and running (see [Quick Start](getting-started/quickstart)).
 - You know the host and port the service is listening on.
 - You have set credentials with `testbench-requirement-service set-credentials`.
 

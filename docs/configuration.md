@@ -75,7 +75,7 @@ requirements_path = "requirements/jsonl/"
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `reader_class` | String | Reader class name or full module path | `"testbench_requirement_service.readers.JsonlRequirementReader"` |
-| `reader_config_path` | String | Path to a separate reader config file | — (uses inline `[testbench_requirement_service.reader_config]`) |
+| `reader_config_path` | String | Path to a separate reader config file | — (uses inline `[testbench-requirement-service.reader_config]`) |
 
 **Example:**
 
@@ -253,6 +253,7 @@ Controls how Sanic spawns and manages its worker process. In most cases you can 
 ```toml
 [testbench-requirement-service.server]
 single_process = false
+keep_alive_timeout = 3
 run_kwargs = { workers = 4 }
 ```
 

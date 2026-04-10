@@ -49,7 +49,7 @@ curl -u "admin:mypassword" http://127.0.0.1:8020/projects
 
 ### 1. Install optional dependencies (if needed)
 
-Choose the extras for your data source. See [Installation](installation.md#optional-extras) for available options.
+Choose the extras for your data source. See [Installation](installation.md#from-pypi-online-recommended) for available options.
 
 ### 2. Create `config.toml`
 

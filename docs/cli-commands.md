@@ -137,6 +137,9 @@ testbench-requirement-service start [OPTIONS]
 | `--host HOST` | Host to bind to | `127.0.0.1` |
 | `--port PORT` | Port to listen on | `8020` |
 | `--dev` | Run in development mode (debug + auto reload) | off |
+| `--ssl-cert PATH` | Path to SSL certificate file for HTTPS | — |
+| `--ssl-key PATH` | Path to SSL private key file for HTTPS | — |
+| `--ssl-ca-cert PATH` | Path to CA certificate file for client verification (mTLS) | — |
 
 Command-line arguments take **precedence** over configuration file settings.
 
@@ -157,6 +160,12 @@ testbench-requirement-service start --reader-class JiraRequirementReader --reade
 
 # Use a custom reader class
 testbench-requirement-service start --reader-class custom_reader.CustomRequirementReader
+
+# Start with HTTPS
+testbench-requirement-service start --ssl-cert certs/server.crt --ssl-key certs/server.key
+
+# Start with mutual TLS (mTLS)
+testbench-requirement-service start --ssl-cert certs/server.crt --ssl-key certs/server.key --ssl-ca-cert certs/ca.crt
 ```
 
 ---

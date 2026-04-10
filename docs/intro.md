@@ -5,7 +5,7 @@ title: Introduction
 
 # Introduction
 
-[**Testbench Requirement Service**](https://github.com/imbus/testbench-requirement-service) is a lightweight, asynchronous REST API service for [imbus TestBench](https://www.imbus.de/en/testbench) that provides unified access to requirements from multiple sources, including Jira, Excel/text files, and JSONL.
+[**TestBench Requirement Service**](https://github.com/imbus/testbench-requirement-service) is a lightweight, asynchronous REST API service for [imbus TestBench](https://www.testbench.com) that provides unified access to requirements from multiple sources, including Jira, Excel/text files, and JSONL.
 
 ## Features
 

@@ -3,12 +3,11 @@ sidebar_position: 6
 title: Windows Service Installation
 ---
 
-## Prerequisites
+## Requirements
 
 Before installing the service, ensure the following requirements are met:
 
-- **Python Service**: The requirement service must be built and installed
-- **Virtual Environment**: A `.venv` with the executable `testbench-requirement-service.exe` must exist
+- **Installed service**: Either the [executable](../getting-started/installation.md#option-1-ready-to-use-executable) (recommended, no Python needed) or a pip install with a `.venv` — see [Installation](../getting-started/installation.md)
 - **Administrator Privileges**: Required for installing and managing Windows services
 - **Port Availability**: Ensure the desired port (default: 8020) is not in use by another application
 
@@ -253,7 +252,7 @@ First select the service from the services list.
 
 ### Installation Steps
 
-1. **Prerequisites:**
+1. **Requirements:**
    - YAJSW downloaded and extracted, e.g., to `C:\YAJSW`
    - Java Runtime Environment (JRE) installed
    - Administrator privileges
