@@ -8,7 +8,7 @@ try:  # noqa: SIM105
     from jira import JIRAError  # type: ignore[import-not-found]
 except ImportError:
     pass
-from sanic import Forbidden, NotFound, SanicException, ServerError, response
+from sanic import Forbidden, NotFound, SanicException, ServerError, Unauthorized, response
 from sanic.errorpages import exception_response
 from sanic.handlers import ErrorHandler
 from sanic.request import Request
@@ -71,10 +71,16 @@ async def handle_validation_error(request: Request, exception: ValidationError):
 async def handle_jira_error(request: Request, exception: JIRAError):
     status_code = getattr(exception, "status_code", None)
     sanic_exc: SanicException
-    if status_code == NotFound.status_code:
-        sanic_exc = NotFound("Not Found")
+    if status_code == Unauthorized.status_code:
+        sanic_exc = Unauthorized(
+            "Invalid Jira credentials (401). Check your authentication configuration."
+        )
     elif status_code == Forbidden.status_code:
-        sanic_exc = Forbidden("Forbidden")
+        sanic_exc = Forbidden(
+            "Access denied by Jira (403). The configured credentials lack sufficient permissions."
+        )
+    elif status_code == NotFound.status_code:
+        sanic_exc = NotFound("Jira resource not found (404).")
     else:
         sanic_exc = ServerError(f"Jira service error ({status_code})")
     sanic_exc.__cause__ = exception
