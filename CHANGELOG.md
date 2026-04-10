@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.0b7] - 2026-04-01
+## [1.0.0b8] - 2026-04-10
 
 ### Added
 - JSONL reader — serve requirements from `.jsonl` files (included in base install)
@@ -25,4 +25,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows service installation support
 - Initial documentation under `docs/`
 
-[1.0.0b7]: https://github.com/imbus/testbench-requirement-service/releases/tag/1.0.0b7
+[1.0.0b8]: https://github.com/imbus/testbench-requirement-service/releases/tag/1.0.0b8
