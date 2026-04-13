@@ -11,6 +11,11 @@ Before installing the service, ensure the following requirements are met:
 - **Administrator Privileges**: Required for installing and managing Windows services
 - **Port Availability**: Ensure the desired port (default: 8020) is not in use by another application
 
+:::note Executable path vs. Python venv path
+The examples throughout this guide use a Python virtual environment path such as `.venv\Scripts\testbench-requirement-service.exe`.
+If you installed using the **ready-to-use executable**, replace this with the direct path to the extracted executable instead, e.g., `C:\TestBenchRequirementService\testbench-requirement-service.exe`. No `.venv` folder is involved.
+:::
+
 ---
 
 ## Which Option to Choose?
@@ -316,3 +321,44 @@ stopService.bat
 ```cmd
 uninstallService.bat
 ```
+
+---
+
+## Autostart with Windows Task Scheduler *(Alternative)*
+
+The Windows Task Scheduler is a simpler alternative to a registered Windows service. It can launch the service automatically at system startup without installing it as a service.
+
+### Setup
+
+1. Open **Task Scheduler** (search in the Start menu, or Control Panel → Administrative Tools → Task Scheduler).
+
+2. In the left pane, select the **Task Scheduler Library** folder.
+
+3. In the **Actions** pane on the right, click **Create Basic Task...**
+
+4. Enter a **Name** (e.g., `TestBench Requirement Service`) and an optional description → **Next**
+
+5. Select **When the computer starts** → **Next**
+
+6. Select **Start a program** → **Next**
+
+7. Configure the program:
+   - **Program/script**: Full path to `testbench-requirement-service.exe`, e.g.:
+     - Ready-to-use executable: `C:\TestBenchRequirementService\testbench-requirement-service.exe`
+     - Python venv: `E:\MyService\.venv\Scripts\testbench-requirement-service.exe`
+   - **Add arguments**: `start`
+   - **Start in (optional)**: The directory containing your `config.toml`, e.g., `C:\TestBenchRequirementService\`
+
+   → **Next**
+
+8. Check **"Open the Properties dialog for this task when I click Finish"** → **Finish**
+
+9. In the **Properties** dialog, configure the following tabs:
+   - **General**: Set security options appropriate for your environment — e.g., "Run whether user is logged on or not" and "Run with highest privileges".
+   - **Triggers**: Select the existing trigger → **Edit...** → enable **Delay task for** (e.g., `1 minute`) as a startup buffer.
+   - **Conditions**: Check that no unwanted conditions are active — for a server machine, uncheck "Start only if on AC power".
+   - **Settings**: Uncheck **"Stop the task if it runs longer than:"** — the service is intended to run indefinitely.
+
+:::note
+The service can be stopped via Task Manager or `taskkill`. Unlike a registered Windows service there is no clean shutdown handling. For production environments, NSSM or FireDaemon are the recommended approach.
+:::
