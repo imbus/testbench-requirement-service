@@ -30,9 +30,17 @@ pip install testbench-requirement-service[jira]
 
 ## Setup
 
-1. Configure the Jira server URL and authentication type.
-2. Provide credentials, either in `config.toml`, a `.env` file, or environment variables.
-3. Start the service.
+1. Ensure the Jira account has the [required permissions](#jira-user-permissions).
+2. Configure the Jira server URL and authentication type.
+3. Provide credentials via `config.toml`, a `.env` file, or environment variables.
+4. Start the service.
+
+### Jira user permissions
+
+The Jira account needs the following permissions:
+
+- **Browse Projects** — required to list projects, search issues, read changelogs and field metadata.
+- **Create Issues** — required to fetch per-project field metadata. This is used when querying user-defined attributes or when `baseline_field` is set to a custom field name other than `fixVersions` or `sprint`.
 
 ### Minimal configuration
 
