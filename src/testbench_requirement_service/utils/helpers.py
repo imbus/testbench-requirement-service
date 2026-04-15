@@ -1,9 +1,43 @@
 import importlib.util
 import inspect
+import types
 from pathlib import Path
 
 
-def import_module_from_file_path(file_path: Path):
+def _discover_subclass_in_module(
+    module: types.ModuleType, base_class: type, file_path: Path
+) -> type:
+    """Return the single subclass of *base_class* defined in *module*.
+
+    Only classes whose ``__module__`` matches the loaded module are considered,
+    so names that were merely imported into the file are excluded.
+
+    Raises:
+        ImportError: If zero or more than one matching subclass is found.
+    """
+    candidates = [
+        obj
+        for obj in vars(module).values()
+        if inspect.isclass(obj)
+        and obj is not base_class
+        and obj.__module__ == module.__name__
+        and issubclass(obj, base_class)
+    ]
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    if len(candidates) > 1:
+        names = ", ".join(c.__name__ for c in candidates)
+        raise ImportError(
+            f"Multiple subclasses of '{base_class.__name__}' found in "
+            f"'{file_path}' ({names}). Pass class_name explicitly."
+        )
+
+    raise ImportError(f"No subclass of '{base_class.__name__}' found in '{file_path}'.")
+
+
+def import_module_from_file_path(file_path: Path) -> types.ModuleType:
     """Imports a module dynamically from a file path."""
     file_path = Path(file_path).resolve()
     module_name = file_path.stem
@@ -24,70 +58,101 @@ def import_module_from_file_path(file_path: Path):
 
 
 def import_class_from_file_path(
-    file_path: Path, class_name: str | None = None, subclass_from: type | None = None
-):
-    """Imports a class dynamically from a Python file at file_path.
+    file_path: Path, class_name: str | None = None, subclass_of: type | None = None
+) -> type:
+    """Import a class dynamically from a Python source file.
+
+    Resolution order when *class_name* is ``None``:
+    1. Derive a candidate name by converting the file stem from snake_case to
+       PascalCase (e.g. ``custom_reader.py`` → ``CustomReader``) and look that
+       name up in the module.
+    2. If no matching class is found and *subclass_of* is given, scan the module
+       for exactly one subclass (direct or indirect) of *subclass_of* that is
+       **defined** in the file — classes that are merely imported into the module
+       namespace are excluded.
 
     Args:
-        file_path (Path): The path to the Python file.
-        class_name (str | None): The specific class name to import (optional).
-        subclass_from (type | None): If set, finds a direct subclass of this type.
+        file_path (Path): Path to the Python source file to import from.
+        class_name (str | None): Name of the class to import. When omitted the resolution
+            order above is used.
+        subclass_of (type | None):  When provided the resolved class is validated as a subclass
+            (direct or indirect) of this type. Also drives the fallback
+            discovery mechanism when *class_name* is ``None``.
 
     Returns:
-        type: The imported class.
+        type: The resolved class object.
 
     Raises:
-        ImportError: If the class cannot be found or loaded.
+        ImportError: If the module cannot be loaded, no matching class is found,
+            the resolved attribute is not a class, or it fails the
+            *subclass_of* constraint.
     """
     try:
         module = import_module_from_file_path(file_path)
 
         if class_name is None:
-            class_name = module.__name__
+            stem = Path(file_path).stem
+            pascal_name = "".join(word.capitalize() for word in stem.split("_"))
+
+            candidate = getattr(module, pascal_name, None)
+            if inspect.isclass(candidate):
+                class_name = pascal_name
+            elif subclass_of is not None:
+                return _discover_subclass_in_module(module, subclass_of, file_path)
+            else:
+                raise ImportError(
+                    f"No class named '{pascal_name}' found in '{file_path}'. "
+                    "Pass class_name explicitly or provide subclass_of for automatic discovery."
+                )
 
         if not hasattr(module, class_name):
-            raise ImportError(f"Class '{class_name}' not found in file '{file_path}'.")
+            raise ImportError(f"Class '{class_name}' not found in '{file_path}'.")
 
-        imported_class = getattr(module, class_name)
-
-        if not inspect.isclass(imported_class):
+        cls = getattr(module, class_name)
+        if not inspect.isclass(cls):
             raise ImportError(f"'{class_name}' in '{file_path}' is not a valid class.")
 
-        if subclass_from and (
-            subclass_from not in imported_class.__bases__ or imported_class is subclass_from
-        ):
+        if subclass_of is not None and not issubclass(cls, subclass_of):
             raise ImportError(
-                f"No direct subclass of '{subclass_from.__name__}' found in file '{file_path}'."
+                f"Class '{class_name}' in '{file_path}' is not a subclass "
+                f"of '{subclass_of.__name__}'."
             )
 
-        return imported_class
+        return cls
 
+    except ImportError:
+        raise
     except Exception as e:
         raise ImportError(f"Failed to import class from '{file_path}': {e}") from e
 
 
 def import_class_from_module_str(
-    module_str: str, class_name: str | None = None, subclass_from: type | None = None
-):
-    """Imports a class dynamically from a module string.
+    module_str: str, class_name: str | None = None, subclass_of: type | None = None
+) -> type:
+    """Import a class dynamically from a module string.
 
     Args:
-        module_str (str): The module import string (e.g., "my_package.my_module")
-        class_name (str | None): The specific class name to import (optional).
-        subclass_from (type | None): If set, finds a direct subclass of this type.
+        module_str (str): The module import string (e.g., ``"my_package.my_module"``).
+            May also include the class name as the last segment
+            (e.g., ``"my_package.my_module.MyClass"``).
+        class_name (str | None): Name of the class to import. When omitted the last
+            segment of *module_str* is used as the class name.
+        subclass_of (type | None): When provided the resolved class is validated as a
+            subclass (direct or indirect) of this type.
 
     Returns:
-        type: The imported class.
+        type: The resolved class object.
 
     Raises:
-        ImportError: If the class cannot be found or loaded.
+        ImportError: If the module cannot be loaded, the class is not found,
+            the attribute is not a class, or it fails the *subclass_of* constraint.
     """
     try:
         try:
-            # Try importing module assuming class name is not included in module_str
+            # Try importing module assuming class name is not the last segment
             module = importlib.import_module(module_str)
         except ModuleNotFoundError:
-            # Fallback: assume class name is included in module_str
+            # Fallback: assume the last segment is the class name
             module_str, class_name = module_str.rsplit(".", 1)
             module = importlib.import_module(module_str)
 
@@ -107,17 +172,18 @@ def import_class_from_module_str(
         if not inspect.isclass(imported_class):
             raise ImportError(f"'{class_name}' in module '{module_str}' is not a class.")
 
-        if subclass_from and (
-            subclass_from not in imported_class.__bases__ or imported_class is subclass_from
-        ):
+        if subclass_of is not None and not issubclass(imported_class, subclass_of):
             raise ImportError(
-                f"No direct subclass of '{subclass_from.__name__}' found in module '{module_str}'."
+                f"Class '{class_name}' in module '{module_str}' is not a subclass "
+                f"of '{subclass_of.__name__}'."
             )
 
         return imported_class
 
+    except ImportError:
+        raise
     except Exception as e:
-        raise ImportError(f"Failed to import class from '{module_str}': {e}") from e
+        raise ImportError(f"Failed to import class from module '{module_str}': {e}") from e
 
 
 def get_project_root() -> Path:

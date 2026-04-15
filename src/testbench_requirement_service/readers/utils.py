@@ -59,29 +59,21 @@ def load_reader_config_from_path(
 
 
 def get_reader_class_from_file_path(file_path: Path) -> type[AbstractRequirementReader]:
-    try:
-        return import_class_from_file_path(file_path, subclass_from=AbstractRequirementReader)  # type: ignore
-    except Exception as e:
-        message = f"Failed to import custom RequirementReader class from '{file_path}'."
-        raise ImportError(message) from e
+    return import_class_from_file_path(file_path, subclass_of=AbstractRequirementReader)  # type: ignore
 
 
 def get_reader_class_from_module_str(
     reader_name: str, default_package: str = "testbench_requirement_service.readers"
 ) -> type[AbstractRequirementReader]:
-    try:
-        if "." in reader_name:
-            return import_class_from_module_str(  # type: ignore
-                reader_name, subclass_from=AbstractRequirementReader
-            )
+    if "." in reader_name:
         return import_class_from_module_str(  # type: ignore
-            default_package,
-            class_name=reader_name,
-            subclass_from=AbstractRequirementReader,
+            reader_name, subclass_of=AbstractRequirementReader
         )
-    except Exception as e:
-        message = f"Failed to import custom RequirementReader class from '{reader_name}'."
-        raise ImportError(message) from e
+    return import_class_from_module_str(  # type: ignore
+        default_package,
+        class_name=reader_name,
+        subclass_of=AbstractRequirementReader,
+    )
 
 
 def get_requirement_reader_from_reader_class_str(
@@ -98,6 +90,8 @@ def get_requirement_reader_from_reader_class_str(
     relative_from_root = get_project_root() / reader_path
     if relative_from_root.is_file():
         return get_reader_class_from_file_path(relative_from_root)
+    if not relative_from_root.suffix and relative_from_root.with_suffix(".py").is_file():
+        return get_reader_class_from_file_path(relative_from_root.with_suffix(".py"))
     return get_reader_class_from_module_str(reader_class)
 
 
@@ -131,15 +125,8 @@ def get_requirement_reader(app) -> AbstractRequirementReader:
     3. Instantiates the reader with the validated config
     """
     if not getattr(app.ctx, "requirement_reader", None):
-        requirement_reader_class_str = app.config.READER_CLASS
         requirement_reader_class = get_requirement_reader_from_reader_class_str(
-            requirement_reader_class_str
+            app.config.READER_CLASS
         )
-        requirement_reader_config = app.config.READER_CONFIG
-        requirement_reader = requirement_reader_class(requirement_reader_config)  # type: ignore
-        if not isinstance(requirement_reader, AbstractRequirementReader):
-            raise ImportError(
-                f"{requirement_reader_class} is no instance of AbstractRequirementReader!"
-            )
-        app.ctx.requirement_reader = requirement_reader
+        app.ctx.requirement_reader = requirement_reader_class(app.config.READER_CONFIG)  # type: ignore
     return app.ctx.requirement_reader  # type: ignore

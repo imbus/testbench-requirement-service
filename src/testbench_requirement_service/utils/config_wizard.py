@@ -374,7 +374,7 @@ def get_reader_class(reader_type: str) -> str | None:
     if reader_type == "custom":
         reader_class: str | None = questionary.text(
             "Enter the full class path to your custom reader class:",
-            default="CustomRequirementReader.py",
+            default="custom_reader.py",
         ).ask()
         if reader_class is None:
             return None

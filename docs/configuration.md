@@ -74,8 +74,27 @@ requirements_path = "requirements/jsonl/"
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
-| `reader_class` | String | Reader class name or full module path | `"testbench_requirement_service.readers.JsonlRequirementReader"` |
-| `reader_config_path` | String | Path to a separate reader config file | — (uses inline `[testbench-requirement-service.reader_config]`) |
+| `reader_class` | String | Identifies the reader to load. See supported formats below. | `"JsonlRequirementReader"` |
+| `reader_config_path` | String | Path to a separate reader config file (`.toml` or `.properties`). | — (uses inline `[testbench-requirement-service.reader_config]`) |
+
+#### `reader_class` formats
+
+| Format | Example | Notes |
+|--------|---------|-------|
+| Built-in class name | `"JsonlRequirementReader"` | Short name of any class in the built-in `testbench_requirement_service.readers` package |
+| File path with extension | `"custom_reader.py"` | Absolute path, or relative to the directory the service is started from |
+| File path without extension | `"custom_reader"` | `.py` is appended automatically |
+| Module string | `"my_package.MyReader"` | Imported via `importlib`; the file must be on `PYTHONPATH` or in the working directory |
+| Full dotted module path | `"my_package.my_module.MyReader"` | Module and class can also be combined into one string |
+
+#### `reader_config_path` formats
+
+Supported file types:
+
+- **`.toml`** — Either raw key-value pairs at the top level, or a full service config file — the `[testbench-requirement-service.reader_config]` section is extracted automatically.
+- **`.properties`** — Java-style `key=value` pairs (same format as used by the Excel and Jira readers).
+
+The path is resolved relative to the directory where the service is started.
 
 **Example:**
 

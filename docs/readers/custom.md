@@ -54,24 +54,24 @@ class CustomRequirementReader(AbstractRequirementReader):
 
 ### 3. Provide configuration
 
-The service validates your `CONFIG_CLASS` against the reader config before starting. You can supply the config in two ways:
+The service validates your `CONFIG_CLASS` against the reader config before starting. You can supply it inline or in a separate file.
 
 **Inline in `config.toml`:**
 
 ```toml
 [testbench-requirement-service]
-reader_class = "custom_reader.CustomRequirementReader"
+reader_class = "custom_reader.py"
 
 [testbench-requirement-service.reader_config]
 source_path = "/data/requirements"
 some_option = true
 ```
 
-**Or as a separate config file** (referenced via `reader_config_path`):
+**As a separate config file** (referenced via `reader_config_path`):
 
 ```toml
 [testbench-requirement-service]
-reader_class = "custom_reader.CustomRequirementReader"
+reader_class = "custom_reader.py"
 reader_config_path = "custom_reader_config.toml"
 ```
 
@@ -85,18 +85,39 @@ some_option = true
 
 - Your class **must implement** all required abstract methods defined in `AbstractRequirementReader`.
 - `CONFIG_CLASS` must be a subclass of `pydantic.BaseModel`. Setting it to `None` disables config validation (use only if your reader truly needs no configuration).
-- Make sure your import paths are correct relative to where the service is started.
+- Make sure your reader file or module is accessible from the directory where the service is started.
 
 ### 5. Start the service with your custom reader
 
-Use the `--reader-class` flag with the **module path** to your class:
+The `reader_class` option (and the matching `--reader-class` CLI flag) accepts several formats:
+
+| Format | Example |
+|--------|---------|
+| File path (recommended) | `"custom_reader.py"` |
+| File path without extension | `"custom_reader"` |
+| Absolute file path | `"/opt/readers/custom_reader.py"` |
+| Module string | `"my_package.CustomReader"` |
+| Full dotted path | `"my_package.my_module.CustomReader"` |
+
+File paths are resolved relative to the directory you start the service from. Module strings are imported via `importlib` — the module must be on `PYTHONPATH` or in the working directory.
+
+**Via CLI flag:**
 
 ```bash
-testbench-requirement-service start --reader-class custom_reader.CustomRequirementReader
+testbench-requirement-service start --reader-class custom_reader.py
 ```
 
-Or set it in `config.toml` together with your reader config (see step 3).
+**Via `config.toml`:**
+
+```toml
+[testbench-requirement-service]
+reader_class = "custom_reader.py"
+```
 
 :::tip
-The module must be importable from the working directory where the service is started. Place your custom reader file in the same directory or add its location to `PYTHONPATH`.
+Place your custom reader file in the directory you run the service from, or pass an absolute path. For module-string imports, add the reader's directory to `PYTHONPATH` before starting:
+
+```bash
+PYTHONPATH=/path/to/readers testbench-requirement-service start
+```
 :::
