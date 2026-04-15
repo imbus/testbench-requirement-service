@@ -16,7 +16,7 @@ TestBench communicates with the Requirement Service through the **RMProxy** (Req
 
 ## Requirements
 
-- TestBench Requirement Service is installed and running (see [Quick Start](getting-started/quickstart)).
+- TestBench Requirement Service is installed and running (see [Quick Start](getting-started/quickstart.md)).
 - You know the host and port the service is listening on.
 - You have set credentials with `testbench-requirement-service set-credentials`.
 

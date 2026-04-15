@@ -37,7 +37,7 @@ C:\TestBenchRequirementService\testbench-requirement-service.exe --version
 ```
 
 :::tip Running as a Windows service
-Point NSSM or FireDaemon directly to `testbench-requirement-service.exe` in the extracted folder. See the [Windows service guide](../windows-service-installation/index.md).
+Point NSSM or FireDaemon directly to `testbench-requirement-service.exe` in the extracted folder. See the [Windows service guide](../windows-service-installation.md).
 :::
 
 ---
@@ -72,7 +72,7 @@ source .venv/bin/activate
 ```
 
 :::tip Running as a Windows service
-With a venv, point NSSM or FireDaemon to `.venv\Scripts\testbench-requirement-service.exe` (full absolute path). See the [Windows service guide](../windows-service-installation/index.md).
+With a venv, point NSSM or FireDaemon to `.venv\Scripts\testbench-requirement-service.exe` (full absolute path). See the [Windows service guide](../windows-service-installation.md).
 :::
 
 ---

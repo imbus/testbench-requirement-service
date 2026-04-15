@@ -388,4 +388,4 @@ See the [TestBench Integration](testbench-integration.md) page for the full RMPr
 
 ### Running as Windows services
 
-When running multiple instances as Windows services, give each service a distinct name and point it to its own config file. See the [Windows Service Installation](windows-service-installation/index.md) guide for details.
+When running multiple instances as Windows services, give each service a distinct name and point it to its own config file. See the [Windows Service Installation](windows-service-installation.md) guide for details.
