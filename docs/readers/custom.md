@@ -29,7 +29,6 @@ Create a Pydantic `BaseModel` for your reader's configuration. The service uses 
 
 ```python
 # custom_reader.py
-
 from pydantic import BaseModel
 
 
@@ -45,6 +44,7 @@ If your reader requires no configuration, you can skip this and leave `CONFIG_CL
 Inherit from `AbstractRequirementReader`, set `CONFIG_CLASS`, and implement all abstract methods. Your `__init__` receives an already-validated instance of your config model — you do not need to load or parse any config file yourself:
 
 ```python
+# custom_reader.py
 from testbench_requirement_service.readers.abstract_reader import AbstractRequirementReader
 
 
@@ -111,6 +111,7 @@ Point `reader_class` at your class and add the matching `reader_config` section.
 **Using a file path (recommended for single-file readers):**
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "custom_reader.py"
 
@@ -122,6 +123,7 @@ some_option = true
 **Using a module string (recommended for packaged readers):**
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "my_package.my_module.CustomRequirementReader"
 
@@ -133,6 +135,7 @@ some_option = true
 **Using a separate config file** (referenced via `reader_config_path`):
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "custom_reader.py"
 reader_config_path = "custom_reader_config.toml"

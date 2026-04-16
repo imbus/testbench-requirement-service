@@ -23,7 +23,7 @@ See [CLI Commands](cli-commands.md) for all options.
 
 ## Configuration precedence
 
-Highest priority first:
+The following order shows which source takes precedence when the same setting is defined in multiple places (highest priority first):
 
 1. **Command-line flags** (`start --host ... --port ...`)
 2. **Environment variables**
@@ -37,6 +37,7 @@ Highest priority first:
 This example uses the JSONL reader. Adjust `reader_class` and `[testbench-requirement-service.reader_config]` for other readers.
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "JsonlRequirementReader"
 host = "127.0.0.1"
@@ -99,6 +100,7 @@ The path is resolved relative to the directory where the service is started.
 **Example:**
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "JsonlRequirementReader"
 reader_config_path = "jsonl_config.toml"
@@ -116,6 +118,7 @@ reader_config_path = "jsonl_config.toml"
 **Example:**
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 host = "127.0.0.1"
 port = 8020
@@ -133,6 +136,7 @@ debug = true
 **Example:**
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 password_hash = "your_generated_hash"
 salt = "your_generated_salt"
@@ -154,7 +158,7 @@ You will be prompted for a username and password. The command writes `password_h
 Non-interactive mode (e.g. for scripts or CI pipelines — avoid passing `--password` directly in a shared-environment shell to prevent it from being written to shell history):
 
 ```bash
-testbench-requirement-service set-credentials --username admin --password mypassword
+testbench-requirement-service set-credentials --username ADMIN_USERNAME --password PASSWORD
 ```
 
 ### HTTPS / TLS
@@ -168,6 +172,7 @@ testbench-requirement-service set-credentials --username admin --password mypass
 **Example:**
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 ssl_cert = "..."
 ssl_key = "..."
@@ -192,6 +197,7 @@ When using mTLS (`ssl_ca_cert`), the service runs in single-process mode.
 **Example:**
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 proxies_count = 1
 real_ip_header = "X-Real-IP"
@@ -235,6 +241,7 @@ server {
 **Service configuration:**
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 host = "127.0.0.1"   # bind to localhost only
 port = 8020
@@ -259,7 +266,7 @@ forwarded_secret = "your-token"
 
 **`[testbench-requirement-service.server]`**
 
-Controls how Sanic spawns and manages its worker process. In most cases you can leave this section out and rely on the defaults.
+Controls how Sanic spawns and manages its worker process. In most cases you can leave out this section and rely on the defaults.
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
@@ -270,6 +277,7 @@ Controls how Sanic spawns and manages its worker process. In most cases you can 
 **Example:**
 
 ```toml
+# config.toml
 [testbench-requirement-service.server]
 single_process = false
 keep_alive_timeout = 3
@@ -292,6 +300,7 @@ run_kwargs = { workers = 4 }
 **Example:**
 
 ```toml
+# config.toml
 [testbench-requirement-service.logging.console]
 log_level = "INFO"
 log_format = "%(asctime)s %(levelname)8s: %(message)s"
@@ -310,6 +319,7 @@ log_format = "%(asctime)s %(levelname)8s: %(message)s"
 **Example:**
 
 ```toml
+# config.toml
 [testbench-requirement-service.logging.file]
 log_level = "INFO"
 log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
@@ -334,7 +344,7 @@ Each `start` command loads exactly one config file and binds to one port. To ser
 
 ### Setup
 
-**1. Create a config file per instance:**
+**1. Create one config file per instance:**
 
 `excel_config.toml`
 ```toml

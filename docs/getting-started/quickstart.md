@@ -18,10 +18,10 @@ testbench-requirement-service init
 ```
 
 This single command walks you through:
-- Service settings (host, port, debug mode)
-- Credentials setup (username, password)
-- Reader selection (JSONL, Excel, Jira, or Custom)
-- Reader-specific configuration
+- [Service settings](../configuration.md#server) (host, port, debug mode)
+- [Credentials setup](../configuration.md#authentication) (username, password)
+- Reader selection ([JSONL](../readers/jsonl.md), [Excel](../readers/excel.md), [Jira](../readers/jira.md), or [Custom](../readers/custom.md))
+- Reader-specific configuration (see the chosen reader's Configuration section)
 
 It creates a complete `config.toml` when finished.
 
@@ -38,7 +38,7 @@ Visit [http://127.0.0.1:8020/docs](http://127.0.0.1:8020/docs) to explore the AP
 ### 4. Quick API check
 
 ```bash
-curl -u "admin:mypassword" http://127.0.0.1:8020/projects
+curl -u "ADMIN_USERNAME:PASSWORD" http://127.0.0.1:8020/projects
 ```
 
 **That's it!** Your service is ready to use.
@@ -51,11 +51,12 @@ curl -u "admin:mypassword" http://127.0.0.1:8020/projects
 
 Choose the extras for your data source. See [Installation](installation.md#from-pypi-online-recommended) for available options.
 
-### 2. Create `config.toml`
+### 2. Create the configuration file
 
-Start from a minimal example. Here is one for the JSONL reader:
+Create a new file called `config.toml` in the root directory of your installation. Start from this minimal example for the JSONL reader:
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "JsonlRequirementReader"
 host = "127.0.0.1"
@@ -90,7 +91,7 @@ Visit [http://127.0.0.1:8020/docs](http://127.0.0.1:8020/docs).
 ### 6. Quick API check
 
 ```bash
-curl -u "admin:mypassword" http://127.0.0.1:8020/projects
+curl -u "ADMIN_USERNAME:PASSWORD" http://127.0.0.1:8020/projects
 ```
 
 ---

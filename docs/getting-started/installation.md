@@ -30,7 +30,7 @@ C:\TestBenchRequirementService\
   <support files>
 ```
 
-**3. Verify**
+**3. Verify installation from the command line**
 
 ```cmd
 C:\TestBenchRequirementService\testbench-requirement-service.exe --version
@@ -54,7 +54,7 @@ Use this option if you have Python installed or are about to install it.
 ### Set up a virtual environment
 
 :::note
-For [From source](#from-source-developers): skip this step and create the virtual environment inside the cloned repository instead (shown there).
+If you are installing [from source](#from-source-developers): create the virtual environment inside the cloned repository instead.
 :::
 
 A virtual environment keeps the installation isolated and provides a stable, predictable path to the executable. Navigate to the directory where you want the service to live, then run:
@@ -92,7 +92,7 @@ The base install includes the [JSONL reader](../readers/jsonl.md). Add extras fo
 | [Jira](../readers/jira.md) | `pip install testbench-requirement-service[jira]` |
 | All readers | `pip install testbench-requirement-service[excel,jira]` |
 
-Verify:
+Verify installation:
 ```bash
 testbench-requirement-service --version
 ```
@@ -113,7 +113,7 @@ With optional extras:
 pip install "testbench_requirement_service-x.y.z-py3-none-any.whl[excel,jira]"
 ```
 
-Verify:
+Verify installation:
 
 ```bash
 testbench-requirement-service --version
@@ -122,7 +122,7 @@ testbench-requirement-service --version
 :::note Fully offline install
 By default pip still fetches dependencies from PyPI. To install on a machine with no internet access:
 
-**On a machine with internet access**, download the wheel and all its dependencies into a local folder:
+**On another machine which has internet access**, download the wheel and all its dependencies into a local folder:
 
 ```bash
 pip download "testbench_requirement_service-x.y.z-py3-none-any.whl[excel,jira]" -d ./wheels
@@ -154,7 +154,7 @@ Install with all readers and development dependencies:
 pip install -e .[excel,jira,dev]
 ```
 
-Verify:
+Verify installation:
 
 ```bash
 testbench-requirement-service --version

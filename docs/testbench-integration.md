@@ -10,7 +10,7 @@ This page explains how to connect TestBench to the running TestBench Requirement
 
 ## Overview
 
-TestBench communicates with the Requirement Service through the **RMProxy** (Requirement Management Proxy) component. The connection is configured via a `.properties` file in the TestBench installation directory.
+TestBench communicates with the Requirement Service through the **RMProxy** (Requirement Management Proxy) component. The connection is configured via two `.properties` files in the TestBench installation directory.
 
 ---
 
@@ -37,18 +37,16 @@ It contains two relevant configuration files:
 Located in the `wrapper-config` subdirectory, e.g.:
 
 ```
-C:\imbus\TestBench\iTB_RMProxy\wrapper-config\requirement-service-wrapper.properties
+C:\imbus\TestBench\iTB_RMProxy\wrapper-config\RequirementService_wrapper.properties
 ```
 
 This file registers the Requirement Service as a repository and points to its settings. **You typically do not need to change anything here**, but verify it contains:
 
 ```properties
 de.imbus.itb.re.wrapper.class=de.imbus.testbench.service.rm.RequirementServiceWrapper
-
-# Repository ID shown in TestBench
+# repository ID
 name=RequirementService
-
-settings = ../RequirementService/settings.properties
+settings = ../requirementServiceWrapper/RequirementService_settings.properties
 ```
 
 The `name` value is the repository identifier that appears in TestBench. The `settings` path points to the service settings file (relative to the wrapper config file).
@@ -58,7 +56,7 @@ The `name` value is the repository identifier that appears in TestBench. The `se
 Located at (relative to the RMProxy directory):
 
 ```
-C:\imbus\TestBench\iTB_RMProxy\RequirementService\settings.properties
+C:\imbus\TestBench\iTB_RMProxy\requirementServiceWrapper\RequirementService_settings.properties
 ```
 
 **This is the file you need to edit.** Set the URL to match the host and port the Requirement Service is listening on:
@@ -72,13 +70,14 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 
 ---
 
-## Verifying the Connection
+## Verifying the connection
 
 1. Start the Requirement Service:
    ```bash
    testbench-requirement-service start
    ```
-2. Open TestBench and trigger an import of requirements. Check the service logs for incoming requests.
+2. Start the RMProxy.
+3. Open TestBench, assign the Requirement Service as a new repository in the project management of your project, and select *Test Connection* from its context menu. You may need to set the username and password in the data sources table. Check the service logs for incoming requests.
 
 ---
 
@@ -87,7 +86,7 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `Connection refused` | Service is not running or port mismatch | Start the service; verify `host` and `port` in config. |
-| `401 Unauthorized` | Wrong credentials | Re-run `testbench-requirement-service set-credentials` |
+| `401 Unauthorized` | Wrong credentials | Re-run `testbench-requirement-service set-credentials`. |
 | `500 Server Error` | Service or reader misconfiguration | Check service logs; run `configure --view` to inspect current settings. |
 
 ---
@@ -96,4 +95,4 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 
 - By default the service listens on `127.0.0.1` (loopback only). To accept connections from another machine (e.g. TestBench running on a different host), set `host = "0.0.0.0"` in `config.toml`.
 - If a firewall is in place, open the configured port (default `8020`).
-- For production deployments, consider enabling HTTPS — see [Configuration](configuration.md#https--tls)
+- For production deployments, consider enabling HTTPS — see [Configuration](configuration.md#https--tls).

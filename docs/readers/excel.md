@@ -67,7 +67,7 @@ Each project can use **either** Excel files (`.xlsx`, `.xls`) **or** text files 
 
 The Excel reader supports two configuration formats:
 
-- **TOML**: inline under `[testbench-requirement-service.reader_config]` in `config.toml`
+- **TOML**: inline under section `[testbench-requirement-service.reader_config]` inside of `config.toml`
 - **Java `.properties`**: a separate file with global settings, optionally overridden per project
 
 :::caution Windows paths in `.properties` files
@@ -112,14 +112,14 @@ Can be set globally and overridden per project.
 
 | Setting | Description | Default | Example |
 |---------|-------------|---------|---------|
-| `useExcelDirectly` | `true`: use `.xlsx`/`.xls` files. `false`: use text files | `false` | `true` |
+| `useExcelDirectly` | `true`: use `.xlsx`/`.xls` files.<br/>`false`: use text files | `false` | `true` |
 | `baselinesFromSubfolders` | Search subfolders for baseline files | `false` | `true` |
 | `worksheetName` | Worksheet name to use in Excel files (falls back to first sheet) | first sheet | `Tabelle1` |
 | `dateFormat` | Date format for version dates. Accepts Java `SimpleDateFormat` (e.g. `yyyy-MM-dd HH:mm:ss`) or Python `strftime` (e.g. `%Y-%m-%d %H:%M:%S`). Auto-detected by presence of `%`. Falls back to `dateutil` auto-detection. | auto | `yyyy-MM-dd HH:mm:ss` |
 | `header.rowIdx` | Row number of the header line (1-based) | `1` | `1` |
 | `data.rowIdx` | Row number of the first data line (1-based). Must be greater than `header.rowIdx`. | `2` | `2` |
-| `bufferMaxAgeMinutes` | Max idle age (minutes) before a cached dataframe is evicted. `0` = disable. | `1440` | `1440` |
-| `bufferMaxSizeMiB` | Max total buffer size in MiB. When exceeded, least-recently used entries are evicted to 80%. `0` = disable. | `1024` | `1024` |
+| `bufferMaxAgeMinutes` | Maximum idle age (minutes) before a cached dataframe is evicted. `0` = disable. | `1440` | `1440` |
+| `bufferMaxSizeMiB` | Maximum total buffer size in MiB. When exceeded, least-recently used entries are evicted to 80%. `0` = disable. | `1024` | `1024` |
 | `bufferCleanupIntervalMinutes` | Background cleanup interval (minutes) | `1` | `1` |
 
 #### Dataframe buffering
@@ -128,7 +128,7 @@ The Excel reader caches parsed dataframes keyed by file path. A cached entry is 
 
 ### Column mapping (attributes)
 
-Column numbering starts at **1**. Mappings for `requirement.id`, `requirement.version`, and `requirement.name` are **mandatory**. Can be overridden per project.
+Column numbering starts at **1**. Mappings for `requirement.id`, `requirement.version`, and `requirement.name` are **mandatory**. All settings can be overridden per project.
 
 | Setting | Description | Example |
 |---------|-------------|---------|
@@ -196,6 +196,7 @@ For `.properties` files: place a file named `<ProjectName>.properties` inside th
 When configuring inline in `config.toml`, keys containing dots must be **quoted**:
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "ExcelRequirementReader"
 
@@ -212,7 +213,30 @@ useExcelDirectly = false
 "requirement.status" = 5
 ```
 
-### `.properties` file
+### Separate `.toml` file
+
+```toml
+# config.toml
+[testbench-requirement-service]
+reader_class = "ExcelRequirementReader"
+reader_config_path = "excel_config.toml"
+```
+
+```toml
+# excel_config.toml (no section prefix)
+requirementsDataPath = "requirements/excel/"
+columnSeparator = ";"
+arrayValueSeparator = ","
+baselineFileExtensions = ".tsv,.csv,.txt"
+useExcelDirectly = false
+"requirement.id" = 1
+"requirement.version" = 6
+"requirement.name" = 3
+"requirement.owner" = 4
+"requirement.status" = 5
+```
+
+### Separate `.properties` file
 
 ```properties
 # reader_config.properties
@@ -281,10 +305,10 @@ udf.attr3.column=17
 
 2. Verify projects and baselines are discovered:
    ```bash
-   curl -u "admin:mypassword" http://127.0.0.1:8020/projects
+   curl -u "ADMIN_USERNAME:PASSWORD" http://127.0.0.1:8020/projects
    ```
 
-3. Confirm the response lists your project directories.
+3. Confirm that the response lists your project directories.
 
 ### Troubleshooting
 

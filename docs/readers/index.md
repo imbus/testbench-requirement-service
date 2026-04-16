@@ -13,7 +13,7 @@ A **reader** is a pluggable component that fetches projects, baselines, and requ
 |--------|------------|-------------------|----------|
 | [**JSONL**](jsonl.md) | `.jsonl` files on disk | None (included in base install) | Simple file-based requirements, CI pipelines, testing |
 | [**Excel**](excel.md) | `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` files | `pip install testbench-requirement-service[excel]` | Spreadsheet-based requirement management |
-| [**Jira**](jira.md) | Jira REST API | `pip install testbench-requirement-service[jira]` | Teams managing requirements as Jira issues |
+| [**Jira**](jira.md) | Jira REST API | `pip install testbench-requirement-service[jira]` | Teams managing requirements in Jira as issues |
 
 ## Choosing a reader
 
@@ -33,7 +33,7 @@ The **default reader**, so no extra installation is needed. Use this when:
 Reads from Excel workbooks and delimited text files. Use this when:
 - Your requirements live in `.xlsx`, `.xls`, `.csv`, `.tsv`, or `.txt` files.
 - You need flexible column mapping to match your spreadsheet layout.
-- You want per-project configuration overrides via `.properties` files.
+- You want to be able to override the configuration for a project using `.properties` files.
 
 Supports dataframe buffering for performance with large files.
 
@@ -65,6 +65,7 @@ None of the built-in readers fit? You can create your own by subclassing `Abstra
 Set `reader_class` in your `config.toml` and provide reader-specific settings under `[testbench-requirement-service.reader_config]`:
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "JsonlRequirementReader"   # or ExcelRequirementReader, JiraRequirementReader
 
@@ -75,6 +76,7 @@ reader_class = "JsonlRequirementReader"   # or ExcelRequirementReader, JiraRequi
 Alternatively, keep reader settings in a separate file using `reader_config_path`:
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "JiraRequirementReader"
 reader_config_path = "jira_config.toml"

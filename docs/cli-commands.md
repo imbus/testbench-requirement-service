@@ -29,7 +29,7 @@ testbench-requirement-service [COMMAND] [OPTIONS]
 Create a new configuration file with an interactive wizard.
 
 The wizard guides you through:
-1. Service settings (host, port, debug mode)
+1. Service settings (host, port)
 2. Credential setup (username, password)
 3. Reader selection (JSONL, Excel, Jira, or Custom)
 4. Reader-specific configuration
@@ -142,6 +142,15 @@ testbench-requirement-service start [OPTIONS]
 | `--ssl-ca-cert PATH` | Path to CA certificate file for client verification (mTLS) | — |
 
 Command-line arguments take **precedence** over configuration file settings.
+
+:::info Built-in reader class names
+When using `--reader-class`, you can specify:
+- `JsonlRequirementReader` — for JSONL files
+- `ExcelRequirementReader` — for Excel/CSV files
+- `JiraRequirementReader` — for Jira API
+
+Or provide a custom reader (e.g. `custom_reader.py` or `custom_reader.CustomClass`).
+:::
 
 ### Examples
 

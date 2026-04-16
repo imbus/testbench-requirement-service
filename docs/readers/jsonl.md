@@ -45,6 +45,7 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
 ### Minimal configuration
 
 ```toml
+# config.toml
 [testbench-requirement-service]
 reader_class = "JsonlRequirementReader"
 
@@ -73,7 +74,7 @@ requirements_path = "requirements/jsonl/"
 | **Projects** | Top-level directories inside `requirements_path` | Each directory is a project |
 | **Baselines** | `.jsonl` files inside a project directory | Each file is a baseline |
 | **Requirements** | JSON objects (one per line) in a `.jsonl` file | Each line is a requirement or folder node |
-| **User-defined attributes** | `UserDefinedAttributes.json` at the top of `requirements_path` | Defines available UDF types |
+| **User-defined attributes** | `UserDefinedAttributes.json` at the top of `requirements_path` | Defines available types of user defined fields (UDF)|
 
 ## Requirement JSON schema
 
@@ -119,18 +120,18 @@ Each line in a baseline `.jsonl` file is a JSON object representing either a req
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Requirement name |
-| `extendedID` | string | External ID |
-| `key.id` | string | Unique identifier |
-| `key.version` | object | Version info: `name`, `date`, `author`, `comment` |
-| `owner` | string | Responsible person |
-| `status` | string | Requirement status |
-| `priority` | string | Priority level |
-| `requirement` | boolean | `true` = requirement, `false` = folder/group |
-| `description` | string | Requirement description |
-| `documents` | string[] | Attached document references |
-| `parent` | string or null | Parent node ID (`null` for roots) |
-| `userDefinedAttributes` | array | User-defined fields (see below) |
+| `name` | String | Requirement name |
+| `extendedID` | String | Extended ID |
+| `key.id` | String | Unique identifier |
+| `key.version` | Object | Version info: `name`, `date`, `author`, `comment` |
+| `owner` | String | Responsible person |
+| `status` | String | Requirement status |
+| `priority` | String | Priority level |
+| `requirement` | Boolean | `true` = requirement, `false` = folder/group |
+| `description` | String | Requirement description |
+| `documents` | List[String] | Attached document references |
+| `parent` | String or null | Parent node ID (`null` for roots) |
+| `userDefinedAttributes` | List[Object] | User-defined fields (see below) |
 
 ## UserDefinedAttributes.json
 
@@ -157,7 +158,7 @@ Supported `valueType` values: `STRING`, `ARRAY`, `BOOLEAN`.
 
 2. Call the projects endpoint:
    ```bash
-   curl -u "admin:mypassword" http://127.0.0.1:8020/projects
+   curl -u "ADMIN_USERNAME:PASSWORD" http://127.0.0.1:8020/projects
    ```
 
 3. Verify that your project directories are listed in the response.
@@ -166,6 +167,6 @@ Supported `valueType` values: `STRING`, `ARRAY`, `BOOLEAN`.
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| Empty project list | Wrong `requirements_path` | Check that the path exists and contains project subdirectories |
-| 500 error on baselines | Missing `UserDefinedAttributes.json` | Create the file at the top level of `requirements_path` |
-| Malformed response | Invalid JSONL | Validate each line is valid JSON matching the required schema |
+| Empty project list | Wrong `requirements_path` | Check that the path exists and contains project subdirectories. |
+| 500 error on baselines | Missing `UserDefinedAttributes.json` | Create the file at the top level of `requirements_path`. |
+| Malformed response | Invalid JSONL | Verify that each line is valid JSON matching the required schema. |
