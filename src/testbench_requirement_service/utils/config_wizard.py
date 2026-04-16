@@ -387,10 +387,26 @@ def get_reader_class(reader_type: str) -> str | None:
     return READER_CLASSES.get(reader_type)
 
 
-def get_reader_type(reader: str) -> str | None:
-    """Infer reader type from class name."""
-    for reader_type, reader_class in READER_CLASSES.items():
-        if reader in reader_class or reader_type in reader.lower():
+def get_reader_type(reader_class: str) -> str | None:
+    """Infer reader type from a reader class path or name.
+
+    Matches in order of specificity per reader type:
+    1. Exact full path (e.g. ``"testbench_requirement_service.readers.JiraRequirementReader"``)
+    2. Exact class name segment (e.g. ``"JiraRequirementReader"``)
+    3. Exact reader type keyword, case-insensitive (e.g. ``"jira"`` or ``"Jira"``)
+    """
+    if "." in reader_class and not reader_class.endswith(".py"):
+        class_name = reader_class.rsplit(".", 1)[-1]
+    else:
+        class_name = reader_class
+
+    for reader_type, known_class in READER_CLASSES.items():
+        known_segment = known_class.rsplit(".", 1)[-1]
+        if reader_class == known_class:
+            return reader_type
+        if class_name == known_segment:
+            return reader_type
+        if class_name.lower() == reader_type:
             return reader_type
 
     return None
@@ -403,17 +419,12 @@ def configure_reader_only(config_path: Path):
     service_config = load_service_config(config_path)
 
     reader_class_path = service_config.reader_class
-    if ".py" in reader_class_path:
-        reader = Path(reader_class_path).stem
-    else:
-        reader = reader_class_path.split(".")[-1]
-    if reader:
-        click.echo(f"Current reader: {reader}\n")
+    reader_type = get_reader_type(reader_class_path) or "custom"
+    click.echo(f"Current reader type: {reader_type.capitalize()}\n")
 
     change_reader_type = questionary.confirm(
         "Do you want to change the reader type?", default=False
     ).ask()
-
     if change_reader_type is None:
         click.echo("\nConfiguration cancelled.")
         return
@@ -429,14 +440,15 @@ def configure_reader_only(config_path: Path):
                 Choice("⚙️  Custom Reader", "custom"),
             ],
         ).ask()
+        if reader_type is None:
+            click.echo("\nConfiguration cancelled.")
+            return
+
+    reader_class: str | None
+    if reader_type == "custom" and not change_reader_type:
+        reader_class = reader_class_path
     else:
-        reader_type = get_reader_type(reader) or "custom"
-
-    if reader_type is None:
-        click.echo("\nConfiguration cancelled.")
-        return
-
-    reader_class = get_reader_class(reader_type)
+        reader_class = get_reader_class(reader_type)
     if reader_class is None:
         click.echo("\nConfiguration cancelled.")
         return

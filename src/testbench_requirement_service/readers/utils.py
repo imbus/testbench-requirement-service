@@ -7,7 +7,7 @@ from testbench_requirement_service.utils.config import (
     load_properties_config,
     load_toml_config,
 )
-from testbench_requirement_service.utils.helpers import (
+from testbench_requirement_service.utils.import_utils import (
     get_project_root,
     import_class_from_file_path,
     import_class_from_module_str,
@@ -79,20 +79,25 @@ def get_reader_class_from_module_str(
 def get_requirement_reader_from_reader_class_str(
     reader_class: str,
 ) -> type[AbstractRequirementReader]:
-    reader_path = Path(reader_class)
-    if reader_path.is_file():
-        return get_reader_class_from_file_path(reader_path)
-    local_file = Path(__file__).resolve().parent / reader_path
-    if local_file.is_file():
-        return get_reader_class_from_file_path(local_file)
-    if not local_file.suffix and local_file.with_suffix(".py").is_file():
-        return get_reader_class_from_file_path(local_file.with_suffix(".py"))
-    relative_from_root = get_project_root() / reader_path
-    if relative_from_root.is_file():
-        return get_reader_class_from_file_path(relative_from_root)
-    if not relative_from_root.suffix and relative_from_root.with_suffix(".py").is_file():
-        return get_reader_class_from_file_path(relative_from_root.with_suffix(".py"))
-    return get_reader_class_from_module_str(reader_class)
+    try:
+        reader_path = Path(reader_class)
+        if reader_path.is_file():
+            return get_reader_class_from_file_path(reader_path)
+        local_file = Path(__file__).resolve().parent / reader_path
+        if local_file.is_file():
+            return get_reader_class_from_file_path(local_file)
+        if not local_file.suffix and local_file.with_suffix(".py").is_file():
+            return get_reader_class_from_file_path(local_file.with_suffix(".py"))
+        relative_from_root = get_project_root() / reader_path
+        if relative_from_root.is_file():
+            return get_reader_class_from_file_path(relative_from_root)
+        if not relative_from_root.suffix and relative_from_root.with_suffix(".py").is_file():
+            return get_reader_class_from_file_path(relative_from_root.with_suffix(".py"))
+        return get_reader_class_from_module_str(reader_class)
+    except ImportError as e:
+        raise ImportError(
+            f"Failed to import RequirementReader class from '{reader_class}': {e}"
+        ) from e
 
 
 def get_reader_config_class(

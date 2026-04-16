@@ -44,6 +44,10 @@ class RequirementServiceConfig(BaseModel):
         default=None,
         description="Optional path to a separate reader configuration file",
     )
+    reader_config: dict = Field(
+        default_factory=dict,
+        description="Inline reader configuration when no separate file is used",
+    )
     host: str = Field(
         DEFAULT_HOST,
         description="Hostname or IP address to bind the service to",
@@ -88,17 +92,13 @@ class RequirementServiceConfig(BaseModel):
         default=None,
         description="Secret token for validating Forwarded header (security measure)",
     )
-    server: ServerConfig = Field(
-        default_factory=lambda: ServerConfig(),  # noqa: PLW0108
-        description="Sanic server configuration",
-    )
     logging: LoggingConfig = Field(
         default_factory=LoggingConfig,
         description="Structured logging configuration for the service runtime",
     )
-    reader_config: dict = Field(
-        default_factory=dict,
-        description="Inline reader configuration when no separate file is used",
+    server: ServerConfig = Field(
+        default_factory=lambda: ServerConfig(),  # noqa: PLW0108
+        description="Sanic server configuration",
     )
 
     @field_validator("reader_config_path")
