@@ -81,7 +81,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/imbus/testbench-requirement-service"
-Documentation = "https://github.com/imbus/testbench-requirement-service/tree/main/docs"
+Documentation = "https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/intro"
 Source = "https://github.com/imbus/testbench-requirement-service"
 Changelog = "https://github.com/imbus/testbench-requirement-service/blob/main/CHANGELOG.md"
 
