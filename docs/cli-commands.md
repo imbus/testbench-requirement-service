@@ -143,7 +143,7 @@ testbench-requirement-service start [OPTIONS]
 
 Command-line arguments take **precedence** over configuration file settings.
 
-:::info Built-in reader class names
+:::info[Built-in reader class names]
 When using `--reader-class`, you can specify:
 - `JsonlRequirementReader` — for JSONL files
 - `ExcelRequirementReader` — for Excel/CSV files

@@ -182,7 +182,7 @@ ssl_ca_cert = "certs/ca.crt"   # optional — enables mTLS
 
 Set both `ssl_cert` and `ssl_key` to enable HTTPS. Add `ssl_ca_cert` to require client certificates (mTLS).
 
-:::caution limitation
+:::warning[limitation]
 When using mTLS (`ssl_ca_cert`), the service runs in single-process mode.
 :::
 
@@ -214,7 +214,7 @@ forwarded_secret = "secret"
 3. `X-Forwarded-For` + other `X-Forwarded-*` headers (if `proxies_count` is set)
 4. Direct connection IP (default)
 
-:::warning Security
+:::warning[Security]
 Without proxy configuration, the service ignores all proxy headers. This is safe. Only enable proxy settings when actually behind a proxy.
 :::
 

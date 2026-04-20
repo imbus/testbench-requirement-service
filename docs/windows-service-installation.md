@@ -17,7 +17,7 @@ Use these values when following the central guide:
 | `<servicePort>` | `8020` |
 | `<serviceInstallDir>` | Your installation directory, e.g. `C:\TestBenchRequirementService` |
 
-:::note Executable path
+:::note[Executable path]
 - **Ready-to-use executable**: `C:\TestBenchRequirementService\testbench-requirement-service.exe`
 - **Python venv**: `C:\TestBenchRequirementService\.venv\Scripts\testbench-requirement-service.exe`
 

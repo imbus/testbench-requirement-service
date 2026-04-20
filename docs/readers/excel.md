@@ -36,7 +36,7 @@ requirements/excel/
     └── Specs.tsv
 ```
 
-:::caution One file type per project
+:::warning[One file type per project]
 Each project can use **either** Excel files (`.xlsx`, `.xls`) **or** text files (`.csv`, `.tsv`, `.txt`) — not both at the same time. This is controlled by the `useExcelDirectly` setting (globally or per project via a `.properties` file). Files of the wrong type are silently ignored.
 :::
 
@@ -70,7 +70,7 @@ The Excel reader supports two configuration formats:
 - **TOML**: inline under section `[testbench-requirement-service.reader_config]` inside of `config.toml`
 - **Java `.properties`**: a separate file with global settings, optionally overridden per project
 
-:::caution Windows paths in `.properties` files
+:::warning[Windows paths in `.properties` files]
 Java `.properties` files treat backslashes (`\`) as escape characters:
 
 - `C:\folder\file` → parsed incorrectly ❌
@@ -146,7 +146,7 @@ Column numbering starts at **1**. Mappings for `requirement.id`, `requirement.ve
 | `requirement.type` | Column indicating folder vs. requirement | `10` |
 | `requirement.folderPattern` | Regex to identify folders in the `type` column | `.*folder.*` |
 
-:::note Character limits
+:::note[Character limits]
 Values that exceed the limits above are automatically **truncated** (with `...` appended) and a warning is logged. This matches TestBench's internal field length constraints. The `description` and `references` fields are not subject to length limits.
 :::
 
