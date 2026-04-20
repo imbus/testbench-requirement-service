@@ -1,0 +1,35 @@
+p, ul, ol, dl, h1, h2, h3, h4, h5, h6, blockquote, pre, form, table {
+    margin: 0 0 12px 0;
+}
+
+h4 {
+    font-size: 9px;
+}
+
+ul, ol {
+    padding-left: 12px;
+}
+
+li {
+    margin-bottom: 4px;
+}
+
+tt {
+    background-color: #ececef;
+    color: #18171d;
+}
+
+a {
+    text-decoration: underline;
+    color: #0b5fd7;
+}
+
+.jira-issue-macro {
+    background-color: #f4f5f7;
+}
+
+.resolved {
+    background-color: #eef7ec;
+    border-color: #d7eed6;
+    color: #1b5e20;
+}
