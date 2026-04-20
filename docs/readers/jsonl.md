@@ -5,7 +5,7 @@ title: JSONL Reader
 
 # JSONL Reader
 
-The JSONL reader is the **default reader**. It reads requirements from JSON Lines (`.jsonl`) files stored on disk. No extra dependencies are required.
+The JSONL reader is the **default reader**. It reads requirements from [JSON Lines](https://jsonlines.org/) (`.jsonl`) files stored on disk. No extra dependencies are required.
 
 **When to use:** Your requirements are exported or generated as `.jsonl` files, or you want the simplest setup with no external dependencies.
 

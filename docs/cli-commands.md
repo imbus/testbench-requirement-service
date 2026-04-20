@@ -13,7 +13,7 @@ testbench-requirement-service [COMMAND] [OPTIONS]
 
 ---
 
-## Commands Overview
+## Commands overview
 
 | Command | Description |
 |---|---|
@@ -179,7 +179,7 @@ testbench-requirement-service start --ssl-cert certs/server.crt --ssl-key certs/
 
 ---
 
-## Getting Help
+## Getting help
 
 ```bash
 # General help

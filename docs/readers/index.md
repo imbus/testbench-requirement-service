@@ -82,4 +82,9 @@ reader_class = "JiraRequirementReader"
 reader_config_path = "jira_config.toml"
 ```
 
+```toml
+# jira_config.toml
+# reader-specific settings go here
+```
+
 See the [Configuration](../configuration.md#service-settings) reference for details.

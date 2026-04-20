@@ -94,6 +94,10 @@ Visit [http://127.0.0.1:8020/docs](http://127.0.0.1:8020/docs).
 curl -u "ADMIN_USERNAME:PASSWORD" http://127.0.0.1:8020/projects
 ```
 
+:::tip
+Use `testbench-requirement-service configure` to update specific parts of your configuration later without starting from scratch.
+:::
+
 ---
 
 ## API documentation endpoints
@@ -105,10 +109,6 @@ Once the service is running, these endpoints are available without authenticatio
 | `/docs` | Interactive Swagger UI |
 | `/docs/openapi.json` | OpenAPI specification (JSON) |
 | `/openapi.yaml` | OpenAPI specification (YAML) |
-
-:::tip
-Use `testbench-requirement-service configure` to update specific parts of your configuration later without starting from scratch.
-:::
 
 ## Next steps
 

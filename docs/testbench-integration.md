@@ -91,7 +91,7 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 
 ---
 
-## Network Considerations
+## Network considerations
 
 - By default the service listens on `127.0.0.1` (loopback only). To accept connections from another machine (e.g. TestBench running on a different host), set `host = "0.0.0.0"` in `config.toml`.
 - If a firewall is in place, open the configured port (default `8020`).

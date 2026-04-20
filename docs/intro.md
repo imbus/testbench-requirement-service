@@ -26,9 +26,9 @@ title: Introduction
 | **Requirements tree** | The baseline content exposed as a tree of folders/groups and leaf requirements. |
 | **Reader** | A pluggable component that knows how to fetch projects, baselines, and requirements from a specific data source. |
 
-## How it works
+## Architecture
 
-The service runs a [Sanic](https://sanic.dev)-based HTTP server and delegates all domain logic to a configured `RequirementReader` implementation. Reader configuration can live inline in the main `config.toml` or in a separate file.
+The service runs a [Sanic](https://sanic.dev)-based HTTP server and delegates all domain logic to a configured `RequirementReader` implementation.
 
 ```
 ┌──────────────────────────────────────┐

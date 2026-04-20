@@ -15,7 +15,7 @@ Typical use cases:
 
 ---
 
-## How It Works
+## How it works
 
 At startup the service reads `reader_class` from `config.toml`, imports the class by its path or fully qualified Python dotted path, and instantiates it with the validated `reader_config` section. As long as your class is importable and implements the interface, no other changes to the service are required.
 
