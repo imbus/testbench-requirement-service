@@ -9,11 +9,11 @@ A lightweight REST API service for [imbus TestBench](https://www.testbench.com) 
 ## Features
 
 - **Multiple readers**: JSONL files, Excel spreadsheets (`.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt`), or Jira via REST API
-- **Unified REST API**: single API surface regardless of the underlying data source
-- **Interactive setup wizard**: `testbench-requirement-service init` generates a complete config in seconds
+- **Unified REST API**: one consistent API surface regardless of the underlying data source
+- **Interactive setup wizard**: `testbench-requirement-service init` generates a complete configuration in seconds
 - **Swagger UI**: built-in interactive API docs at `/docs`
 - **HTTPS & mTLS**: optional TLS and mutual TLS for production deployments
-- **Windows service ready**: deploy with NSSM, FireDaemon, or YAJSW
+- **Windows service support**: deploy as a service with NSSM, FireDaemon, or YAJSW
 - **Extensible**: implement `AbstractRequirementReader` to connect any data source
 
 ## Installation
@@ -32,7 +32,7 @@ Optional extras for additional readers:
 | Excel | `.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt` | `pip install testbench-requirement-service[excel]` |
 | Jira | Jira REST API | `pip install testbench-requirement-service[jira]` |
 
-**Standalone executable** (no Python required): download the pre-built binary from the [GitHub releases page](https://github.com/imbus/testbench-requirement-service/releases).
+**Standalone executable** — no Python required. Download the pre-built binary from the [GitHub releases page](https://github.com/imbus/testbench-requirement-service/releases).
 
 ## Quick start
 
@@ -48,16 +48,16 @@ The service runs at `http://127.0.0.1:8020` by default. Open `/docs` for the int
 
 ## Documentation
 
-Full documentation is available in the [docs/](https://github.com/imbus/testbench-requirement-service/tree/main/docs) folder of the repository:
+Full documentation is available on the [TestBench Ecosystem documentation site](https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/intro):
 
-- [Introduction](https://github.com/imbus/testbench-requirement-service/blob/main/docs/intro.md)
-- [Installation](https://github.com/imbus/testbench-requirement-service/blob/main/docs/getting-started/installation.md)
-- [Quickstart](https://github.com/imbus/testbench-requirement-service/blob/main/docs/getting-started/quickstart.md)
-- [Configuration](https://github.com/imbus/testbench-requirement-service/blob/main/docs/configuration.md)
-- [CLI Commands](https://github.com/imbus/testbench-requirement-service/blob/main/docs/cli-commands.md)
-- [Readers overview](https://github.com/imbus/testbench-requirement-service/blob/main/docs/readers/index.md)
-- [TestBench Integration](https://github.com/imbus/testbench-requirement-service/blob/main/docs/testbench-integration.md)
-- [Windows Service Installation](https://github.com/imbus/testbench-requirement-service/blob/main/docs/windows-service-installation/index.md)
+- [Introduction](https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/intro)
+- [Installation](https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/getting-started/installation)
+- [Quickstart](https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/getting-started/quickstart)
+- [Configuration](https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/configuration)
+- [CLI Commands](https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/cli-commands)
+- [Readers overview](https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/readers/)
+- [TestBench Integration](https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/testbench-integration)
+- [Windows Service Installation](https://imbus.github.io/testbench-ecosystem-documentation/testbench-requirement-service/windows-service-installation)
 
 ## Contributing
 
