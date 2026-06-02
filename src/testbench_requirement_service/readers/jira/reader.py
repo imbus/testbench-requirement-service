@@ -30,6 +30,7 @@ from testbench_requirement_service.readers.jira.utils import (
     get_config_value,
     get_field_id,
     get_issue_version,
+    is_sprint_type_field,
     is_version_type_field,
 )
 
@@ -269,6 +270,28 @@ class JiraRequirementReader(AbstractRequirementReader):
         )
         return None
 
+    def _extract_baselines_from_field(
+        self, field: Field, field_name: str, project: str
+    ) -> list[str]:
+        """Extract baseline options from a select-list type field's allowedValues."""
+        baselines: list[str] = []
+        allowed_values = getattr(field, "allowedValues", []) or []
+        for value in allowed_values:
+            if isinstance(value, dict):
+                baseline = value.get("name") or value.get("value") or str(value)
+            else:
+                baseline = (
+                    getattr(value, "name", None) or getattr(value, "value", None) or str(value)
+                )
+            if baseline:
+                baselines.append(baseline)
+        if not baselines:
+            logger.warning(
+                f"Baseline field '{field_name}' has no allowedValues for project "
+                f"{project}. Verify it is a select-list type field in Jira."
+            )
+        return baselines
+
     def _fetch_baselines_for_project(self, project: str) -> list[str]:
         project_key = self.projects[project].key
         baseline_field = get_config_value(self.config, "baseline_field", project)
@@ -282,11 +305,12 @@ class JiraRequirementReader(AbstractRequirementReader):
             if baseline_field_obj:
                 if is_version_type_field(baseline_field_obj):
                     baselines = self.jira_client.fetch_project_versions(project_key)
+                elif is_sprint_type_field(baseline_field_obj):
+                    baselines = self._fetch_sprint_baselines(project_key)
                 else:
-                    allowed_values = getattr(baseline_field_obj, "allowedValues", []) or []
-                    baselines = [
-                        av.get("name") or av.get("value") or str(av) for av in allowed_values
-                    ]
+                    baselines = self._extract_baselines_from_field(
+                        baseline_field_obj, baseline_field, project
+                    )
             else:
                 logger.warning(f"Baseline field '{baseline_field}' not found for project {project}")
                 baselines = []
@@ -298,10 +322,16 @@ class JiraRequirementReader(AbstractRequirementReader):
         baselines: list[str] = []
         boards = self.jira_client.fetch_project_boards(project_key)
         scrum_boards = [board for board in boards if board.type == "scrum"]
+        if not scrum_boards:
+            logger.warning(
+                f"No scrum boards found for project {project_key}. "
+                "Sprint-based baselines require at least one scrum board."
+            )
+            return baselines
         for board in scrum_boards:
             sprints = self.jira_client.fetch_sprints(board.id)
             for sprint in sprints:
-                if sprint.name not in seen:
+                if sprint.name and sprint.name not in seen:
                     seen.add(sprint.name)
                     baselines.append(sprint.name)
         return baselines

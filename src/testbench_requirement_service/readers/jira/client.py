@@ -20,6 +20,7 @@ DEFAULT_CHUNK_SIZE = 100
 
 _JIRA_CLOUD_API3_BASE = "{server}/rest/api/3/{path}"
 
+SPRINT_FIELD_SCHEMA_KEY = "com.pyxis.greenhopper.jira:gh-sprint"
 _EPIC_LINK_SCHEMA_KEY = "com.pyxis.greenhopper.jira:gh-epic-link"
 _PARENT_LINK_SCHEMA_KEY = "com.atlassian.jpo:jpo-custom-field-parent"
 
