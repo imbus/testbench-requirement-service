@@ -1,4 +1,17 @@
-p, ul, ol, dl, h1, h2, h3, h4, h5, h6, blockquote, pre, form, table {
+p,
+ul,
+ol,
+dl,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+blockquote,
+pre,
+form,
+table {
     margin: 0 0 12px 0;
 }
 
@@ -6,7 +19,8 @@ h4 {
     font-size: 9px;
 }
 
-ul, ol {
+ul,
+ol {
     padding-left: 12px;
 }
 
@@ -14,9 +28,11 @@ li {
     margin-bottom: 4px;
 }
 
+code,
 tt {
     background-color: #ececef;
     color: #18171d;
+    font-size: 9px;
 }
 
 a {
