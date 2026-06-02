@@ -1,3 +1,4 @@
+import math
 from http import HTTPStatus
 from typing import Any
 
@@ -43,6 +44,24 @@ class JiraClient:
         self._parent_link_field_id: str | None = None
         if not self.jira._is_cloud:
             self._init_parent_link_fields()
+        logger.info(
+            "Connected to Jira %s (version=%s, cloud=%s, use_issuetypes=%s)",
+            self.config.server_url,
+            self.jira._version,
+            self.jira._is_cloud,
+            self.use_issuetypes_endpoint,
+        )
+
+    @property
+    def site_url(self) -> str:
+        """Return the human-facing Jira site URL (always the configured server_url).
+
+        This is the URL to use for building browser links, display URLs, and any
+        URL embedded in responses shown to the user.  It is distinct from the
+        internal gateway URL used when connecting via the Atlassian API gateway
+        for scoped API tokens.
+        """
+        return self.config.server_url.rstrip("/")
 
     def _connect(self) -> JIRA:
         try:
@@ -131,8 +150,11 @@ class JiraClient:
         expand: str | None = None,
         properties: str | None = None,
     ) -> Issue | None:
+        logger.debug("Fetching issue '%s'", issue_id)
         try:
-            return self.jira.issue(issue_id, fields=fields, expand=expand, properties=properties)
+            issue = self.jira.issue(issue_id, fields=fields, expand=expand, properties=properties)
+            logger.debug("Successfully fetched issue '%s'", issue_id)
+            return issue
         except JIRAError as e:
             if e.status_code == HTTPStatus.NOT_FOUND:
                 logger.debug(f"Issue {issue_id} not found ({HTTPStatus.NOT_FOUND})")
@@ -158,15 +180,23 @@ class JiraClient:
         if not issue_keys:
             return []
 
+        num_batches = math.ceil(len(issue_keys) / chunk_size)
+        logger.debug(
+            "Fetching %d issue(s) by key in %d batch(es) (chunk_size=%d)",
+            len(issue_keys),
+            num_batches,
+            chunk_size,
+        )
         all_issues: list[Issue] = []
 
-        for batch in _chunks(issue_keys, chunk_size):
+        for batch_index, batch in enumerate(_chunks(issue_keys, chunk_size), start=1):
             keys_str = ",".join(batch)
             if base_jql:
                 jql = f"({base_jql}) AND issuekey IN ({keys_str})"
             else:
                 jql = f"issuekey IN ({keys_str})"
 
+            logger.debug("Fetching batch %d/%d (%d key(s))", batch_index, num_batches, len(batch))
             batch_issues = self.fetch_issues_by_jql(
                 jql_query=jql,
                 fields=fields,
@@ -176,6 +206,9 @@ class JiraClient:
             )
             all_issues.extend(batch_issues)
 
+        logger.debug(
+            "Fetched %d issue(s) total for %d requested key(s)", len(all_issues), len(issue_keys)
+        )
         return all_issues
 
     def fetch_issues_by_jql(
@@ -186,12 +219,16 @@ class JiraClient:
         properties: str | None = None,
         max_results: int = DEFAULT_MAX_RESULTS,
     ) -> list[Issue]:
+        logger.debug("Fetching issues by JQL (max_results=%d): %s", max_results, jql_query)
         try:
             issues: list[Issue] = []
 
             if self.use_manual_pagination:
                 start_at = 0
+                page_num = 0
                 while True:
+                    page_num += 1
+                    logger.debug("Fetching JQL page %d (start_at=%d)", page_num, start_at)
                     issues_chunk = self.jira.search_issues(
                         jql_query,
                         startAt=start_at,
@@ -202,13 +239,26 @@ class JiraClient:
                     )
                     chunk = list(issues_chunk)
                     issues.extend(chunk)
+                    logger.debug(
+                        "JQL page %d: received %d issue(s) (total so far: %d)",
+                        page_num,
+                        len(chunk),
+                        len(issues),
+                    )
                     if len(chunk) < max_results:
                         # No more pages
                         break
                     start_at += len(chunk)
             else:
                 next_page_token = None
+                page_num = 0
                 while True:
+                    page_num += 1
+                    logger.debug(
+                        "Fetching JQL page %d (has_next_page_token=%s)",
+                        page_num,
+                        bool(next_page_token),
+                    )
                     issues_chunk = self.jira.enhanced_search_issues(
                         jql_str=jql_query,
                         nextPageToken=next_page_token,
@@ -217,24 +267,38 @@ class JiraClient:
                         expand=expand,
                         properties=properties,
                     )
-                    issues.extend(list(issues_chunk))
+                    chunk = list(issues_chunk)
+                    issues.extend(chunk)
+                    logger.debug(
+                        "JQL page %d: received %d issue(s) (total so far: %d)",
+                        page_num,
+                        len(chunk),
+                        len(issues),
+                    )
                     if not issues_chunk.nextPageToken:
                         break
                     next_page_token = issues_chunk.nextPageToken
+            logger.debug("Fetched %d issue(s) total using JQL query", len(issues))
             return issues
         except JIRAError as e:
             logger.warning(f"Error fetching issues by JQL '{jql_query}': {e}")
             return []
 
     def fetch_projects(self) -> list[Project]:
+        logger.debug("Fetching projects from Jira")
         try:
-            return self.jira.projects()
+            projects = self.jira.projects()
+            logger.debug("Fetched %d project(s) from Jira", len(projects))
+            return projects
         except JIRAError as e:
             logger.warning(f"Error fetching projects: {e}")
             return []
 
     def _fetch_fields_for_issue_type(self, project_key: str, issue_type_id: str) -> list[Field]:
         """Fetch all fields for a single issue type using pagination."""
+        logger.debug(
+            "Fetching fields for issue type '%s' in project '%s'", issue_type_id, project_key
+        )
         fields: list[Field] = []
         start_at = 0
         while True:
@@ -249,6 +313,7 @@ class JiraClient:
             if returned < DEFAULT_MAX_RESULTS:
                 break
             start_at += returned
+        logger.debug("Fetched %d field(s) for issue type '%s'", len(fields), issue_type_id)
         return fields
 
     def _fetch_fields_via_issuetypes_endpoint(self, project_key: str) -> dict[str, Field]:
@@ -256,6 +321,9 @@ class JiraClient:
 
         Uses a dict keyed by field ID to deduplicate fields that appear across multiple issue types.
         """
+        logger.debug(
+            "Fetching project fields via issuetypes endpoint for project '%s'", project_key
+        )
         fields_dict: dict[str, Field] = {}
         start_at = 0
         while True:
@@ -263,6 +331,11 @@ class JiraClient:
                 project_key, startAt=start_at, maxResults=DEFAULT_MAX_RESULTS
             )
             for issue_type in issue_types_chunk:
+                logger.debug(
+                    "Processing fields for issue type '%s' in project '%s'",
+                    issue_type.id,
+                    project_key,
+                )
                 try:
                     for field in self._fetch_fields_for_issue_type(project_key, issue_type.id):
                         fields_dict[field.fieldId] = field
@@ -274,10 +347,18 @@ class JiraClient:
             if returned < DEFAULT_MAX_RESULTS:
                 break
             start_at += returned
+        logger.debug(
+            "Fetched %d unique field(s) for project '%s' via issuetypes endpoint",
+            len(fields_dict),
+            project_key,
+        )
         return fields_dict
 
     def _fetch_fields_via_createmeta_endpoint(self, project_key: str) -> dict[str, Field]:
         """Fetch all project fields using the legacy createmeta endpoint."""
+        logger.debug(
+            "Fetching project fields via createmeta endpoint for project '%s'", project_key
+        )
         fields_dict: dict[str, Field] = {}
         createmeta = self.jira.createmeta(project_key, expand="projects.issuetypes.fields")
         projects = createmeta.get("projects", [])
@@ -295,6 +376,11 @@ class JiraClient:
             except Exception as e:
                 issue_type_id = issue_type.get("id", "unknown")
                 logger.warning(f"Error fetching issue fields for issue type {issue_type_id}: {e}")
+        logger.debug(
+            "Fetched %d unique field(s) for project '%s' via createmeta endpoint",
+            len(fields_dict),
+            project_key,
+        )
         return fields_dict
 
     def fetch_project_issue_fields(self, project_key: str) -> list[Field]:
@@ -304,35 +390,49 @@ class JiraClient:
         else:
             logger.debug("_fetch_project_issue_fields: Use createmeta endpoint")
             fields_dict = self._fetch_fields_via_createmeta_endpoint(project_key)
-        return list(fields_dict.values())
+        result = list(fields_dict.values())
+        logger.debug("Fetched %d unique field(s) for project '%s'", len(result), project_key)
+        return result
 
     def fetch_project_versions(self, project_key: str) -> list[str]:
+        logger.debug("Fetching versions for project '%s'", project_key)
         try:
             versions = self.jira.project_versions(project_key)
             if not versions:
+                logger.debug("No versions found for project '%s'", project_key)
                 return []
-            return [version.name for version in versions if version.name]
+            names = [version.name for version in versions if version.name]
+            logger.debug("Fetched %d version(s) for project '%s'", len(names), project_key)
+            return names
         except JIRAError as e:
             logger.warning(f"Error fetching project versions for {project_key}: {e}")
             return []
 
     def fetch_project_boards(self, project_key: str) -> list[Board]:
+        logger.debug("Fetching boards for project '%s'", project_key)
         try:
-            return self.jira.boards(projectKeyOrID=project_key)  # type: ignore[no-any-return]
+            boards = self.jira.boards(projectKeyOrID=project_key)
+            logger.debug("Fetched %d board(s) for project '%s'", len(boards), project_key)
+            return boards  # type: ignore[no-any-return]
         except JIRAError as e:
             logger.warning(f"Error fetching boards for project {project_key}: {e}")
             return []
 
     def fetch_sprints(self, board_id: int) -> list[Sprint]:
+        logger.debug("Fetching sprints for board %d", board_id)
         try:
-            return self.jira.sprints(board_id)  # type: ignore[no-any-return]
+            sprints = self.jira.sprints(board_id)
+            logger.debug("Fetched %d sprint(s) for board %d", len(sprints), board_id)
+            return sprints  # type: ignore[no-any-return]
         except JIRAError as e:
             logger.warning(f"Error fetching sprints for board {board_id}: {e}")
             return []
 
     def fetch_sprint_by_name(self, project_key: str, sprint_name: str) -> Sprint | None:
+        logger.debug("Searching for sprint '%s' in project '%s'", sprint_name, project_key)
         boards = self.fetch_project_boards(project_key)
         scrum_boards = [board for board in boards if board.type == "scrum"]
+        logger.debug("Found %d scrum board(s) in project '%s'", len(scrum_boards), project_key)
         for board in scrum_boards:
             sprints = self.fetch_sprints(board.id)
             for sprint in sprints:
@@ -345,9 +445,12 @@ class JiraClient:
         """Return all issue fields, refreshing automatically when the cache expires."""
         cached = self._fields_cache.get()
         if cached is not None:
+            logger.debug("Returning %d cached issue field(s)", len(cached))
             return cached
+        logger.debug("Fetching all issue fields from Jira")
         try:
             fields = self.jira.fields()
+            logger.debug("Fetched %d issue field(s) from Jira", len(fields))
             self._fields_cache.set(fields)
             return fields
         except JIRAError as e:
@@ -369,11 +472,20 @@ class JiraClient:
         ``GET /rest/api/2/issue/{key}/changelog`` — Jira Cloud only.
         Raises on any error; callers are responsible for exception handling.
         """
+        logger.debug("Fetching changelog for '%s' via paginated endpoint", issue_id_or_key)
         max_results = 100
         histories: list[Any] = []
         start_at = 0
+        page_num = 0
 
         while True:
+            page_num += 1
+            logger.debug(
+                "Fetching changelog page %d for '%s' (start_at=%d)",
+                page_num,
+                issue_id_or_key,
+                start_at,
+            )
             page = self.jira._get_json(
                 f"issue/{issue_id_or_key}/changelog",
                 params={"startAt": start_at, "maxResults": max_results},
@@ -385,12 +497,20 @@ class JiraClient:
                 break
             histories.extend(dict2resource(h) for h in page_histories)
             start_at += len(page_histories)
+            logger.debug(
+                "Changelog page %d for '%s': received %d entries (total so far: %d)",
+                page_num,
+                issue_id_or_key,
+                len(page_histories),
+                len(histories),
+            )
             total = page.get("total")
             if page.get("isLast", False) or (total is not None and start_at >= total):
                 break
             if len(page_histories) < max_results:
                 break
 
+        logger.debug("Fetched %d changelog entries for '%s'", len(histories), issue_id_or_key)
         return histories
 
     def _fetch_changelog_via_expand(self, issue_id_or_key: str) -> list[Any]:
@@ -401,6 +521,7 @@ class JiraClient:
         instance types but is truncated to ~100 entries (no pagination).
         Raises on any error; callers are responsible for exception handling.
         """
+        logger.debug("Fetching changelog for '%s' via expand", issue_id_or_key)
         issue = self.fetch_issue(issue_id_or_key, expand="changelog")
         if issue is None:
             return []
@@ -416,6 +537,7 @@ class JiraClient:
                 len(raw_histories),
                 total,
             )
+        logger.debug("Fetched %d changelog entries for '%s'", len(raw_histories), issue_id_or_key)
         return list(raw_histories)
 
     def fetch_issue_changelog_histories(self, issue_id_or_key: str) -> list[Any]:
@@ -429,6 +551,7 @@ class JiraClient:
 
         Returns an empty list on failure.
         """
+        logger.debug("Fetching changelog histories for issue '%s'", issue_id_or_key)
         try:
             if self.jira._is_cloud:
                 return self._fetch_changelog_via_endpoint(issue_id_or_key)
@@ -455,8 +578,16 @@ class JiraClient:
         """
         issue_changelogs: dict[str, list[Any]] = {}
 
+        logger.debug(
+            "Bulk fetching changelog histories for %d issue(s) in batches of %d",
+            len(issue_ids),
+            batch_size,
+        )
         try:
-            for batch in _chunks(issue_ids, batch_size):
+            for batch_index, batch in enumerate(_chunks(issue_ids, batch_size), start=1):
+                logger.debug(
+                    "Bulk changelog batch %d: fetching %d issue(s)", batch_index, len(batch)
+                )
                 next_page_token: str | None = None
 
                 while True:
@@ -473,7 +604,8 @@ class JiraClient:
                     )
 
                     # Process each issue's changelog histories directly
-                    for issue_changelog in page_data.get("issueChangeLogs", []):
+                    issue_change_logs = page_data.get("issueChangeLogs", [])
+                    for issue_changelog in issue_change_logs:
                         issue_id = issue_changelog.get("issueId")
                         if not issue_id:
                             continue
@@ -487,6 +619,13 @@ class JiraClient:
                             issue_changelogs[issue_id] = converted_histories
 
                     next_page_token = page_data.get("nextPageToken")
+                    logger.debug(
+                        "Bulk changelog batch %d page: processed %d issue changelog(s) "
+                        "(has_next_page=%s)",
+                        batch_index,
+                        len(issue_change_logs),
+                        bool(next_page_token),
+                    )
                     if not next_page_token:
                         break
 
@@ -496,6 +635,10 @@ class JiraClient:
                 f"Returning {len(issue_changelogs)} partial result(s)."
             )
 
+        logger.debug(
+            "Bulk changelog fetch completed: got changelogs for %d issue(s)",
+            len(issue_changelogs),
+        )
         return issue_changelogs
 
     def fetch_changelog_histories(
@@ -519,6 +662,7 @@ class JiraClient:
         if not issues:
             return {}
 
+        logger.debug("Fetching changelog histories for %d issue(s)", len(issues))
         issue_changelogs: dict[str, list[Any]] = {}
 
         # On Cloud, use the efficient bulk endpoint (requires numeric IDs; remapped to keys here).
@@ -552,6 +696,7 @@ class JiraClient:
         for issue in issues:
             issue_changelogs[issue.key] = self.fetch_issue_changelog_histories(issue.key)
 
+        logger.debug("Fetched changelog histories for %d issue(s)", len(issue_changelogs))
         return issue_changelogs
 
     def get_parent_key(self, issue: Issue) -> str | None:

@@ -41,14 +41,30 @@ def build_rendered_field_html(
     include_head: bool = True,
 ) -> str:
     """Build HTML for a Jira rendered field."""
+    issue_key = getattr(issue, "key", "unknown")
+    logger.debug("Building rendered HTML for field '%s' in issue '%s'", field_id, issue_key)
     rendered_html = getattr(issue.renderedFields, field_id, "")
     if not rendered_html:
+        logger.debug("No rendered HTML found for field '%s' in issue '%s'", field_id, issue_key)
         return wrap_in_html("", include_head=include_head)
 
+    html_size = len(rendered_html)
+    logger.debug(
+        "Enriching rendered HTML for field '%s' in issue '%s' (%d bytes)",
+        field_id,
+        issue_key,
+        html_size,
+    )
     enriched_body = enrich_rendered_html(
         rendered_html,
         issue=issue,
         jira_server_url=jira_server_url,
+    )
+    logger.debug(
+        "Completed rendering for field '%s' in issue '%s' (result: %d bytes)",
+        field_id,
+        issue_key,
+        len(enriched_body),
     )
     return wrap_in_html(enriched_body, include_head=include_head)
 
@@ -71,12 +87,26 @@ def enrich_rendered_html(
     """Normalize Jira rendered HTML for downstream consumers."""
     if not rendered_html:
         return ""
+    issue_key = getattr(issue, "key", "unknown")
+    logger.debug("Parsing HTML for issue '%s'", issue_key)
     soup = BeautifulSoup(rendered_html, "html.parser")
+
+    logger.debug("Processing task items for issue '%s'", issue_key)
     process_task_items(soup)
+
+    logger.debug("Processing ins tags for issue '%s'", issue_key)
     process_ins_tags(soup)
+
+    logger.debug("Processing del tags for issue '%s'", issue_key)
     process_del_tags(soup)
+
+    logger.debug("Processing image tags for issue '%s'", issue_key)
     process_image_tags(soup, issue, jira_server_url)
+
+    logger.debug("Processing anchor tags for issue '%s'", issue_key)
     process_anchor_tags(soup, jira_server_url)
+
+    logger.debug("Completed HTML enrichment for issue '%s'", issue_key)
     return str(soup)
 
 
@@ -135,6 +165,7 @@ def fetch_attachment_info(  # noqa: PLR0911
 ) -> dict[str, Any] | None:
     """Fetch and encode a specific attachment by ID, with caching for duplicate references."""
     if attachment_id in attachment_cache:
+        logger.debug("Using cached attachment info for attachment %s", attachment_id)
         return attachment_cache[attachment_id]
 
     attachments = getattr(issue.fields, "attachment", []) or []
@@ -166,6 +197,9 @@ def fetch_attachment_info(  # noqa: PLR0911
                 attachment_cache[attachment_id] = info
                 return info
 
+            logger.debug(
+                "Fetching attachment %s from Jira (size=%s bytes)", attachment_id, size or "unknown"
+            )
             try:
                 image_bytes = attachment.get()
             except Exception as e:
@@ -199,7 +233,12 @@ def process_image_tags(
     attachment_cache: dict[str, dict[str, Any]] = {}
     image_cache: dict[str, str | None] = {}
 
-    for img in soup.find_all("img"):
+    images = soup.find_all("img")
+    if images:
+        issue_key = getattr(issue, "key", "unknown")
+        logger.debug("Processing %d image(s) for issue '%s'", len(images), issue_key)
+
+    for img_index, img in enumerate(images, start=1):
         # Check next sibling and strip existing whitespace
         next_sib = img.next_sibling
         if next_sib and isinstance(next_sib, str):
@@ -219,10 +258,10 @@ def process_image_tags(
             img.attrs.pop("src", None)
             continue
 
-        if handle_attachment_image(img, src, issue, attachment_cache, jira_server_url):
+        if handle_attachment_image(img, src, issue, attachment_cache, jira_server_url, img_index):
             continue
 
-        if handle_remote_image(img, src, image_cache, issue, jira_server_url):
+        if handle_remote_image(img, src, image_cache, issue, jira_server_url, img_index):
             continue
 
         # Unsupported
@@ -230,16 +269,24 @@ def process_image_tags(
         img.attrs.pop("src", None)
 
 
-def handle_attachment_image(
+def handle_attachment_image(  # noqa: PLR0913
     img,
     src: str,
     issue: Issue,
     attachment_cache: dict[str, dict[str, Any]],
     jira_server_url: str,
+    img_index: int = 0,
 ) -> bool:
     attachment_match = JIRA_ATTACHMENT_URL_PATTERN.fullmatch(src)
     if attachment_match:
         attachment_id = attachment_match.group(1)
+        issue_key = getattr(issue, "key", "unknown")
+        logger.debug(
+            "Processing attachment image %d for issue '%s' (attachment_id=%s)",
+            img_index,
+            issue_key,
+            attachment_id,
+        )
         attachment_info = fetch_attachment_info(issue, attachment_id, attachment_cache)
         apply_attachment_image(img, attachment_info, attachment_id, jira_server_url)
         return True
@@ -266,8 +313,13 @@ def apply_attachment_image(
     img["src"] = build_absolute_jira_url(fallback_url, jira_server_url)
 
 
-def handle_remote_image(
-    img, src: str, image_cache: dict[str, str | None], issue: Issue, jira_server_url: str
+def handle_remote_image(  # noqa: PLR0913
+    img,
+    src: str,
+    image_cache: dict[str, str | None],
+    issue: Issue,
+    jira_server_url: str,
+    img_index: int = 0,
 ) -> bool:
     # Normalize relative URLs
     if is_relative_url(src):
@@ -284,11 +336,17 @@ def handle_remote_image(
 
     # Try to inline
     if should_inline_remote_image(src, jira_server_url):
+        issue_key = getattr(issue, "key", "unknown")
+        logger.debug("Fetching remote image %d for issue '%s': %s", img_index, issue_key, src)
         data_uri = fetch_image_as_data_uri(issue, src)
         image_cache[src] = data_uri
         if data_uri:
             img["src"] = data_uri
+            logger.debug(
+                "Successfully inlined remote image %d for issue '%s'", img_index, issue_key
+            )
             return True
+        logger.debug("Failed to inline remote image %d for issue '%s'", img_index, issue_key)
 
     # Use remote URL directly
     image_cache[src] = None
@@ -377,8 +435,10 @@ def fetch_image_as_data_uri(
 ) -> str | None:
     session: ResilientSession | None = getattr(issue, "_session", None)
     if session is None:
+        logger.debug("No session available for fetching remote image: %s", url)
         return None
 
+    logger.debug("Fetching remote image from URL: %s", url)
     try:
         response = session.get(url)
         response.raise_for_status()
