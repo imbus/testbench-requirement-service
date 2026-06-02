@@ -3,7 +3,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse
 
 from bs4 import BeautifulSoup
 from jira.resilientsession import ResilientSession
@@ -13,6 +13,7 @@ from testbench_requirement_service.log import logger
 
 MAX_EMBEDDED_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB limit for embedded images
 JIRA_ATTACHMENT_URL_PATTERN = re.compile(r"^/rest/api/\d+/attachment/content/(\d+)$")
+JIRA_UNIVERSAL_AVATAR_PATH_PATTERN = re.compile(r"/rest/api/\w+/universal_avatar/view/type/[^/]+")
 DEFAULT_INLINE_STYLES_PATH = Path(__file__).parents[2] / "static" / "rendered_fields.css"
 
 
@@ -328,6 +329,8 @@ def handle_remote_image(  # noqa: PLR0913
     if not is_remote_http(src):
         return False
 
+    src = ensure_png_format_on_avatar_url(src)
+
     # Check cache
     if src in image_cache:
         if image_cache[src]:
@@ -363,6 +366,33 @@ def process_anchor_tags(soup: BeautifulSoup, jira_server_url: str) -> None:
             continue
         if is_relative_url(href):
             anchor["href"] = build_absolute_jira_url(href, jira_server_url)
+
+
+def ensure_png_format_on_avatar_url(url: str) -> str:
+    """Ensure format=png and size=xsmall are set on Jira universal_avatar image URLs.
+
+    Matches all REST API versions (v2, v3, …) for the three universal_avatar endpoints:
+      /rest/api/{version}/universal_avatar/view/type/{type}
+      /rest/api/{version}/universal_avatar/view/type/{type}/avatar/{id}
+      /rest/api/{version}/universal_avatar/view/type/{type}/owner/{entityId}
+
+    If the URL is not a universal_avatar image endpoint, it is returned unchanged.
+    Any existing format= or size= parameters are replaced to enforce a small PNG output.
+    """
+    parsed = urlparse(url)
+
+    if not JIRA_UNIVERSAL_AVATAR_PATH_PATTERN.search(parsed.path):
+        return url
+
+    query_params = [
+        (k, v)
+        for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+        if k not in {"format", "size"}
+    ]
+    query_params.append(("format", "png"))
+    query_params.append(("size", "xsmall"))
+
+    return parsed._replace(query=urlencode(query_params, doseq=True)).geturl()
 
 
 def build_absolute_jira_url(url: str, jira_server_url: str) -> str:
