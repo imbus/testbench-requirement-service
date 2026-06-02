@@ -16,6 +16,7 @@ from testbench_requirement_service.models.requirement import (
     UserDefinedAttribute,
 )
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
+from testbench_requirement_service.readers.jira.field_formatters import format_value, to_str
 from testbench_requirement_service.readers.jira.render_utils import build_rendered_field_html
 
 UNSET_DATETIME = datetime.min.replace(tzinfo=timezone.utc)
@@ -82,42 +83,48 @@ def build_userdefinedattribute_object(
     field_value: Any,
     issue: Issue,
 ) -> UserDefinedAttribute:
-    name = field.get("name", "") if isinstance(field, dict) else getattr(field, "name", "")
+    if isinstance(field, dict):
+        name = field.get("name", "")
+        field_id = field.get("id") or field.get("key") or field.get("fieldId") or name
+    else:
+        name = getattr(field, "name", "")
+        field_id = get_field_id(field)
+
     value_type = extract_valuetype_from_issue_field(field)
-    if value_type == "ARRAY":
-        string_values: list[str] | None = None
-        if isinstance(field_value, list):
-            string_values = []
-            for item in field_value:
-                if hasattr(item, "value"):
-                    string_values.append(item.value)
-                elif hasattr(item, "name"):
-                    string_values.append(item.name)
-                else:
-                    string_values.append(str(item))
-        return UserDefinedAttribute(
-            name=name,
-            valueType="ARRAY",
-            stringValues=string_values,
-        )
+
     if value_type == "BOOLEAN":
         return UserDefinedAttribute(
             name=name,
             valueType="BOOLEAN",
             booleanValue=bool(field_value),
         )
-    # Default to STRING type
-    if hasattr(field_value, "value"):
-        string_value = field_value.value
-    elif hasattr(field_value, "name"):
-        string_value = field_value.name
+
+    if value_type == "ARRAY":
+        string_values: list[str] | None = None
+        if isinstance(field_value, list):
+            formatted = format_value(field_id, name, field_value, issue)
+            if isinstance(formatted, list):
+                string_values = formatted
+            else:
+                string_values = [to_str(item) for item in field_value]
+        return UserDefinedAttribute(
+            name=name,
+            valueType="ARRAY",
+            stringValues=string_values,
+        )
+
+    if field_value is None:
+        return UserDefinedAttribute(name=name, valueType="STRING", stringValue=None)
+
+    formatted = format_value(field_id, name, field_value, issue)
+    if isinstance(formatted, str):
+        string_value: str | None = formatted
+    elif isinstance(formatted, list):
+        string_value = ", ".join(formatted)
     else:
-        string_value = str(field_value) if field_value else None
-    return UserDefinedAttribute(
-        name=name,
-        valueType="STRING",
-        stringValue=string_value,
-    )
+        string_value = to_str(field_value)
+
+    return UserDefinedAttribute(name=name, valueType="STRING", stringValue=string_value)
 
 
 def build_userdefinedattribute_objects_for_issue(
@@ -292,20 +299,8 @@ def extract_baselines_from_issue(issue: Issue, baseline_field: str) -> list[str]
     if value is None:
         return []
     if isinstance(value, list):
-        result = []
-        for entry in value:
-            if hasattr(entry, "name"):
-                result.append(str(entry.name))
-            elif hasattr(entry, "value"):
-                result.append(str(entry.value))
-            else:
-                result.append(str(entry))
-        return result
-    if hasattr(value, "name"):
-        return [str(value.name)]
-    if hasattr(value, "value"):
-        return [str(value.value)]
-    return [str(value)]
+        return [to_str(entry) for entry in value]
+    return [to_str(value)]
 
 
 def format_description(description: str) -> str:
