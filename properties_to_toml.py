@@ -1,27 +1,30 @@
-import re
+import argparse
 import sys
-import tomli_w  # Requires: pip install tomli-w
+from pathlib import Path
+
+import tomli_w
 
 
-def parse_properties(file_path):
-    """Parses a .properties file into a flat dictionary, handling escaped backslashes."""
+def parse_properties(file_path: Path):
+    """Parses a .properties file into a flat dictionary, handling lines cleanly."""
     properties = {}
-    with open(file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            # Skip comments and empty lines
-            if not line or line.startswith("#") or line.startswith("!"):
-                continue
+    try:
+        with file_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()  # noqa: PLW2901
+                # Skip comments and empty lines
+                if not line or line.startswith(("#", "!")):
+                    continue
 
-            # Split by the first '='
-            if "=" in line:
-                key, val = line.split("=", 1)
-                key = key.strip()
-                val = val.strip()
-
-                # Clean up Java properties path/escape artifacts if necessary
-                # (un-escaping standard characters)
-                properties[key] = val
+                # Split by the first '='
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip()
+                    properties[key] = val
+    except FileNotFoundError:
+        print(f"Error: The properties file '{file_path}' was not found.")
+        sys.exit(1)
     return properties
 
 
@@ -41,69 +44,97 @@ def convert_val(val):
         return float(val)
     except ValueError:
         pass
-    # Return string if no matches, retaining single backslashes safely
     return val
 
 
-def properties_to_toml(properties_file, toml_output_file):
+def properties_to_toml(
+    properties_file: Path, toml_output_file: Path, include_base_template: bool = False
+):
+    """
+    Converts properties to TOML.
+    If include_base_template is True, appends the boilerplate infrastructural sections.
+    """
     props = parse_properties(properties_file)
 
-    # Initialize the base template structure
-    toml_dict = {
-        "testbench-requirement-service": {
-            "reader_class": "testbench_requirement_service.readers.ExcelRequirementReader",
-            "host": "127.0.0.1",
-            "port": 8020,
-            "debug": False,
-            "password_hash": "a3d0339584abd7307e250b319d1126d967c2890e677a7b9b466cca08031c6be6",
-            "salt": "fY9qE8wBo7VRRNJoDAy7qg==",
-        },
-        "testbench-requirement-service.reader_config": {},
-        "testbench-requirement-service.logging.console": {
-            "log_level": "INFO",
-            "log_format": "%(asctime)s %(levelname)8s: %(message)s",
-        },
-        "testbench-requirement-service.logging.file": {
-            "log_level": "INFO",
-            "log_format": "%(asctime)s - %(levelname)8s - %(name)s - %(message)s",
-            "file_path": "testbench-requirement-service.log",
-        },
-        "testbench-requirement-service.server": {
-            "single_process": True,
-            "keep_alive_timeout": 5,
-        },
-        "testbench-requirement-service.server.run_kwargs": {},
-    }
-
-    reader_config = toml_dict["testbench-requirement-service.reader_config"]
-
-    # Keys to process from properties
+    # Create the core configuration dictionary dynamically from properties
+    reader_config = {}
     for key, raw_val in props.items():
-        converted_val = convert_val(raw_val)
+        reader_config[key] = convert_val(raw_val)
 
-        # Map directly to reader_config
-        reader_config[key] = converted_val
+    # Build final dictionary structure based on template preference
+    if include_base_template:
+        toml_dict = {
+            "testbench-requirement-service": {
+                "reader_class": "testbench_requirement_service.readers.ExcelRequirementReader",
+                "host": "127.0.0.1",
+                "port": 8020,
+                "debug": False,
+                "password_hash": "a3d0339584abd7307e250b319d1126d967c2890e677a7b9b466cca08031c6be6",
+                "salt": "fY9qE8wBo7VRRNJoDAy7qg==",
+            },
+            "testbench-requirement-service.reader_config": reader_config,
+            "testbench-requirement-service.logging.console": {
+                "log_level": "INFO",
+                "log_format": "%(asctime)s %(levelname)8s: %(message)s",
+            },
+            "testbench-requirement-service.logging.file": {
+                "log_level": "INFO",
+                "log_format": "%(asctime)s - %(levelname)8s - %(name)s - %(message)s",
+                "file_path": "testbench-requirement-service.log",
+            },
+            "testbench-requirement-service.server": {
+                "single_process": True,
+                "keep_alive_timeout": 5,
+            },
+            "testbench-requirement-service.server.run_kwargs": {},
+        }
+    else:
+        # Isolated output: Only builds the parsed section
+        defaults = {
+            "bufferMaxAgeMinutes": 1440.0,
+            "bufferMaxSizeMiB": 1024.0,
+            "bufferCleanupIntervalMinutes": 1.0,
+        }
+        for k, v in defaults.items():
+            if k not in reader_config:
+                reader_config[k] = v
+        toml_dict = {"testbench-requirement-service.reader_config": reader_config}
 
-    # Inject default service buffer values if missing from the property file
-    defaults = {
-        "bufferMaxAgeMinutes": 1440.0,
-        "bufferMaxSizeMiB": 1024.0,
-        "bufferCleanupIntervalMinutes": 1.0,
-    }
-    for k, v in defaults.items():
-        if k not in reader_config:
-            reader_config[k] = v
-
-    # Write out using tomli_w to ensure correct quoting of dotted keys
-    with open(toml_output_file, "wb") as f:
+    # Write out using tomli_w to preserve quoted dotted keys
+    with toml_output_file.open("wb") as f:
         tomli_w.dump(toml_dict, f)
 
-    print(f"Successfully converted {properties_file} -> {toml_output_file}")
+    print(f"Successfully converted: {properties_file} -> {toml_output_file}")
+    print(f"Base template structure included: {include_base_template}")
 
 
 if __name__ == "__main__":
-    # Example usage: python convert.py genericexcel.properties config.toml
-    input_prop = sys.argv[1] if len(sys.argv) > 1 else "genericexcel.properties"
-    output_toml = sys.argv[2] if len(sys.argv) > 2 else "config1.toml"
+    # Setting up command line argument parsing
+    parser = argparse.ArgumentParser(
+        description="Convert an imbus TestBench .properties file into a TOML configuration file."
+    )
 
-    properties_to_toml(input_prop, output_toml)
+    parser.add_argument(
+        "input_file",
+        nargs="?",
+        default="genericexcel.properties",
+        help="Path to the input .properties file (default: genericexcel.properties)",
+    )
+    parser.add_argument(
+        "output_file",
+        nargs="?",
+        default="config2.toml",
+        help="Path to the output .toml file (default: config.toml)",
+    )
+    parser.add_argument(
+        "-f",
+        "--full",
+        action="store_true",
+        help="Include the full base infrastructure template (logging, server settings, etc.)",
+    )
+
+    args = parser.parse_args()
+
+    properties_to_toml(
+        Path(args.input_file), Path(args.output_file), include_base_template=args.full
+    )
