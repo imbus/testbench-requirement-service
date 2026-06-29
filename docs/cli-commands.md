@@ -20,6 +20,7 @@ testbench-requirement-service [COMMAND] [OPTIONS]
 | [`init`](#init) | Interactive wizard to create a new configuration file from scratch. |
 | [`configure`](#configure) | Create or update an existing configuration interactively. |
 | [`set-credentials`](#set-credentials) | Set the service username and password. |
+| [`convert-properties`](#convert-properties) | Convert an Excel `.properties` config into TOML. |
 | [`start`](#start) | Start the requirement service. |
 
 ---
@@ -115,6 +116,47 @@ testbench-requirement-service set-credentials
 
 # Non-interactive
 testbench-requirement-service set-credentials --username admin --password mypassword
+```
+
+---
+
+## `convert-properties`
+
+Convert an Excel reader `.properties` file into TOML for this service.
+
+```bash
+testbench-requirement-service convert-properties [OPTIONS]
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--input-file PATH` | Path to the input `.properties` file | `genericexcel.properties` |
+| `--output-file PATH` | Path to the generated `.toml` file | `config2.toml` |
+| `--full` | Include full service + logging + server template | off |
+
+### Dependency checks
+
+This command checks for required Excel conversion dependencies before running. If any are missing, it prints a clear error and exits with a non-zero status.
+
+Install missing dependencies with:
+
+```bash
+pip install testbench-requirement-service[excel]
+```
+
+### Examples
+
+```bash
+# Convert with defaults
+testbench-requirement-service convert-properties
+
+# Convert custom files
+testbench-requirement-service convert-properties --input-file genericexcel.properties --output-file config.toml
+
+# Include full template output
+testbench-requirement-service convert-properties --full
 ```
 
 ---

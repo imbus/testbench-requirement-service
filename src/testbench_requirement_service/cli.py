@@ -19,6 +19,11 @@ from testbench_requirement_service.utils.config_wizard import (
     show_main_menu,
     view_current_config,
 )
+from testbench_requirement_service.utils.properties_to_toml import (
+    get_missing_dependencies,
+    properties_to_toml,
+    REQUIRED_EXCEL_CONVERTER_MODULES,
+)
 
 
 def print_service_banner():
@@ -275,9 +280,58 @@ def set_credentials(config_path, username, password):
     configure_credentials_only(config_path, username=username, password=password)
 
 
+@click.command("convert-properties")
+@click.option(
+    "--input-file",
+    "input_file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="genericexcel.properties",
+    show_default=True,
+    help="Path to the input .properties file.",
+)
+@click.option(
+    "--output-file",
+    "output_file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="config.toml",
+    show_default=True,
+    help="Path to the generated .toml file.",
+)
+@click.option(
+    "--full",
+    is_flag=True,
+    help="Include the full base template (service, logging, and server sections).",
+)
+def convert_properties_command(input_file: Path, output_file: Path, full: bool):
+    """Convert an Excel .properties reader config into TOML."""
+    missing = get_missing_dependencies(REQUIRED_EXCEL_CONVERTER_MODULES)
+    if missing:
+        deps = ", ".join(missing)
+        raise click.ClickException(
+            "Missing required dependencies for 'convert-properties': "
+            f"{deps}.\n"
+            "Install with: pip install testbench-requirement-service[excel]"
+        )
+
+    try:
+        properties_to_toml(input_file, output_file, include_base_template=full)
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"Properties file not found: {input_file}") from exc
+    except OSError as exc:
+        raise click.ClickException(
+            f"Could not write TOML output file '{output_file}': {exc}"
+        ) from exc
+    except ImportError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"Successfully converted: {input_file} -> {output_file}")
+    click.echo(f"Base template structure included: {full}")
+
+
 cli.add_command(init)
 cli.add_command(configure)
 cli.add_command(set_credentials)
+cli.add_command(convert_properties_command)
 cli.add_command(start)
 
 if __name__ == "__main__":
