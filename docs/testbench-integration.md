@@ -51,6 +51,18 @@ settings = ../requirementServiceWrapper/RequirementService_settings.properties
 
 The `name` value is the repository identifier that appears in TestBench. The `settings` path points to the service settings file (relative to the wrapper config file).
 
+### Migration and Link Preservation
+
+A requirement is uniquely defined by the combination of three elements:
+
+1. **RepoID**: the value of the `name` property in `<RM-Wrapper-Installation>\wrapper-config\requirement-service-wrapper.properties`
+2. **Requirement name**
+3. **Requirement version**
+
+During migration, existing links to elements are preserved only if this three-part combination stays unchanged.
+
+**Crucial migration rule:** The RepoID of the new service wrapper must use exactly the same `name` value as the old service wrapper. After migration, remove the old wrapper to preserve existing data and avoid duplicates.
+
 ### 2. Service settings
 
 Located at (relative to the RMProxy directory):
