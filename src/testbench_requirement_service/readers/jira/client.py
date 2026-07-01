@@ -2,6 +2,7 @@ import math
 from http import HTTPStatus
 from typing import Any
 
+import requests
 from jira import JIRA, JIRAError
 from jira.resources import (
     Board,
@@ -20,6 +21,8 @@ DEFAULT_MAX_RESULTS = 100
 DEFAULT_CHUNK_SIZE = 100
 
 _JIRA_CLOUD_API3_BASE = "{server}/rest/api/3/{path}"
+_JIRA_GATEWAY_BASE = "https://api.atlassian.com/ex/jira/{cloud_id}"
+_TENANT_INFO_PATH = "/_edge/tenant_info"
 
 _EPIC_LINK_SCHEMA_KEY = "com.pyxis.greenhopper.jira:gh-epic-link"
 _PARENT_LINK_SCHEMA_KEY = "com.atlassian.jpo:jpo-custom-field-parent"
@@ -34,8 +37,10 @@ def _chunks(lst: list, n: int):
 class JiraClient:
     def __init__(self, config: JiraRequirementReaderConfig):
         self.config = config
-        self.jira = self._connect()
         self._fields_cache: TTLCache[list[dict[str, Any]]] = TTLCache(ttl=config.cache_ttl)
+        self._uses_gateway: bool = False
+        self._gateway_url: str | None = None
+        self.jira = self._connect()
         # The following flags determine which Jira API endpoints to use
         self.use_issuetypes_endpoint = not self.jira._is_cloud and self.jira._version >= (8, 4, 0)
         self.use_manual_pagination = not self.jira._is_cloud
@@ -63,42 +68,194 @@ class JiraClient:
         """
         return self.config.server_url.rstrip("/")
 
-    def _connect(self) -> JIRA:
-        try:
-            options: dict[str, Any] = {"verify": self.config.ssl_verify}
-            if self.config.client_cert is not None:
-                options["client_cert"] = self.config.client_cert
+    @property
+    def gateway_url(self) -> str | None:
+        """Return the Atlassian API gateway URL, or ``None`` when not in gateway mode.
 
-            if self.config.auth_type == "basic":
-                return JIRA(
-                    server=self.config.server_url,
-                    options=options,
-                    basic_auth=(self.config.username or "", self.config.password or ""),
-                    max_retries=self.config.max_retries,
-                    timeout=self.config.timeout,
+        When set, all authenticated HTTP fetches (attachments, inline images) must
+        use this URL as the base instead of ``site_url`` because scoped API tokens
+        are only accepted by the gateway, not by the direct Jira Cloud site.
+        """
+        return self._gateway_url
+
+    def _build_jira_options(self) -> dict[str, Any]:
+        options: dict[str, Any] = {"verify": self.config.ssl_verify}
+        if self.config.client_cert is not None:
+            options["client_cert"] = self.config.client_cert
+        return options
+
+    def _create_jira_instance(self, server: str) -> JIRA:
+        """Create a JIRA instance against *server* using the configured auth."""
+        logger.debug(
+            "Creating JIRA instance for '%s' (auth_type='%s')", server, self.config.auth_type
+        )
+        options = self._build_jira_options()
+        if self.config.auth_type == "basic":
+            return JIRA(
+                server=server,
+                options=options,
+                basic_auth=(self.config.username or "", self.config.password or ""),
+                max_retries=self.config.max_retries,
+                timeout=self.config.timeout,
+            )
+        if self.config.auth_type == "token":
+            return JIRA(
+                server=server,
+                options=options,
+                token_auth=self.config.token,
+                max_retries=self.config.max_retries,
+                timeout=self.config.timeout,
+            )
+        if self.config.auth_type == "oauth1":
+            return JIRA(
+                server=server,
+                options=options,
+                oauth={
+                    "access_token": self.config.oauth1_access_token,
+                    "access_token_secret": self.config.oauth1_access_token_secret,
+                    "consumer_key": self.config.oauth1_consumer_key,
+                    "key_cert": self.config.oauth1_key_cert,
+                },
+                max_retries=self.config.max_retries,
+                timeout=self.config.timeout,
+            )
+        raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
+
+    def _verify_connection(self, jira: JIRA) -> bool:
+        """Verify that *jira* can authenticate successfully by calling ``/myself``.
+
+        The ``/myself`` endpoint is available on both Jira Cloud and Server/DC
+        and requires valid authentication on both.  It is used here because the
+        JIRA constructor alone is insufficient — the ``serverInfo`` endpoint used
+        during construction is public and returns HTTP 200 regardless of whether
+        the credentials are valid.
+
+        Returns ``True`` on success, ``False`` on HTTP 401.  Any other error is
+        re-raised so the caller can surface it as a hard connection failure.
+        """
+        try:
+            jira.myself()
+            return True
+        except JIRAError as e:
+            if e.status_code == HTTPStatus.UNAUTHORIZED:
+                logger.debug("Connection verification returned 401 for '%s'.", jira.server_url)
+                return False
+            raise
+
+    def _fetch_cloud_id(self) -> str | None:
+        """Fetch the Atlassian Cloud ID for this Jira instance.
+
+        Uses the public ``/_edge/tenant_info`` endpoint which requires no
+        authentication and is available on all Jira Cloud sites (including
+        those using custom domains).
+
+        Returns the cloud ID string, or ``None`` when the request fails or
+        the response does not contain the expected field.
+        """
+        server_url = self.config.server_url.rstrip("/")
+        tenant_info_url = f"{server_url}{_TENANT_INFO_PATH}"
+        try:
+            response = requests.get(
+                tenant_info_url,
+                timeout=self.config.timeout,
+                verify=self.config.ssl_verify,
+            )
+            response.raise_for_status()
+            data = response.json()
+            cloud_id: str | None = data.get("cloudId")
+            if not cloud_id:
+                logger.warning(
+                    f"Tenant info response from '{tenant_info_url}' did not contain 'cloudId'. "
+                    f"Response keys: {list(data.keys())}"
                 )
-            if self.config.auth_type == "token":
-                return JIRA(
-                    server=self.config.server_url,
-                    options=options,
-                    token_auth=self.config.token,
-                    max_retries=self.config.max_retries,
-                    timeout=self.config.timeout,
-                )
-            if self.config.auth_type == "oauth1":
-                return JIRA(
-                    server=self.config.server_url,
-                    options=options,
-                    oauth={
-                        "access_token": self.config.oauth1_access_token,
-                        "access_token_secret": self.config.oauth1_access_token_secret,
-                        "consumer_key": self.config.oauth1_consumer_key,
-                        "key_cert": self.config.oauth1_key_cert,
-                    },
-                    max_retries=self.config.max_retries,
-                    timeout=self.config.timeout,
-                )
-            raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
+                return None
+            logger.debug(f"Fetched Atlassian Cloud ID: {cloud_id}")
+            return cloud_id
+        except requests.RequestException as e:
+            logger.warning(f"Could not fetch Atlassian Cloud ID from '{tenant_info_url}': {e}")
+            return None
+        except (ValueError, KeyError) as e:
+            logger.warning(
+                f"Unexpected response from '{tenant_info_url}' while fetching Cloud ID: {e}"
+            )
+            return None
+
+    def _connect_via_gateway(self) -> JIRA:
+        """Connect to Jira Cloud through the Atlassian API gateway.
+
+        Fetches the Cloud ID, then creates a JIRA instance against the gateway URL.
+
+        Raises ``ConnectionError`` when the Cloud ID cannot be fetched or the
+        gateway connection fails.
+        """
+        cloud_id = self._fetch_cloud_id()
+        if not cloud_id:
+            raise ConnectionError(
+                f"Could not obtain Atlassian Cloud ID for '{self.config.server_url}'. "
+                "Unable to attempt gateway connection for scoped API token."
+            )
+
+        gateway_url = _JIRA_GATEWAY_BASE.format(cloud_id=cloud_id)
+        logger.info(
+            f"Connecting to Jira via Atlassian gateway (scoped API token mode): {gateway_url}"
+        )
+
+        jira = self._create_jira_instance(gateway_url)
+        if not self._verify_connection(jira):
+            raise ConnectionError(
+                f"Authentication failed against the Atlassian gateway '{gateway_url}'. "
+                f"Please verify your credentials for '{self.config.server_url}'."
+            )
+
+        self._uses_gateway = True
+        self._gateway_url = gateway_url
+        self._patch_session_for_gateway(jira._session, gateway_url)
+
+        return jira
+
+    def _patch_session_for_gateway(self, session: Any, gateway_url: str) -> None:
+        """Rewrite site-URL requests to the Atlassian gateway at transport level.
+
+        Scoped API tokens are only accepted by the gateway, not by the direct
+        Jira Cloud site URL.  Attaching `content` and inline-image URLs are
+        always absolute site URLs embedded in API responses.  Patching ``send``
+        here means every request that goes through this session — regardless of
+        who constructed the URL — is transparently routed to the gateway without
+        any caller needing to know about the gateway.
+        """
+        site_base = self.site_url.rstrip("/")
+        gateway_base = gateway_url.rstrip("/")
+        original_send = session.send
+
+        def _rewriting_send(request: Any, **kwargs: Any) -> Any:
+            if request.url and request.url.startswith(site_base + "/"):
+                request.url = gateway_base + request.url[len(site_base) :]
+            return original_send(request, **kwargs)
+
+        session.send = _rewriting_send
+
+    def _connect(self) -> JIRA:
+        """Connect to Jira using the configured authentication.
+
+        Connection strategy:
+        1. Create a JIRA instance against ``config.server_url``.
+        2. Verify authentication via ``/myself`` (for all auth types — the
+           JIRA constructor alone is insufficient because ``serverInfo`` is public).
+        3. If verification fails with HTTP 401 **and** the instance is Jira Cloud
+           **and** ``auth_type`` is ``"basic"``, attempt a gateway connection via
+           the Atlassian API gateway (``api.atlassian.com``).  This transparently
+           supports scoped API tokens which only work through the gateway.
+        4. If all attempts fail, raise ``ConnectionError`` with a clear message.
+
+        Gateway fallback is deliberately restricted to Cloud + basic auth because:
+        - ``token`` and ``oauth1`` are only used on Jira Data Center / Server,
+          which has no gateway.
+        - A 401 on DC basic auth means wrong credentials, not a scoped token.
+        """
+        try:
+            jira = self._create_jira_instance(self.config.server_url)
+        except NotImplementedError:
+            raise
         except Exception as e:
             status_code = getattr(e, "status_code", None)
             detail = f"HTTP {status_code}: {e}" if status_code else f"{type(e).__name__}: {e}"
@@ -106,6 +263,46 @@ class JiraClient:
                 f"Could not connect to Jira at '{self.config.server_url}' "
                 f"(auth_type='{self.config.auth_type}'): {detail}"
             ) from e
+
+        try:
+            auth_ok = self._verify_connection(jira)
+        except Exception as e:
+            status_code = getattr(e, "status_code", None)
+            detail = f"HTTP {status_code}: {e}" if status_code else f"{type(e).__name__}: {e}"
+            raise ConnectionError(
+                f"Could not connect to Jira at '{self.config.server_url}' "
+                f"(auth_type='{self.config.auth_type}'): {detail}"
+            ) from e
+
+        if auth_ok:
+            logger.debug(
+                "Connected to Jira at '%s' (auth_type='%s').",
+                self.config.server_url,
+                self.config.auth_type,
+            )
+            return jira
+
+        if self.config.auth_type == "basic" and jira._is_cloud:
+            logger.info(
+                "Direct authentication to '%s' failed (likely a scoped API token). "
+                "Attempting connection via Atlassian API gateway.",
+                self.config.server_url,
+            )
+            try:
+                return self._connect_via_gateway()
+            except ConnectionError as gateway_error:
+                raise ConnectionError(
+                    f"Could not connect to Jira at '{self.config.server_url}' "
+                    f"(auth_type='{self.config.auth_type}'): "
+                    "Direct authentication failed and gateway fallback also failed: "
+                    f"{gateway_error}"
+                ) from gateway_error
+
+        raise ConnectionError(
+            f"Could not connect to Jira at '{self.config.server_url}' "
+            f"(auth_type='{self.config.auth_type}'): "
+            "Authentication failed (HTTP 401). Please check your credentials."
+        )
 
     def _init_parent_link_fields(self):
         """
