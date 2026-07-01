@@ -19,7 +19,11 @@ from testbench_requirement_service.models.requirement import (
 from testbench_requirement_service.readers.jira.client import SPRINT_FIELD_SCHEMA_KEY
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
 from testbench_requirement_service.readers.jira.field_formatters import format_value, to_str
-from testbench_requirement_service.readers.jira.render_utils import build_rendered_field_html
+from testbench_requirement_service.readers.jira.jira_markup_to_html import convert_jira_to_html
+from testbench_requirement_service.readers.jira.render_utils import (
+    build_rendered_field_html,
+    is_html,
+)
 
 UNSET_DATETIME = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -56,7 +60,7 @@ def parse_jira_datetime(dt: str | float | datetime | None) -> datetime:
     if isinstance(dt, datetime):
         return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
-    if isinstance(dt, (int, float)):
+    if isinstance(dt, int | float):
         return datetime.fromtimestamp(dt / 1000, tz=timezone.utc)
 
     dt_str = str(dt).strip()
@@ -313,6 +317,9 @@ def extract_baselines_from_issue(issue: Issue, baseline_field: str) -> list[str]
 def format_description(description: str) -> str:
     if not isinstance(description, str) or not description:
         return ""
+
+    if not is_html(description):
+        return convert_jira_to_html(description)
     return "<p>" + description.replace("\n\n", "</p><p>") + "</p>"
 
 

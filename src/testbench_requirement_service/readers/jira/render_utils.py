@@ -28,6 +28,13 @@ def load_inline_styles(path: Path) -> str:
         return ""
 
 
+def is_html(text):
+    if not isinstance(text, str):
+        return False
+
+    return bool(BeautifulSoup(text, "html.parser").find())
+
+
 @lru_cache(maxsize=1)
 def _get_inline_styles() -> str:
     """Return cached inline styles, loading from disk only on the first call."""
