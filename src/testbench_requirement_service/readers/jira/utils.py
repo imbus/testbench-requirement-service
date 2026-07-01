@@ -16,6 +16,7 @@ from testbench_requirement_service.models.requirement import (
     RequirementVersionObject,
     UserDefinedAttribute,
 )
+from testbench_requirement_service.readers.jira.client import SPRINT_FIELD_SCHEMA_KEY
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
 from testbench_requirement_service.readers.jira.field_formatters import format_value, to_str
 from testbench_requirement_service.readers.jira.render_utils import build_rendered_field_html
@@ -213,6 +214,11 @@ def is_version_type_field(field: Field) -> bool:
     schema_type = getattr(field.schema, "type", None)
     items_type = getattr(field.schema, "items", None)
     return schema_type == "version" or (schema_type == "array" and items_type == "version")
+
+
+def is_sprint_type_field(field: Field) -> bool:
+    schema_custom = getattr(getattr(field, "schema", None), "custom", None)
+    return schema_custom == SPRINT_FIELD_SCHEMA_KEY
 
 
 def get_current_requirement_version(
