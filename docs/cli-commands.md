@@ -20,6 +20,7 @@ testbench-requirement-service [COMMAND] [OPTIONS]
 | [`init`](#init) | Interactive wizard to create a new configuration file from scratch. |
 | [`configure`](#configure) | Create or update an existing configuration interactively. |
 | [`set-credentials`](#set-credentials) | Set the service username and password. |
+| [`convert-config`](#convert-config) | Convert legacy Jira/Excel configs to TOML with overwrite/append modes. |
 | [`convert-properties`](#convert-properties) | Convert an Excel `.properties` config into TOML. |
 | [`start`](#start) | Start the requirement service. |
 
@@ -157,6 +158,46 @@ testbench-requirement-service convert-properties --input-file genericexcel.prope
 
 # Include full template output
 testbench-requirement-service convert-properties --full
+```
+
+---
+
+## `convert-config`
+
+Convert a legacy config file into TOML for this service.
+
+```bash
+testbench-requirement-service convert-config INPUT_FILE OUTPUT_FILE [OPTIONS]
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--type [jira\|excel]` | Input file type to convert | `jira` |
+| `INPUT_FILE` | Path to legacy input config | — |
+| `OUTPUT_FILE` | Path to generated TOML | — |
+| `--overwrite` | Overwrite output with full base TOML | off |
+| `--add-project` | Append project section to existing TOML | off |
+| `--project-name TEXT` | Project key used with `--add-project` | required with `--add-project` |
+
+If neither `--overwrite` nor `--add-project` is passed and `OUTPUT_FILE` already exists,
+the command asks interactively whether to overwrite, append a project section, or cancel.
+
+### Examples
+
+```bash
+# Convert JiraRest.conf to a new full config.toml
+testbench-requirement-service convert-config JiraRest.conf config.toml --type jira --overwrite
+
+# Convert Excel properties and overwrite config.toml
+testbench-requirement-service convert-config genericexcel.properties config.toml --type excel --overwrite
+
+# Append a Jira project section to existing config.toml
+testbench-requirement-service convert-config JiraRest.conf config.toml --type jira --add-project --project-name PROJECT_A
+
+# Let command ask whether to overwrite or append when output exists
+testbench-requirement-service convert-config JiraRest.conf config.toml --type jira
 ```
 
 ---
