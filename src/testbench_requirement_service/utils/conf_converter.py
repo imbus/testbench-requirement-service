@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import importlib
+import re
 import sys
 from pathlib import Path
+from typing import Any, Literal
+
+import tomli_w
 
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
-
-import importlib
 
 # Python module name -> package name shown to end users.
 REQUIRED_EXCEL_CONVERTER_MODULES: dict[str, str] = {
@@ -18,10 +21,16 @@ REQUIRED_EXCEL_CONVERTER_MODULES: dict[str, str] = {
     "xlrd": "xlrd",
 }
 
+MIN_QUOTED_LENGTH = 2
+
+
+class ConfConversionError(ValueError):
+    """Raised when legacy config conversion cannot be completed."""
+
 
 def _strip_quotes(value: str) -> str:
     value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+    if len(value) >= MIN_QUOTED_LENGTH and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
     return value
 
@@ -61,6 +70,14 @@ def parse_legacy_jira_conf(file_path: Path) -> dict[str, str]:
     return config
 
 
+def parse_conf_file(file_path: Path) -> dict[str, str]:
+    """Parse a Jira-style .conf file into a flat dictionary."""
+    try:
+        return parse_legacy_jira_conf(file_path)
+    except OSError as exc:
+        raise ConfConversionError(f"Could not read conf file '{file_path}': {exc}") from exc
+
+
 def _build_change_fields(version_field: str) -> tuple[list[str], list[str]]:
     if version_field == "empty":
         return [], []
@@ -91,7 +108,10 @@ def convert_jira_conf_to_reader_config(jira_conf: dict[str, str]) -> dict[str, o
         "baseline_field": jira_conf.get("baseline", "fixVersions"),
         "baseline_jql": jira_conf.get(
             "baseline_jql",
-            'project = "{project}" AND fixVersion = "{baseline}" AND issuetype in standardIssueTypes()',
+            (
+                'project = "{project}" AND fixVersion = "{baseline}" '
+                "AND issuetype in standardIssueTypes()"
+            ),
         ),
         "current_baseline_jql": jira_conf.get(
             "current_baseline_jql",
@@ -138,10 +158,43 @@ def build_base_service_config(
     }
 
 
+def generate_base_toml(conf_data: dict[str, str]) -> dict[str, object]:
+    """Generate a complete base TOML payload from Jira conf data."""
+    reader_config = convert_jira_conf_to_reader_config(conf_data)
+    return build_base_service_config(
+        "testbench_requirement_service.readers.JiraRequirementReader",
+        reader_config,
+    )
+
+
 def load_toml(path: Path) -> dict[str, object]:
     """Load a TOML file into a dictionary."""
     with path.open("rb") as file_handle:
         return tomllib.load(file_handle)
+
+
+def _load_toml_file(file_path: Path) -> dict[str, Any]:
+    """Load TOML content from disk, returning an empty dict when file is missing."""
+    if not file_path.exists():
+        return {}
+
+    try:
+        data = load_toml(file_path)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise ConfConversionError(f"Could not read TOML file '{file_path}': {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise ConfConversionError(f"Invalid TOML root in '{file_path}'")
+    return data
+
+
+def _write_toml_file(file_path: Path, data: dict[str, Any]) -> None:
+    """Write TOML content using tomli_w."""
+    try:
+        with file_path.open("wb") as toml_file:
+            tomli_w.dump(data, toml_file)
+    except OSError as exc:
+        raise ConfConversionError(f"Could not write TOML file '{file_path}': {exc}") from exc
 
 
 def build_project_reader_config(
@@ -153,6 +206,24 @@ def build_project_reader_config(
     if reader_type == "jira" and "owner_field" in project_config:
         project_config["owner"] = project_config.pop("owner_field")
     return project_config
+
+
+def _validate_project_name(project_name: str) -> str:
+    value = project_name.strip()
+    if not value:
+        raise ConfConversionError("Project name cannot be empty")
+    if not re.fullmatch(r"[A-Za-z0-9_\-]+", value):
+        raise ConfConversionError(
+            "Project name must contain only letters, digits, underscore, or hyphen"
+        )
+    return value
+
+
+def generate_project_toml(conf_data: dict[str, str], project_name: str) -> dict[str, object]:
+    """Generate project-specific Jira reader config payload from conf data."""
+    validated_name = _validate_project_name(project_name)
+    reader_config = convert_jira_conf_to_reader_config(conf_data)
+    return {validated_name: build_project_reader_config("jira", reader_config)}
 
 
 def get_missing_dependencies(required_modules: dict[str, str]) -> list[str]:
@@ -181,6 +252,14 @@ def parse_properties(file_path: Path) -> dict[str, str]:
             key, value = stripped_line.split("=", 1)
             properties[key.strip()] = value.strip()
     return properties
+
+
+def parse_properties_file(file_path: Path) -> dict[str, str]:
+    """Parse a Java .properties file into a flat dictionary."""
+    try:
+        return parse_properties(file_path)
+    except OSError as exc:
+        raise ConfConversionError(f"Could not read properties file '{file_path}': {exc}") from exc
 
 
 def convert_val(value: str) -> bool | int | float | str:
@@ -286,3 +365,129 @@ def properties_to_toml(
 
     with toml_output_file.open("wb") as file_handle:
         tomli_w_module.dump(toml_dict, file_handle)
+
+
+def generate_excel_base_toml(properties: dict[str, str]) -> dict[str, object]:
+    """Generate a complete base TOML payload for the Excel reader."""
+    return build_base_service_config(
+        "testbench_requirement_service.readers.ExcelRequirementReader",
+        properties_to_reader_config_dict(properties),
+    )
+
+
+def generate_excel_project_toml(properties: dict[str, str], project_name: str) -> dict[str, object]:
+    """Generate Excel reader project config payload from properties file."""
+    validated_name = _validate_project_name(project_name)
+    return {
+        validated_name: build_project_reader_config(
+            "excel",
+            properties_to_reader_config_dict(properties),
+        )
+    }
+
+
+def properties_to_reader_config_dict(
+    properties: dict[str, str],
+) -> dict[str, bool | int | float | str]:
+    """Convert parsed properties values to reader config scalars with defaults."""
+    reader_config = {key: convert_val(raw_val) for key, raw_val in properties.items()}
+    defaults: dict[str, float] = {
+        "bufferMaxAgeMinutes": 1440.0,
+        "bufferMaxSizeMiB": 1024.0,
+        "bufferCleanupIntervalMinutes": 1.0,
+    }
+    for key, value in defaults.items():
+        reader_config.setdefault(key, value)
+    return reader_config
+
+
+def extract_common_fields(conf_data: dict[str, str]) -> tuple[str, str, str, str, int]:
+    """Extract shared Jira reader settings from parsed conf data."""
+    reader_config = convert_jira_conf_to_reader_config(conf_data)
+    return (
+        str(reader_config.get("server_url", "")),
+        str(reader_config.get("baseline_field", "fixVersions")),
+        str(reader_config.get("baseline_jql", "")),
+        str(reader_config.get("owner_field", "assignee")),
+        int(reader_config.get("timeout", 30)),
+    )
+
+
+def convert_jira_conf(
+    input_file: Path,
+    output_file: Path,
+    mode: Literal["overwrite", "add-project"],
+    project_name: str | None = None,
+) -> str:
+    """Convert JiraRest.conf into base TOML or append a project section."""
+    conf_data = parse_conf_file(input_file)
+
+    if mode == "overwrite":
+        payload = generate_base_toml(conf_data)
+        _write_toml_file(output_file, payload)
+        return f"Successfully wrote mapped TOML to {output_file}"
+
+    if mode == "add-project":
+        if project_name is None:
+            raise ConfConversionError("Project name is required when mode is 'add-project'")
+
+        payload = _load_toml_file(output_file)
+        app_cfg = payload.setdefault("testbench-requirement-service", {})
+        if not isinstance(app_cfg, dict):
+            raise ConfConversionError("Invalid TOML shape for [testbench-requirement-service]")
+        reader_cfg = app_cfg.setdefault("reader_config", {})
+        if not isinstance(reader_cfg, dict):
+            raise ConfConversionError(
+                "Invalid TOML shape for [testbench-requirement-service.reader_config]"
+            )
+        projects_cfg = reader_cfg.setdefault("projects", {})
+        if not isinstance(projects_cfg, dict):
+            raise ConfConversionError(
+                "Invalid TOML shape for [testbench-requirement-service.reader_config.projects]"
+            )
+
+        projects_cfg.update(generate_project_toml(conf_data, project_name))
+        _write_toml_file(output_file, payload)
+        return f"Successfully appended project '{project_name}' to {output_file}"
+
+    raise ConfConversionError(f"Unsupported conversion mode: {mode}")
+
+
+def convert_excel_properties(
+    input_file: Path,
+    output_file: Path,
+    mode: Literal["overwrite", "add-project"],
+    project_name: str | None = None,
+) -> str:
+    """Convert ExcelWrapper.properties into base TOML or append a project section."""
+    properties = parse_properties_file(input_file)
+
+    if mode == "overwrite":
+        payload = generate_excel_base_toml(properties)
+        _write_toml_file(output_file, payload)
+        return f"Successfully wrote mapped TOML to {output_file}"
+
+    if mode == "add-project":
+        if project_name is None:
+            raise ConfConversionError("Project name is required when mode is 'add-project'")
+
+        payload = _load_toml_file(output_file)
+        app_cfg = payload.setdefault("testbench-requirement-service", {})
+        if not isinstance(app_cfg, dict):
+            raise ConfConversionError("Invalid TOML shape for [testbench-requirement-service]")
+        reader_cfg = app_cfg.setdefault("reader_config", {})
+        if not isinstance(reader_cfg, dict):
+            raise ConfConversionError(
+                "Invalid TOML shape for [testbench-requirement-service.reader_config]"
+            )
+        projects_cfg = reader_cfg.setdefault("projects", {})
+        if not isinstance(projects_cfg, dict):
+            raise ConfConversionError(
+                "Invalid TOML shape for [testbench-requirement-service.reader_config.projects]"
+            )
+
+        projects_cfg.update(generate_excel_project_toml(properties, project_name))
+        _write_toml_file(output_file, payload)
+        return f"Successfully appended project '{project_name}' to {output_file}"
+
+    raise ConfConversionError(f"Unsupported conversion mode: {mode}")

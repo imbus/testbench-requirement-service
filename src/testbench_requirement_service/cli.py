@@ -4,7 +4,6 @@ from pathlib import Path
 from ssl import SSLContext
 
 import click
-import tomli_w
 from dotenv import load_dotenv
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
@@ -12,6 +11,11 @@ from sanic.worker.loader import AppLoader
 from testbench_requirement_service import __title__, __version__
 from testbench_requirement_service.app import AppConfig, create_app
 from testbench_requirement_service.log import logger
+from testbench_requirement_service.utils.conf_converter import (
+    ConfConversionError,
+    convert_excel_properties,
+    convert_jira_conf,
+)
 from testbench_requirement_service.utils.config_wizard import (
     configure_credentials_only,
     configure_reader_only,
@@ -20,19 +24,6 @@ from testbench_requirement_service.utils.config_wizard import (
     show_main_menu,
     view_current_config,
 )
-from testbench_requirement_service.utils.legacy_config_converter import (
-    REQUIRED_EXCEL_CONVERTER_MODULES,
-    build_base_service_config,
-    build_project_reader_config,
-    convert_jira_conf_to_reader_config,
-    get_missing_dependencies,
-    load_toml,
-    parse_legacy_jira_conf,
-    properties_to_reader_config,
-    properties_to_toml,
-)
-
-CONFIG_ROOT = "testbench-requirement-service"
 
 
 def print_service_banner():
@@ -289,152 +280,6 @@ def set_credentials(config_path, username, password):
     configure_credentials_only(config_path, username=username, password=password)
 
 
-def _ensure_excel_converter_dependencies(command_name: str) -> None:
-    missing = get_missing_dependencies(REQUIRED_EXCEL_CONVERTER_MODULES)
-    if missing:
-        deps = ", ".join(missing)
-        raise click.ClickException(
-            f"Missing required dependencies for '{command_name}': "
-            f"{deps}.\n"
-            "Install with: pip install testbench-requirement-service[excel]"
-        )
-
-
-def _resolve_convert_action(
-    output_file: Path,
-    overwrite: bool,
-    add_project: bool,
-) -> tuple[bool, bool]:
-    if not output_file.exists() or overwrite or add_project:
-        return overwrite, add_project
-
-    choice = click.prompt(
-        (f"Output file '{output_file}' already exists. Choose action"),
-        type=click.Choice(["overwrite", "add-project", "cancel"], case_sensitive=False),
-        default="cancel",
-        show_choices=True,
-    )
-
-    if choice == "cancel":
-        raise click.ClickException("Conversion cancelled.")
-
-    return choice == "overwrite", choice == "add-project"
-
-
-def _load_converted_reader_config(input_type: str, input_file: Path) -> dict[str, object]:
-    if input_type == "jira":
-        jira_conf = parse_legacy_jira_conf(input_file)
-        return convert_jira_conf_to_reader_config(jira_conf)
-
-    _ensure_excel_converter_dependencies("convert-config")
-    return properties_to_reader_config(input_file, include_defaults=True)
-
-
-def _write_overwrite_output(
-    input_type: str,
-    input_file: Path,
-    output_file: Path,
-    reader_config: dict[str, object],
-) -> None:
-    if input_type == "excel":
-        properties_to_toml(input_file, output_file, include_base_template=True)
-        return
-
-    full_config = build_base_service_config(
-        "testbench_requirement_service.readers.JiraRequirementReader",
-        reader_config,
-    )
-    with output_file.open("wb") as file_handle:
-        tomli_w.dump(full_config, file_handle)
-
-
-def _append_project_config(
-    output_file: Path,
-    input_type: str,
-    reader_config: dict[str, object],
-    project_name: str | None,
-) -> str:
-    if not output_file.exists():
-        raise click.ClickException(
-            f"Output file '{output_file}' does not exist. Use --overwrite first."
-        )
-
-    project_key = project_name or click.prompt("Project key to append", type=str).strip()
-    if not project_key:
-        raise click.ClickException("Project key cannot be empty.")
-
-    existing_config = load_toml(output_file)
-    service_config = existing_config.setdefault(CONFIG_ROOT, {})
-    if not isinstance(service_config, dict):
-        raise click.ClickException(
-            f"Invalid TOML structure in '{output_file}': section [{CONFIG_ROOT}] is not a table."
-        )
-
-    root_reader_config = service_config.setdefault("reader_config", {})
-    if not isinstance(root_reader_config, dict):
-        raise click.ClickException(
-            f"Invalid TOML structure in '{output_file}': reader_config is not a table."
-        )
-
-    projects = root_reader_config.setdefault("projects", {})
-    if not isinstance(projects, dict):
-        raise click.ClickException(
-            f"Invalid TOML structure in '{output_file}': reader_config.projects is not a table."
-        )
-
-    if project_key in projects:
-        should_replace = click.confirm(
-            f"Project '{project_key}' already exists in '{output_file}'. Replace it?",
-            default=False,
-        )
-        if not should_replace:
-            raise click.ClickException("Conversion cancelled.")
-
-    projects[project_key] = build_project_reader_config(input_type, reader_config)
-
-    with output_file.open("wb") as file_handle:
-        tomli_w.dump(existing_config, file_handle)
-
-    return project_key
-
-
-def _run_convert_config(  # noqa: PLR0913
-    *,
-    input_type: str,
-    input_file: Path,
-    output_file: Path,
-    overwrite: bool,
-    add_project: bool,
-    project_name: str | None,
-) -> None:
-    if overwrite and add_project:
-        raise click.ClickException("Use either --overwrite or --add-project, not both.")
-
-    overwrite, add_project = _resolve_convert_action(output_file, overwrite, add_project)
-
-    try:
-        reader_config = _load_converted_reader_config(input_type, input_file)
-    except FileNotFoundError as exc:
-        raise click.ClickException(f"Input file not found: {input_file}") from exc
-
-    if add_project:
-        project_key = _append_project_config(output_file, input_type, reader_config, project_name)
-        click.echo(f"Successfully appended project '{project_key}' to {output_file}")
-        return
-
-    try:
-        _write_overwrite_output(input_type, input_file, output_file, reader_config)
-    except OSError as exc:
-        raise click.ClickException(
-            f"Could not write TOML output file '{output_file}': {exc}"
-        ) from exc
-    except ImportError as exc:
-        raise click.ClickException(str(exc)) from exc
-
-    click.echo(f"Successfully converted: {input_file} -> {output_file}")
-    click.echo("Output mode: overwrite")
-
-
 @click.command("convert-config")
 @click.argument(
     "input_file",
@@ -446,36 +291,35 @@ def _run_convert_config(  # noqa: PLR0913
 )
 @click.option(
     "--type",
-    "input_type",
+    "converter_type",
     type=click.Choice(["jira", "excel"], case_sensitive=False),
     default="jira",
     show_default=True,
-    help="Input file type to convert.",
+    help="Input file type to convert",
 )
 @click.option(
     "--overwrite",
     is_flag=True,
-    help="Overwrite OUTPUT_FILE with a full base TOML config.",
+    help="Overwrite the output file with a full base config",
 )
 @click.option(
     "--add-project",
     is_flag=True,
-    help="Append a project section to an existing TOML config.",
+    help="Append a project section to an existing output file",
 )
 @click.option(
     "--project-name",
     type=str,
-    help="Project key to use with --add-project.",
+    help="Project name for --add-project (letters, digits, underscore, hyphen)",
 )
-def convert_config_command(  # noqa: PLR0913
-    input_type: str,
-    input_file: Path,
-    output_file: Path,
-    overwrite: bool,
-    add_project: bool,
-    project_name: str | None,
-):
+def convert_config_command(**kwargs):
     """Convert a legacy config file into TestBench Requirement Service TOML."""
+    input_file: Path = kwargs["input_file"]
+    output_file: Path = kwargs["output_file"]
+    overwrite: bool = kwargs["overwrite"]
+    add_project: bool = kwargs["add_project"]
+    converter_type: str = kwargs["converter_type"]
+    project_name: str | None = kwargs["project_name"]
     if overwrite and add_project:
         raise click.ClickException("Use either --overwrite or --add-project, not both")
 
@@ -495,16 +339,27 @@ def convert_config_command(  # noqa: PLR0913
         else:
             overwrite = True
 
-    normalized_type = input_type.lower()
+    mode = "add-project" if output_file.exists() and add_project else "overwrite"
 
-    _run_convert_config(
-        input_type=normalized_type,
-        input_file=input_file,
-        output_file=output_file,
-        overwrite=overwrite,
-        add_project=add_project,
-        project_name=project_name,
-    )
+    try:
+        if converter_type == "excel":
+            message = convert_excel_properties(
+                input_file=input_file,
+                output_file=output_file,
+                mode=mode,
+                project_name=project_name,
+            )
+        else:
+            message = convert_jira_conf(
+                input_file=input_file,
+                output_file=output_file,
+                mode=mode,
+                project_name=project_name,
+            )
+    except ConfConversionError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(message)
 
 
 cli.add_command(init)
