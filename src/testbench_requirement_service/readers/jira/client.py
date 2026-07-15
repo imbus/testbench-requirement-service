@@ -15,6 +15,11 @@ from jira.resources import (
 
 from testbench_requirement_service.log import logger
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
+from testbench_requirement_service.readers.jira.jira_oauth import (
+    JiraAuthExpiredError,
+    configure_oauth2_runtime,
+    get_valid_jira_token_sync,
+)
 from testbench_requirement_service.utils.cache import TTLCache
 
 DEFAULT_MAX_RESULTS = 100
@@ -84,7 +89,7 @@ class JiraClient:
             options["client_cert"] = self.config.client_cert
         return options
 
-    def _create_jira_instance(self, server: str) -> JIRA:
+    def _create_jira_instance(self, server: str, token_override: str | None = None) -> JIRA:
         """Create a JIRA instance against *server* using the configured auth."""
         logger.debug(
             "Creating JIRA instance for '%s' (auth_type='%s')", server, self.config.auth_type
@@ -116,6 +121,15 @@ class JiraClient:
                     "consumer_key": self.config.oauth1_consumer_key,
                     "key_cert": self.config.oauth1_key_cert,
                 },
+                max_retries=self.config.max_retries,
+                timeout=self.config.timeout,
+            )
+        if self.config.auth_type == "oauth2":
+            token = token_override or self.config.token
+            return JIRA(
+                server=server,
+                options=options,
+                token_auth=token,
                 max_retries=self.config.max_retries,
                 timeout=self.config.timeout,
             )
@@ -200,7 +214,27 @@ class JiraClient:
             f"Connecting to Jira via Atlassian gateway (scoped API token mode): {gateway_url}"
         )
 
-        jira = self._create_jira_instance(gateway_url)
+        if self.config.auth_type == "oauth2":
+            configure_oauth2_runtime(
+                refresh_token=self.config.oauth2_refresh_token,
+                client_id=self.config.oauth2_client_id,
+                client_secret=self.config.oauth2_client_secret,
+                expires_at=self.config.oauth2_expires_at,
+            )
+            try:
+                initial_oauth2_token = get_valid_jira_token_sync(is_first_call=True)
+            except JiraAuthExpiredError as exc:
+                raise ConnectionError(
+                    "Jira OAuth2 authorization expired while establishing the initial connection. "
+                    "Please re-run the setup wizard to authorize Jira OAuth2."
+                ) from exc
+        else:
+            initial_oauth2_token = None
+
+        jira = self._create_jira_instance(gateway_url, token_override=initial_oauth2_token)
+        if self.config.auth_type == "oauth2":
+            self._patch_session_for_oauth2_token(jira._session)
+
         if not self._verify_connection(jira):
             raise ConnectionError(
                 f"Authentication failed against the Atlassian gateway '{gateway_url}'. "
@@ -212,6 +246,25 @@ class JiraClient:
         self._patch_session_for_gateway(jira._session, gateway_url)
 
         return jira
+
+    def _patch_session_for_oauth2_token(self, session: Any) -> None:
+        """Inject a valid OAuth2 bearer token into every Jira HTTP request."""
+        original_send = session.send
+
+        def _oauth2_send(request: Any, **kwargs: Any) -> Any:
+            try:
+                token = get_valid_jira_token_sync()
+            except JiraAuthExpiredError as exc:
+                raise ConnectionError(
+                    "Jira OAuth2 authorization expired. "
+                    "Please re-run the setup wizard to authorize Jira OAuth2."
+                ) from exc
+
+            if token:
+                request.headers["Authorization"] = f"Bearer {token}"
+            return original_send(request, **kwargs)
+
+        session.send = _oauth2_send
 
     def _patch_session_for_gateway(self, session: Any, gateway_url: str) -> None:
         """Rewrite site-URL requests to the Atlassian gateway at transport level.
@@ -253,6 +306,8 @@ class JiraClient:
         - A 401 on DC basic auth means wrong credentials, not a scoped token.
         """
         try:
+            if self.config.auth_type == "oauth2":
+                return self._connect_via_gateway()
             jira = self._create_jira_instance(self.config.server_url)
         except NotImplementedError:
             raise

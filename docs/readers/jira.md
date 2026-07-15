@@ -116,6 +116,14 @@ Pick the authentication flow that matches your Jira deployment. Credentials can 
 | `oauth1_consumer_key` | String | OAuth1 consumer key | `JIRA_OAUTH1_CONSUMER_KEY` |
 | `oauth1_key_cert_path` | String | Path to RSA private key file (`.pem`) | `JIRA_OAUTH1_KEY_CERT_PATH` |
 
+#### OAuth2 authentication (`auth_type = "oauth2"`)
+
+| Setting | Type | Description | Env var |
+|---------|------|-------------|---------|
+| `oauth2_client_id` | String | OAuth 2.0 client secret for`oauth2` auth (Jira Cloud). | `JIRA_OAUTH2_CLIENT_SECRET` |
+| `oauth2_client_secret` | String | OAuth 2.0 client secret for`oauth2` auth (Jira Cloud). | `JIRA_OAUTH2_CLIENT_SECRET` |
+
+
 ### SSL / TLS settings
 
 #### SSL verification (all auth types)
@@ -163,6 +171,139 @@ All requirement and baseline settings can be overridden per project.
 | `minor_change_fields` | Project-specific minor change fields | Inherits from global |
 | `owner` | Project-specific owner field | Inherits from global |
 | `rendered_fields` | Project-specific rendered fields | Inherits from global |
+
+
+## Authentication
+
+### Basic auth (Jira Cloud)
+
+Recommended for Jira Cloud. Uses your Atlassian account email and an API token.
+
+```toml
+# config.toml
+[testbench-requirement-service.client_config]
+auth_type  = "basic"
+username   = "your-email@company.com"
+password  = "your-api-token"
+```
+
+Generate an API token at `https://id.atlassian.com/manage-profile/security/api-tokens`.
+
+### Token auth (Jira Data Center)
+
+Uses a Personal Access Token (PAT) generated in your Jira Data Center profile.
+
+```toml
+# config.toml
+[testbench-requirement-service.client_config]
+auth_type = "token"
+token     = "your-personal-access-token"
+```
+
+:::note
+Personal Access Tokens expire based on the duration set in your Jira Data Center profile. If the service stops authenticating unexpectedly, check whether the token has expired and generate a new one.
+:::
+
+### OAuth 2.0 (3LO) auth (Jira Cloud)
+
+Uses an OAuth 2.0 access token obtained via the Atlassian 3-Legged OAuth (3LO) flow. This is recommended when your Atlassian app is registered in the [Atlassian developer console](https://developer.atlassian.com/console/myapps/) and you need delegated user access.
+
+```toml
+# config.toml
+[testbench-requirement-service.client_config]
+auth_type    = "oauth2"
+```
+
+#### How to obtain an OAuth 2.0 access token
+
+**Step 1 — Direct the user to the Atlassian authorization URL**
+
+Send the user to the following URL in a browser (GET request). You can construct it manually or copy it from **Authorization → OAuth 2.0 (3LO) → Configure** in the developer console:
+
+```
+https://auth.atlassian.com/authorize?
+  audience=api.atlassian.com&
+  client_id=YOUR_CLIENT_ID&
+  scope=read%3Ajira-work%20read%3Ajira-user%20write%3Ajira-work%20offline_access&
+  redirect_uri=https://YOUR_APP_CALLBACK_URL&
+  state=requirement-service&
+  response_type=code&
+  prompt=consent
+```
+
+| Parameter         | Required       | Description                                                                                                                                               |
+| ----------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `audience`      | Yes            | Always`api.atlassian.com`.                                                                                                                              |
+| `client_id`     | Yes            | **Client ID** from your app's **Settings** in the developer console.                                                                          |
+| `scope`         | Yes            | Space-separated list of scopes (URL-encoded as`%20`). Only choose scopes already added to your app. See [Required scopes](#required-oauth-scopes) below. |
+| `redirect_uri`  | Yes            | Callback URL configured in**Authorization** for your app.                                                                                           |
+| `state`         | Yes (security) | An opaque string to prevent CSRF, e.g.`requirement-service`.                                                                                                 |
+| `response_type` | Yes            | Must be`code`.                                                                                                                                          |
+| `prompt`        | Yes            | Must be`consent` to show the access-grant screen.                                                                                                       |
+
+If the user grants access, Atlassian redirects to `redirect_uri` with an `?code=...` query parameter.
+
+**Step 2 — Exchange the authorization code for an access token**
+
+```bash
+curl --request POST \
+  --url 'https://auth.atlassian.com/oauth/token' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "grant_type": "authorization_code",
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "code": "YOUR_AUTHORIZATION_CODE",
+    "redirect_uri": "https://YOUR_APP_CALLBACK_URL"
+  }'
+```
+
+A successful response returns:
+
+```json
+{
+  "access_token": "<string>",
+  "refresh_token":"<string>", 
+  "expires_in": 3600,
+  "scope": "<string>"
+}
+```
+
+Run the setup wizard and enter the returned `refresh_token` when prompted. The wizard stores
+that token in `tmp/oauth2_tokens.toml`, not in `config.toml`. The service uses the refresh token
+to request short-lived access tokens at runtime and updates the cache automatically when they
+expire.
+
+Persist only the OAuth client credentials in your configuration (or provide them via environment
+variables):
+
+- `oauth2_client_id` (or `JIRA_OAUTH2_CLIENT_ID`) = your client ID
+- `oauth2_client_secret` (or `JIRA_OAUTH2_CLIENT_SECRET`) = your client secret
+
+:::note
+Do not store OAuth2 access tokens or refresh tokens in `config.toml` or `.env` files. If the refresh
+token is revoked or expires, re-run the setup wizard to seed a new `tmp/oauth2_tokens.toml` cache.
+:::
+
+#### Required OAuth scopes
+
+The minimum scopes needed by the Requirement Service:
+
+| Scope               | Purpose                                   |
+| ------------------- | ----------------------------------------- |
+| `read:jira-work`  | Read projects, issues, fields, changelogs |
+| `read:jira-user`  | Read user/account information             |
+| `write:jira-work` | Create and update issues, field metadata  |
+
+For `readonly = true` deployments, `write:jira-work` can be omitted.
+
+Refer to the Atlassian REST API documentation to confirm which scopes individual endpoints require:
+
+- [Jira Cloud platform REST API](https://developer.atlassian.com/cloud/jira/platform/rest)
+- [Jira Software Cloud REST API](https://developer.atlassian.com/cloud/jira/software/rest/intro/)
+
+---
+
 
 ## Example configurations
 
