@@ -269,6 +269,7 @@ A successful response returns:
 }
 ```
 
+
 Run the setup wizard and enter the returned `refresh_token` when prompted. The wizard stores
 that token in `tmp/oauth2_tokens.toml`, not in `config.toml`. The service uses the refresh token
 to request short-lived access tokens at runtime and updates the cache automatically when they
@@ -283,6 +284,7 @@ variables):
 :::note
 Do not store OAuth2 access tokens or refresh tokens in `config.toml` or `.env` files. If the refresh
 token is revoked or expires, re-run the setup wizard to seed a new `tmp/oauth2_tokens.toml` cache.
+Refresh tokens are single-use and expire after 90 days without use.
 :::
 
 #### Required OAuth scopes
