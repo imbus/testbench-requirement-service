@@ -203,8 +203,14 @@ def configure_reader(
 
     if reader_type == "jira" and reader_config.get("auth_type") == "oauth2":
         refresh_token = reader_config.get("oauth2_refresh_token")
-        if isinstance(refresh_token, str) and refresh_token:
+        if isinstance(refresh_token, str):
+            refresh_token = refresh_token.strip() or None
+        if not refresh_token:
+            refresh_token = run_jira_oauth_wizard()
+        if refresh_token:
             seed_oauth2_refresh_token(refresh_token)
+        else:
+            reader_config.pop("oauth2_refresh_token", None)
 
     return merge_with_defaults(reader_config, config_class)
 
@@ -654,4 +660,6 @@ def run_full_wizard(config_path: Path):  # noqa: C901, PLR0912, PLR0915
 def run_jira_oauth_wizard() -> str | None:
     click.echo("Jira OAuth2 refresh token is not configured. ")
     refresh_token = questionary.text("Please enter your OAuth2 refresh token: ").ask()
-    return refresh_token if isinstance(refresh_token, str) and refresh_token else None
+    if isinstance(refresh_token, str) and refresh_token.strip():
+        return refresh_token.strip()
+    return None

@@ -404,7 +404,7 @@ class JiraRequirementReaderConfig(BaseModel):
         if not self.oauth2_refresh_token and not has_cached_refresh_token():
             raise ValueError(
                 "Jira OAuth2 refresh token is required. "
-                "Provide it in the configuration wizard or set JIRA_OAUTH2_REFRESH_TOKEN."
+                "Provide it in the configuration wizard."
             )
 
     @model_validator(mode="after")
