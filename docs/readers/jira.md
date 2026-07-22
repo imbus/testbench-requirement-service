@@ -120,7 +120,7 @@ Pick the authentication flow that matches your Jira deployment. Credentials can 
 
 | Setting | Type | Description | Env var |
 |---------|------|-------------|---------|
-| `oauth2_client_id` | String | OAuth 2.0 client secret for`oauth2` auth (Jira Cloud). | `JIRA_OAUTH2_CLIENT_SECRET` |
+| `oauth2_client_id` | String | OAuth 2.0 client secret for`oauth2` auth (Jira Cloud). | `JIRA_OAUTH2_CLIENT_ID` |
 | `oauth2_client_secret` | String | OAuth 2.0 client secret for`oauth2` auth (Jira Cloud). | `JIRA_OAUTH2_CLIENT_SECRET` |
 
 
