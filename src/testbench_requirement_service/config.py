@@ -158,7 +158,7 @@ class AppConfig(Config):
 
     def _prompt_for_missing_jira_oauth2_refresh_token(self, reader_config: dict) -> None:
         """Prompt for a Jira OAuth2 refresh token when starting the service."""
-        if self.READER_CLASS.rsplit(".", 1)[-1] != "JiraRequirementReader":
+        if "JiraRequirementReader" not in self.READER_CLASS:
             return
         if reader_config.get("auth_type") != "oauth2":
             return
