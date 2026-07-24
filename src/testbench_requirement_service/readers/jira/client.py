@@ -125,7 +125,7 @@ class JiraClient:
                 timeout=self.config.timeout,
             )
         if self.config.auth_type == "oauth2":
-            token = token_override or self.config.token
+            token = token_override or self.config.oauth2_access_token or self.config.token
             return JIRA(
                 server=server,
                 options=options,
@@ -173,6 +173,7 @@ class JiraClient:
                 tenant_info_url,
                 timeout=self.config.timeout,
                 verify=self.config.ssl_verify,
+                cert=self.config.client_cert,
             )
             response.raise_for_status()
             data = response.json()
