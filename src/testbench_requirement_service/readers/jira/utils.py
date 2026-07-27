@@ -2,6 +2,7 @@ import copy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from dateutil.parser import isoparse
 from dateutil.parser import parse as dateutil_parse
@@ -78,7 +79,9 @@ def parse_jira_datetime(dt: str | float | datetime | None) -> datetime:
 
 
 def build_userdefinedattribute_object(
-    field: dict[str, Any] | Field, field_value: Any
+    field: dict[str, Any] | Field,
+    field_value: Any,
+    issue: Issue,
 ) -> UserDefinedAttribute:
     name = field.get("name", "") if isinstance(field, dict) else getattr(field, "name", "")
     value_type = extract_valuetype_from_issue_field(field)
@@ -123,16 +126,21 @@ def build_userdefinedattribute_objects_for_issue(
     uda_fields: list[Field],
     project: str,
     config: JiraRequirementReaderConfig,
+    jira_server_url: str | None = None,
 ) -> list[UserDefinedAttribute]:
     """Build UserDefinedAttribute objects for a single issue from the given field descriptors."""
+    issue_key = getattr(issue, "key", "unknown")
+    logger.debug("Building %d user-defined attribute(s) for issue '%s'", len(uda_fields), issue_key)
     rendered_fields_config = set(get_config_value(config, "rendered_fields", project) or [])
     issue_fields = getattr(issue, "fields", None)
     if not issue_fields:
         logger.warning(f"Issue {issue.key} has no fields; skipping UDA extraction.")
         return []
     rendered_fields_obj = getattr(issue, "renderedFields", None)
+    server_url = jira_server_url or config.server_url
 
     udas = []
+    rendered_count = 0
     for field in uda_fields:
         field_id = get_field_id(field)
         if not hasattr(issue_fields, field_id):
@@ -142,15 +150,30 @@ def build_userdefinedattribute_objects_for_issue(
             and hasattr(rendered_fields_obj, field_id)
             and getattr(field, "name", None) in rendered_fields_config
         ):
+            rendered_count += 1
+            logger.debug(
+                "Rendering field '%s' (%s) for issue '%s'",
+                getattr(field, "name", field_id),
+                field_id,
+                issue_key,
+            )
             field_value = build_rendered_field_html(
                 issue,
                 field_id=field_id,
-                jira_server_url=config.server_url,
+                jira_server_url=server_url,
                 include_head=True,
             )
         else:
             field_value = getattr(issue_fields, field_id)
-        udas.append(build_userdefinedattribute_object(field, field_value))
+        udas.append(build_userdefinedattribute_object(field, field_value, issue))
+
+    if rendered_count > 0:
+        logger.debug(
+            "Completed building %d UDA(s) for issue '%s' (%d rendered)",
+            len(udas),
+            issue_key,
+            rendered_count,
+        )
     return udas
 
 
@@ -474,24 +497,59 @@ def build_requirementobjectnode_from_issue(
     )
 
 
+def _get_issue_browse_url(issue: Issue, jira_server_url: str) -> str:
+    """Return the human-facing browse URL for *issue* on *jira_server_url*."""
+    return f"{jira_server_url.rstrip('/')}/browse/{issue.key}"
+
+
+def _normalise_attachment_url(content_url: str, site_base: str) -> str:
+    """Rewrite *content_url* to use *site_base* when it originates from a
+    different host (e.g. an Atlassian API gateway)."""
+    parsed = urlparse(content_url)
+    if parsed.scheme not in {"http", "https"}:
+        return content_url
+    if parsed.netloc == urlparse(site_base).netloc:
+        return content_url
+    rest_idx = content_url.find("/rest/")
+    if rest_idx != -1:
+        return site_base + content_url[rest_idx:]
+    return content_url
+
+
+def _get_attachment_urls(issue: Issue, jira_server_url: str) -> list[str]:
+    """Return normalised content URLs for all attachments on *issue*.
+
+    When the client is connected via the Atlassian API gateway (scoped token
+    mode), attachment content URLs may carry the gateway prefix.  Each URL is
+    rewritten to the human-facing *jira_server_url* so it remains valid for
+    users.
+    """
+    attachments_field = getattr(issue.fields, "attachment", None)
+    if not isinstance(attachments_field, list):
+        return []
+    site_base = jira_server_url.rstrip("/")
+    return [
+        _normalise_attachment_url(url, site_base)
+        for attachment in attachments_field
+        if (url := attachment.content or None)
+    ]
+
+
 def build_extendedrequirementobject_from_issue(
     issue: Issue,
     baseline: str,
     requirement_object: RequirementObjectNode,
     jira_server_url: str,
 ) -> ExtendedRequirementObject:
-    attachments_field = getattr(issue.fields, "attachment", None)
-    if isinstance(attachments_field, list):
-        attachments = [attachment.content for attachment in attachments_field if attachment.content]
-    else:
-        attachments = []
+    browse_url = _get_issue_browse_url(issue, jira_server_url)
+    attachment_urls = _get_attachment_urls(issue, jira_server_url)
 
     return ExtendedRequirementObject(
         **requirement_object.model_dump(),
         description=build_rendered_field_html(
             issue, field_id="description", jira_server_url=jira_server_url
         ),
-        documents=[issue.permalink(), *attachments],
+        documents=[browse_url, *attachment_urls],
         baseline=baseline,
     )
 

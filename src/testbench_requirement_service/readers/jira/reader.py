@@ -143,18 +143,43 @@ class JiraRequirementReader(AbstractRequirementReader):
         if not requirement_keys:
             return []
 
+        logger.debug(
+            "Processing user-defined attributes for %d requirement(s) with %d attribute(s)",
+            len(requirement_keys),
+            len(attribute_names),
+        )
         uda_fields = self._resolve_fields_by_name(attribute_names, project)
         issue_map = self._fetch_issue_map(requirement_keys, project, baseline, uda_fields)
+        logger.debug("Retrieved %d issue(s) from issue map for UDA processing", len(issue_map))
 
         result: list[UserDefinedAttributeResponse] = []
+        processed_count = 0
+        log_interval = max(1, len(requirement_keys) // 10)  # Log every 10% progress
+
         for req_key in requirement_keys:
             issue = issue_map.get((req_key.id, req_key.version))
             if issue is None:
                 continue
+
+            processed_count += 1
+            if processed_count % log_interval == 0 or processed_count == len(requirement_keys):
+                logger.debug(
+                    "Processing UDAs: %d/%d requirements (%d%%)",
+                    processed_count,
+                    len(requirement_keys),
+                    int(100 * processed_count / len(requirement_keys)),
+                )
+
             udas = build_userdefinedattribute_objects_for_issue(
-                issue=issue, uda_fields=uda_fields, project=project, config=self.config
+                issue=issue,
+                uda_fields=uda_fields,
+                project=project,
+                config=self.config,
+                jira_server_url=self.jira_client.site_url,
             )
             result.append(UserDefinedAttributeResponse(key=req_key, userDefinedAttributes=udas))
+
+        logger.debug("Completed processing UDAs for %d requirement(s)", len(result))
         return result
 
     def get_extended_requirement(
@@ -183,7 +208,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             issue=issue,
             baseline=baseline,
             requirement_object=requirement_object,
-            jira_server_url=self.config.server_url,
+            jira_server_url=self.jira_client.site_url,
         )
 
     def get_requirement_versions(

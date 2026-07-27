@@ -5,6 +5,8 @@ from typing import Literal
 from pydantic import BaseModel, field_validator, model_validator
 from pydantic.fields import Field
 
+from testbench_requirement_service.readers.jira.jira_oauth import has_cached_refresh_token
+
 
 class JiraProjectConfig(BaseModel):
     baseline_field: str | None = Field(
@@ -39,10 +41,10 @@ class JiraRequirementReaderConfig(BaseModel):
     server_url: str = Field(
         ..., description="Jira server URL (e.g., https://your-domain.atlassian.net)"
     )
-    auth_type: Literal["basic", "token", "oauth1"] = Field(
+    auth_type: Literal["basic", "token", "oauth1", "oauth2"] = Field(
         "basic",
         description=(
-            "Authentication type: basic (Cloud), token (Self-Hosted), or oauth1 (OAuth 1.0a)"
+            "Authentication type: basic (Cloud), token (Self-Hosted), oauth1 (OAuth 1.0a) or oauth2 (OAuth 3LO)"
         ),
     )
 
@@ -77,6 +79,60 @@ class JiraRequirementReaderConfig(BaseModel):
             "env_var": "JIRA_BEARER_TOKEN",
             "depends_on": {"auth_type": "token"},
             "required": True,
+        },
+    )
+
+    oauth2_access_token: str | None = Field(
+        None,
+        exclude=True,
+        description="Legacy OAuth2 access token for Jira Cloud gateway authentication",
+        json_schema_extra={
+            "sensitive": True,
+            "env_var": "JIRA_OAUTH2_ACCESS_TOKEN",
+            "depends_on": {"auth_type": "oauth2"},
+            "required": False,
+            "skip_if_wizard": True,
+        },
+    )
+    oauth2_refresh_token: str | None = Field(
+        None,
+        exclude=True,
+        description="OAuth2 refresh token used to obtain new access tokens",
+        json_schema_extra={
+            "sensitive": True,
+            "env_var": "JIRA_OAUTH2_REFRESH_TOKEN",
+            "depends_on": {"auth_type": "oauth2"},
+            "required": False,
+        },
+    )
+    oauth2_client_id: str | None = Field(
+        None,
+        description="OAuth2 client ID for Jira token refresh",
+        json_schema_extra={
+            "env_var": "JIRA_OAUTH2_CLIENT_ID",
+            "depends_on": {"auth_type": "oauth2"},
+            "required": True,
+        },
+    )
+    oauth2_client_secret: str | None = Field(
+        None,
+        description="OAuth2 client secret for Jira token refresh",
+        json_schema_extra={
+            "sensitive": True,
+            "env_var": "JIRA_OAUTH2_CLIENT_SECRET",
+            "depends_on": {"auth_type": "oauth2"},
+            "required": True,
+        },
+    )
+    oauth2_expires_at: int | None = Field(
+        None,
+        exclude=True,
+        description="Optional UNIX timestamp when the current OAuth2 access token expires",
+        json_schema_extra={
+            "env_var": "JIRA_OAUTH2_EXPIRES_AT",
+            "depends_on": {"auth_type": "oauth2"},
+            "required": False,
+            "skip_if_wizard": True,
         },
     )
 
@@ -324,6 +380,33 @@ class JiraRequirementReaderConfig(BaseModel):
                 "or oauth1_key_cert / JIRA_OAUTH1_KEY_CERT env)"
             )
 
+    def _validate_oauth2(self) -> None:
+        self.oauth2_refresh_token = self.oauth2_refresh_token or os.getenv(
+            "JIRA_OAUTH2_REFRESH_TOKEN"
+        )
+        self.oauth2_client_id = self.oauth2_client_id or os.getenv("JIRA_OAUTH2_CLIENT_ID")
+        self.oauth2_client_secret = self.oauth2_client_secret or os.getenv(
+            "JIRA_OAUTH2_CLIENT_SECRET"
+        )
+        expires_at_value = self.oauth2_expires_at or os.getenv("JIRA_OAUTH2_EXPIRES_AT")
+        if isinstance(expires_at_value, str) and expires_at_value.strip():
+            try:
+                self.oauth2_expires_at = int(expires_at_value)
+            except ValueError as e:
+                raise ValueError("JIRA_OAUTH2_EXPIRES_AT must be a UNIX timestamp integer") from e
+
+        if not self.oauth2_client_id or not self.oauth2_client_secret:
+            raise ValueError(
+                "Jira OAuth2 client credentials must be provided "
+                "(via oauth2_client_id/oauth2_client_secret or JIRA_OAUTH2_CLIENT_ID/"
+                "JIRA_OAUTH2_CLIENT_SECRET)"
+            )
+        if not self.oauth2_refresh_token and not has_cached_refresh_token():
+            raise ValueError(
+                "Jira OAuth2 refresh token is required. "
+                "Provide it in the configuration wizard."
+            )
+
     @model_validator(mode="after")
     def validate_config(self) -> "JiraRequirementReaderConfig":
         if self.auth_type == "basic":
@@ -332,4 +415,6 @@ class JiraRequirementReaderConfig(BaseModel):
             self._validate_token_auth()
         elif self.auth_type == "oauth1":
             self._validate_oauth1()
+        elif self.auth_type == "oauth2":
+            self._validate_oauth2()
         return self
