@@ -1,10 +1,12 @@
 """Configuration wizard helper functions for CLI."""
 
+import os
 from pathlib import Path
 from typing import Any
 
 import click
 import questionary
+from dotenv import set_key
 from pydantic import BaseModel
 from questionary import Choice
 
@@ -13,6 +15,7 @@ from testbench_requirement_service.models.config import (
     DEFAULT_PORT,
     RequirementServiceConfig,
 )
+from testbench_requirement_service.readers.jira.config import AUTH_OAUTH2_3LO
 from testbench_requirement_service.readers.jira.jira_oauth import seed_oauth2_refresh_token
 from testbench_requirement_service.readers.utils import (
     get_reader_config_class,
@@ -51,6 +54,9 @@ SERVICE_WIZARD_SKIP_FIELDS = {
     "salt",
     "logging",
 }
+
+JIRA_CLIENT_SECRET_ENV_VAR = "JIRA_OAUTH2_CLIENT_SECRET"
+DEFAULT_DOTENV_PATH = Path(".env")
 
 
 def validate_port(value: Any) -> tuple[bool, str | None]:
@@ -162,6 +168,32 @@ def merge_with_defaults(
     return config_obj.model_dump(mode="json", by_alias=True, exclude_none=True, exclude=exclude)
 
 
+def store_client_secret_in_env(
+    client_config: dict[str, Any], dotenv_path: Path = DEFAULT_DOTENV_PATH
+) -> None:
+    """Always store the Jira OAuth2 client secret in a .env file, never in the config file.
+
+    When a secret is present in ``client_config`` it is written to ``dotenv_path`` as
+    ``JIRA_OAUTH2_CLIENT_SECRET``, exported to the current process environment, and removed
+    from ``client_config``. Because ``merge_with_defaults`` excludes fields whose env var is
+    set, the secret is thereby kept out of the generated config file while the config still
+    validates against the environment value.
+
+    Mutates ``client_config`` in place. Does nothing when no secret is present — e.g. when the
+    secret was already supplied via the environment, in which case it never entered the config.
+    """
+    secret = client_config.get("oauth2_client_secret")
+    if not isinstance(secret, str) or not secret:
+        return
+
+    set_key(str(dotenv_path), JIRA_CLIENT_SECRET_ENV_VAR, secret)
+    os.environ[JIRA_CLIENT_SECRET_ENV_VAR] = secret
+    client_config.pop("oauth2_client_secret", None)
+
+    click.echo(f"✓ Stored {JIRA_CLIENT_SECRET_ENV_VAR} in {dotenv_path}")
+    click.echo("  Keep this file out of version control (e.g. add '.env' to .gitignore).")
+
+
 def configure_reader(
     reader_type: str, reader_class: str, service_config: RequirementServiceConfig | None = None
 ) -> dict | None:
@@ -201,7 +233,7 @@ def configure_reader(
     if reader_config is None:
         return None
 
-    if reader_type == "jira" and reader_config.get("auth_type") == "oauth2":
+    if reader_type == "jira" and reader_config.get("auth_type") == AUTH_OAUTH2_3LO:
         refresh_token = reader_config.get("oauth2_refresh_token")
         if isinstance(refresh_token, str):
             refresh_token = refresh_token.strip() or None
@@ -211,6 +243,9 @@ def configure_reader(
             seed_oauth2_refresh_token(refresh_token)
         else:
             reader_config.pop("oauth2_refresh_token", None)
+
+    if reader_type == "jira":
+        store_client_secret_in_env(reader_config)
 
     return merge_with_defaults(reader_config, config_class)
 
