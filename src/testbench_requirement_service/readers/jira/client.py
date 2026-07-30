@@ -14,8 +14,14 @@ from jira.resources import (
 )
 
 from testbench_requirement_service.log import logger
-from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
+from testbench_requirement_service.readers.jira.config import (
+    AUTH_OAUTH2_2LO,
+    JiraRequirementReaderConfig,
+    is_oauth2,
+)
 from testbench_requirement_service.readers.jira.jira_oauth import (
+    GRANT_CLIENT_CREDENTIALS,
+    GRANT_REFRESH_TOKEN,
     JiraAuthExpiredError,
     configure_oauth2_runtime,
     get_valid_jira_token_sync,
@@ -45,6 +51,12 @@ class JiraClient:
         self._fields_cache: TTLCache[list[dict[str, Any]]] = TTLCache(ttl=config.cache_ttl)
         self._uses_gateway: bool = False
         self._gateway_url: str | None = None
+        self._proxies: dict[str, str] | None = None
+        if self.config.proxy_url:
+            self._proxies = {
+                "http": self.config.proxy_url,
+                "https": self.config.proxy_url,
+            }
         self.jira = self._connect()
         # The following flags determine which Jira API endpoints to use
         self.use_issuetypes_endpoint = not self.jira._is_cloud and self.jira._version >= (8, 4, 0)
@@ -87,6 +99,8 @@ class JiraClient:
         options: dict[str, Any] = {"verify": self.config.ssl_verify}
         if self.config.client_cert is not None:
             options["client_cert"] = self.config.client_cert
+        if self._proxies is not None:
+            options["proxies"] = self._proxies
         return options
 
     def _create_jira_instance(self, server: str, token_override: str | None = None) -> JIRA:
@@ -102,6 +116,7 @@ class JiraClient:
                 basic_auth=(self.config.username or "", self.config.password or ""),
                 max_retries=self.config.max_retries,
                 timeout=self.config.timeout,
+                proxies=self._proxies,
             )
         if self.config.auth_type == "token":
             return JIRA(
@@ -110,6 +125,7 @@ class JiraClient:
                 token_auth=self.config.token,
                 max_retries=self.config.max_retries,
                 timeout=self.config.timeout,
+                proxies=self._proxies,
             )
         if self.config.auth_type == "oauth1":
             return JIRA(
@@ -123,8 +139,9 @@ class JiraClient:
                 },
                 max_retries=self.config.max_retries,
                 timeout=self.config.timeout,
+                proxies=self._proxies,
             )
-        if self.config.auth_type == "oauth2":
+        if is_oauth2(self.config.auth_type):
             token = token_override or self.config.token
             return JIRA(
                 server=server,
@@ -132,6 +149,7 @@ class JiraClient:
                 token_auth=token,
                 max_retries=self.config.max_retries,
                 timeout=self.config.timeout,
+                proxies=self._proxies,
             )
         raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
 
@@ -173,6 +191,8 @@ class JiraClient:
                 tenant_info_url,
                 timeout=self.config.timeout,
                 verify=self.config.ssl_verify,
+                cert=self.config.client_cert,
+                proxies=self._proxies,
             )
             response.raise_for_status()
             data = response.json()
@@ -214,12 +234,14 @@ class JiraClient:
             f"Connecting to Jira via Atlassian gateway (scoped API token mode): {gateway_url}"
         )
 
-        if self.config.auth_type == "oauth2":
+        if is_oauth2(self.config.auth_type):
+            is_2lo = self.config.auth_type == AUTH_OAUTH2_2LO
             configure_oauth2_runtime(
-                refresh_token=self.config.oauth2_refresh_token,
+                grant_type=GRANT_CLIENT_CREDENTIALS if is_2lo else GRANT_REFRESH_TOKEN,
+                refresh_token=None if is_2lo else self.config.oauth2_refresh_token,
                 client_id=self.config.oauth2_client_id,
                 client_secret=self.config.oauth2_client_secret,
-                expires_at=self.config.oauth2_expires_at,
+                expires_at=None if is_2lo else self.config.oauth2_expires_at,
             )
             try:
                 initial_oauth2_token = get_valid_jira_token_sync(is_first_call=True)
@@ -232,7 +254,7 @@ class JiraClient:
             initial_oauth2_token = None
 
         jira = self._create_jira_instance(gateway_url, token_override=initial_oauth2_token)
-        if self.config.auth_type == "oauth2":
+        if is_oauth2(self.config.auth_type):
             self._patch_session_for_oauth2_token(jira._session)
 
         if not self._verify_connection(jira):
@@ -306,7 +328,7 @@ class JiraClient:
         - A 401 on DC basic auth means wrong credentials, not a scoped token.
         """
         try:
-            if self.config.auth_type == "oauth2":
+            if is_oauth2(self.config.auth_type):
                 return self._connect_via_gateway()
             jira = self._create_jira_instance(self.config.server_url)
         except NotImplementedError:

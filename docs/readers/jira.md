@@ -79,10 +79,11 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
 | Setting | Type | Description | Required | Default |
 |---------|------|-------------|----------|---------|
 | `server_url` | String | Base URL of the Jira instance (e.g. `https://your-company.atlassian.net`) | Yes | (none) |
-| `auth_type` | String | Authentication method: `basic`, `token`, or `oauth1` | No | `basic` |
+| `auth_type` | String | Authentication method: `basic`, `token`, `oauth1`, `oauth2 2LO (service account)`, or `oauth2 3LO (user account)` | No | `basic` |
 | `timeout` | Integer | HTTP request timeout in seconds (1–300) | No | `30` |
 | `max_retries` | Integer | Max retries for failed API requests (0–10) | No | `3` |
 | `cache_ttl` | Float | Cache time-to-live in seconds. `0` = disable caching. | No | `300.0` |
+| `proxy_url` | String | HTTP(S) proxy for all Jira API requests (e.g. `http://proxy.example.com:8080`). See [Proxy settings](#proxy-settings). | No | (none) |
 
 ### Authentication methods
 
@@ -93,6 +94,12 @@ Pick the authentication flow that matches your Jira deployment. Credentials can 
 | `basic` | Jira Cloud and Data Center with username + password/API token | `username` + `password` (or `JIRA_USERNAME` + `JIRA_PASSWORD`) |
 | `token` | Jira Server/Data Center with Personal Access Tokens | `token` (or `JIRA_BEARER_TOKEN`) |
 | `oauth1` | Enterprise instances requiring OAuth 1.0a | `oauth1_access_token`, `oauth1_access_token_secret`, `oauth1_consumer_key`, `oauth1_key_cert_path` (or matching env vars) |
+| `oauth2 2LO (service account)` | Jira Cloud, unattended service-to-service access without a user account | `oauth2_client_id` + `oauth2_client_secret` (or `JIRA_OAUTH2_CLIENT_ID` + `JIRA_OAUTH2_CLIENT_SECRET`) |
+| `oauth2 3LO (user account)` | Jira Cloud, delegated access on behalf of a user | `oauth2_client_id` + `oauth2_client_secret`, plus a refresh token seeded via the setup wizard |
+
+:::warning
+The two OAuth 2.0 values must be typed **exactly** as shown, including spaces, capitalization and parentheses — e.g. `auth_type = "oauth2 3LO (user account)"`. Any other spelling (such as the older `"oauth2"`) is rejected with a validation error at startup. Use `testbench-requirement-service init` / `configure` to pick the value from a list instead of typing it.
+:::
 
 #### Basic authentication (`auth_type = "basic"`)
 
@@ -116,13 +123,52 @@ Pick the authentication flow that matches your Jira deployment. Credentials can 
 | `oauth1_consumer_key` | String | OAuth1 consumer key | `JIRA_OAUTH1_CONSUMER_KEY` |
 | `oauth1_key_cert_path` | String | Path to RSA private key file (`.pem`) | `JIRA_OAUTH1_KEY_CERT_PATH` |
 
-#### OAuth2 authentication (`auth_type = "oauth2"`)
+#### OAuth2 2LO authentication (`auth_type = "oauth2 2LO (service account)"`)
+
+Two-legged OAuth: the service authenticates as itself using the `client_credentials` grant. No user consent and no refresh token are involved — access tokens are minted from the client ID/secret and re-minted automatically when they expire.
 
 | Setting | Type | Description | Env var |
 |---------|------|-------------|---------|
-| `oauth2_client_id` | String | OAuth 2.0 client ID for `oauth2` auth (Jira Cloud). | `JIRA_OAUTH2_CLIENT_ID` |
-| `oauth2_client_secret` | String | OAuth 2.0 client secret for `oauth2` auth (Jira Cloud). | `JIRA_OAUTH2_CLIENT_SECRET` |
+| `oauth2_client_id` | String | OAuth 2.0 client ID (required) | `JIRA_OAUTH2_CLIENT_ID` |
+| `oauth2_client_secret` | String | OAuth 2.0 client secret (required) | `JIRA_OAUTH2_CLIENT_SECRET` |
 
+#### OAuth2 3LO authentication (`auth_type = "oauth2 3LO (user account)"`)
+
+Three-legged OAuth: a user grants consent once, and the resulting refresh token is used to obtain short-lived access tokens at runtime.
+
+| Setting | Type | Description | Env var |
+|---------|------|-------------|---------|
+| `oauth2_client_id` | String | OAuth 2.0 client ID (required) | `JIRA_OAUTH2_CLIENT_ID` |
+| `oauth2_client_secret` | String | OAuth 2.0 client secret (required) | `JIRA_OAUTH2_CLIENT_SECRET` |
+| `oauth2_refresh_token` | String | Refresh token from the 3LO consent flow. Not written to `config.toml` — the wizard stores it in `tmp/oauth2_tokens.toml`. Required unless a token is already cached there. | `JIRA_OAUTH2_REFRESH_TOKEN` |
+| `oauth2_expires_at` | Integer | Optional UNIX timestamp for when the current access token expires. Rarely needed; the service tracks expiry itself. | `JIRA_OAUTH2_EXPIRES_AT` |
+
+See [OAuth 2.0 (3LO) auth](#oauth-20-3lo-auth-jira-cloud) below for the full consent flow and the required scopes.
+
+### Proxy settings
+
+Only needed when the service cannot reach Jira (or `auth.atlassian.com`) directly and has to go through a forward proxy — typical in corporate networks with egress filtering.
+
+| Setting | Type | Description | Default | Env var |
+|---------|------|-------------|---------|---------|
+| `proxy_url` | String | Proxy URL used for both HTTP and HTTPS Jira API requests, e.g. `http://proxy.example.com:8080`. Credentials can be embedded as `http://user:password@proxy.example.com:8080`. | (none) | — |
+
+```toml
+# config.toml
+[testbench-requirement-service.reader_config]
+server_url = "https://example.atlassian.net/"
+proxy_url = "http://proxy.example.com:8080"
+```
+
+Notes:
+
+- `proxy_url` has no environment variable. When it is not set, the underlying `requests` library still honors the standard `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` environment variables; setting `proxy_url` overrides them for Jira API calls.
+- `proxy_url` covers the Jira REST API calls, the Atlassian Cloud ID lookup (`/_edge/tenant_info`) and attachment/image downloads. The OAuth 2.0 token requests to `https://auth.atlassian.com/oauth/token` are made through a separate HTTP client that only honors the `HTTPS_PROXY` environment variable — set that as well when using OAuth 2.0 behind a proxy.
+- A proxy that terminates TLS (SSL inspection) presents its own certificate. In that case also set `ssl_ca_cert_path` to the proxy's CA bundle, rather than disabling `verify_ssl`.
+
+:::warning[Security]
+Embedding proxy credentials in `proxy_url` stores them in plain text in `config.toml`. Prefer a proxy that does not require authentication, or supply the credentialed URL via `HTTPS_PROXY` in the service environment.
+:::
 
 ### SSL / TLS settings
 
@@ -181,7 +227,7 @@ Recommended for Jira Cloud. Uses your Atlassian account email and an API token.
 
 ```toml
 # config.toml
-[testbench-requirement-service.client_config]
+[testbench-requirement-service.reader_config]
 auth_type  = "basic"
 username   = "your-email@company.com"
 password  = "your-api-token"
@@ -195,7 +241,7 @@ Uses a Personal Access Token (PAT) generated in your Jira Data Center profile.
 
 ```toml
 # config.toml
-[testbench-requirement-service.client_config]
+[testbench-requirement-service.reader_config]
 auth_type = "token"
 token     = "your-personal-access-token"
 ```
@@ -206,12 +252,14 @@ Personal Access Tokens expire based on the duration set in your Jira Data Center
 
 ### OAuth 2.0 (3LO) auth (Jira Cloud)
 
-Uses an OAuth 2.0 access token obtained via the Atlassian 3-Legged OAuth (3LO) flow. This is recommended when your Atlassian app is registered in the [Atlassian developer console](https://developer.atlassian.com/console/myapps/) and you need delegated user access.
+Uses an OAuth 2.0 access token obtained via the Atlassian 3-Legged OAuth (3LO) flow. This is recommended when your Atlassian app is registered in the [Atlassian developer console](https://developer.atlassian.com/console/myapps/) and you need delegated user access — every Jira request is made on behalf of the user who granted consent.
 
 ```toml
 # config.toml
-[testbench-requirement-service.client_config]
-auth_type    = "oauth2"
+[testbench-requirement-service.reader_config]
+auth_type            = "oauth2 3LO (user account)"
+oauth2_client_id     = "your-client-id"
+oauth2_client_secret = "your-client-secret"
 ```
 
 #### How to obtain an OAuth 2.0 access token
@@ -287,7 +335,44 @@ token is revoked or expires, re-run the setup wizard to seed a new `tmp/oauth2_t
 Refresh tokens are single-use and expire after 90 days without use.
 :::
 
-#### Required OAuth scopes
+### OAuth 2.0 (2LO) auth (Jira Cloud)
+
+Uses the Atlassian 2-Legged OAuth (2LO) flow, i.e. the OAuth 2.0 `client_credentials` grant. The service authenticates **as itself** (a service account) instead of on behalf of a user. Choose this for unattended deployments where no user should have to grant consent and no long-lived refresh token has to be maintained.
+
+```toml
+# config.toml
+[testbench-requirement-service.reader_config]
+auth_type            = "oauth2 2LO (service account)"
+oauth2_client_id     = "your-client-id"
+oauth2_client_secret = "your-client-secret"
+```
+
+Or via environment variables:
+
+```bash
+export JIRA_OAUTH2_CLIENT_ID=your-client-id
+export JIRA_OAUTH2_CLIENT_SECRET=your-client-secret
+```
+
+How it differs from 3LO:
+
+| | 2LO (service account) | 3LO (user account) |
+|---|---|---|
+| Grant type | `client_credentials` | `refresh_token` (after `authorization_code`) |
+| Browser consent step | Not needed | Required once |
+| Refresh token | Not used | Required, stored in `tmp/oauth2_tokens.toml` |
+| Wizard prompts for a token | No | Yes |
+| Token cache on disk | No — access tokens are held in memory only | Yes |
+| Acts as | The app itself | The consenting user |
+| Required settings | `oauth2_client_id`, `oauth2_client_secret` | `oauth2_client_id`, `oauth2_client_secret`, refresh token |
+
+Access tokens are requested from `https://auth.atlassian.com/oauth/token` on first connect and re-minted automatically shortly before they expire, so no manual token rotation is needed. Because nothing is persisted, a restart simply mints a new token.
+
+:::note
+2LO requires an Atlassian app that is permitted to use the `client_credentials` grant, with the [required scopes](#required-oauth-scopes) granted to the app itself. If Atlassian rejects the grant, the service fails at startup with `Jira OAuth2 client credentials are not configured` or an authorization error — verify the app type and its scopes in the developer console.
+:::
+
+### Required OAuth scopes
 
 The minimum scopes needed by the Requirement Service:
 
@@ -328,6 +413,9 @@ auth_type = "basic"
 # timeout     = 30
 # max_retries = 3
 # cache_ttl   = 300.0
+
+# Forward proxy for all Jira API requests (optional)
+# proxy_url = "http://proxy.example.com:8080"
 
 # Requirement & baseline settings
 baseline_field = "fixVersions"
@@ -383,10 +471,22 @@ JIRA_PASSWORD=my-api-token
 # JIRA_OAUTH1_CONSUMER_KEY=my-consumer-key
 # JIRA_OAUTH1_KEY_CERT_PATH=/path/to/private-key.pem
 
+# OAuth2 authentication (2LO and 3LO)
+# JIRA_OAUTH2_CLIENT_ID=my-client-id
+# JIRA_OAUTH2_CLIENT_SECRET=my-client-secret
+
 # Mutual TLS (optional)
 # JIRA_CLIENT_CERT_PATH=/path/to/client.crt
 # JIRA_CLIENT_KEY_PATH=/path/to/client.key
+
+# Forward proxy for the OAuth2 token endpoint (auth.atlassian.com).
+# Jira API requests use the `proxy_url` reader setting instead.
+# HTTPS_PROXY=http://proxy.example.com:8080
 ```
+
+:::warning
+Do not put `JIRA_OAUTH2_REFRESH_TOKEN` in a `.env` file for normal operation — the refresh token rotates on every use and belongs in the runtime cache (`tmp/oauth2_tokens.toml`) that the setup wizard seeds. Only use the environment variable for one-off seeding in automated deployments.
+:::
 
 ## Testing
 
@@ -419,3 +519,8 @@ JIRA_PASSWORD=my-api-token
 | 401 / 403 from Jira | Invalid or missing credentials | Check that the env vars or config match the selected `auth_type` |
 | SSL errors | Self-signed or corporate CA certificate | Set `ssl_ca_cert_path` to your CA bundle, or set `verify_ssl = false` for testing only |
 | Timeout errors | Slow Jira instance or network | Increase `timeout` and `max_retries` in config |
+| Validation error on `auth_type` | Value not spelled exactly as the allowed literal | Use `basic`, `token`, `oauth1`, `oauth2 2LO (service account)` or `oauth2 3LO (user account)` — see [Authentication methods](#authentication-methods) |
+| Connection works, but OAuth2 token refresh times out | Egress to `auth.atlassian.com` is blocked; `proxy_url` does not cover the token endpoint | Set the `HTTPS_PROXY` environment variable for the service process |
+| `Jira OAuth2 refresh token is not configured` | 3LO refresh token missing or expired (90 days unused, or revoked) | Re-run `testbench-requirement-service configure` and enter a fresh refresh token |
+| `Jira OAuth2 client credentials are not configured` | `oauth2_client_id` / `oauth2_client_secret` missing or still placeholders | Set both in the config or via `JIRA_OAUTH2_CLIENT_ID` / `JIRA_OAUTH2_CLIENT_SECRET` |
+| Connection refused / timeout in a corporate network | Direct egress to Jira blocked | Set `proxy_url` to your forward proxy — see [Proxy settings](#proxy-settings) |
