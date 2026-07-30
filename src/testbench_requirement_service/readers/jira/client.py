@@ -116,6 +116,7 @@ class JiraClient:
                 basic_auth=(self.config.username or "", self.config.password or ""),
                 max_retries=self.config.max_retries,
                 timeout=self.config.timeout,
+                proxies=self._proxies,
             )
         if self.config.auth_type == "token":
             return JIRA(
@@ -124,6 +125,7 @@ class JiraClient:
                 token_auth=self.config.token,
                 max_retries=self.config.max_retries,
                 timeout=self.config.timeout,
+                proxies=self._proxies,
             )
         if self.config.auth_type == "oauth1":
             return JIRA(
@@ -137,15 +139,17 @@ class JiraClient:
                 },
                 max_retries=self.config.max_retries,
                 timeout=self.config.timeout,
+                proxies=self._proxies,
             )
         if is_oauth2(self.config.auth_type):
-            token = token_override or self.config.oauth2_access_token or self.config.token
+            token = token_override or self.config.token
             return JIRA(
                 server=server,
                 options=options,
                 token_auth=token,
                 max_retries=self.config.max_retries,
                 timeout=self.config.timeout,
+                proxies=self._proxies,
             )
         raise NotImplementedError(f"Unsupported auth_type {self.config.auth_type}")
 
