@@ -160,6 +160,7 @@ def _post_oauth_token_request(payload: dict[str, str]) -> dict[str, object]:
         raise RuntimeError("Unexpected token response format from Jira OAuth endpoint")
     return data
 
+
 def _refresh_jira_token_sync() -> dict[str, object]:
     client_id = _oauth2_settings.get("client_id", "")
     client_secret = _oauth2_settings.get("client_secret", "")
@@ -174,6 +175,7 @@ def _refresh_jira_token_sync() -> dict[str, object]:
     }
     return _post_oauth_token_request(payload)
 
+
 def _mint_client_credentials_token_sync() -> dict[str, object]:
     client_id = _oauth2_settings.get("client_id", "")
     client_secret = _oauth2_settings.get("client_secret", "")
@@ -181,13 +183,14 @@ def _mint_client_credentials_token_sync() -> dict[str, object]:
 
     if missing or _is_placeholder(client_id) or _is_placeholder(client_secret):
         raise JiraAuthExpiredError("Jira OAuth2 client credentials are not configured")
-    
+
     payload = {
         "grant_type": GRANT_CLIENT_CREDENTIALS,
         "client_id": client_id,
         "client_secret": client_secret,
     }
     return _post_oauth_token_request(payload)
+
 
 def _is_cached_2lo_token_valid(is_first_call: bool) -> str | None:
     """Check if a cached 2LO token is valid and return it, or None if not."""
@@ -200,8 +203,9 @@ def _is_cached_2lo_token_valid(is_first_call: bool) -> str | None:
         return access_token
     return None
 
+
 def _get_valid_client_credentials_token(is_first_call: bool) -> str:
-    cached_token = _is_cached_2lo_token_valid(is_first_call)
+    cached_token = _is_cached_2lo_token_valid(is_first_call=False)
     if cached_token is not None:
         return cached_token
     with refresh_lock_sync:
@@ -213,6 +217,7 @@ def _get_valid_client_credentials_token(is_first_call: bool) -> str:
         token_store["expires_at"] = time.time() + int(str(data.get("expires_in", 0)))
         return str(token_store.get("access_token", ""))
 
+
 def get_valid_jira_token_sync(
     fallback_token: str | None = None, is_first_call: bool = False
 ) -> str:
@@ -223,6 +228,7 @@ def get_valid_jira_token_sync(
     if _oauth2_settings.get("grant_type") == GRANT_CLIENT_CREDENTIALS:
         return _get_valid_client_credentials_token(is_first_call)
     expires_at, access_token = _get_cached_token_data(fallback_token)
+    token_before_lock = access_token
 
     if time.time() < (expires_at - 300) and access_token and not is_first_call:
         return access_token
@@ -233,7 +239,12 @@ def get_valid_jira_token_sync(
         expires_at, access_token = _get_cached_token_data(fallback_token)
 
         # Check one more time in case the disk load yielded a fresh, valid token
-        if time.time() < (expires_at - 300) and access_token and not is_first_call:
+        refreshed_by_peer = access_token != token_before_lock
+        if (
+            time.time() < (expires_at - 300)
+            and access_token
+            and (not is_first_call or refreshed_by_peer)
+        ):
             return access_token
 
         refresh_token = str(token_store.get("refresh_token", ""))

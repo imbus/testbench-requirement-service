@@ -278,6 +278,11 @@ class JiraRequirementReaderConfig(BaseModel):
         },
     )
 
+    proxy_url: str | None = Field(
+        None,
+        description="Optional proxy URL for Jira API requests (e.g., http://proxy.example.com:8080)",
+    )
+
     @property
     def ssl_verify(self) -> str | bool:
         """Return the value for SSL verification passed to the jira package ``options`` dict.

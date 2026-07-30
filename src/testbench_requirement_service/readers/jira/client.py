@@ -51,6 +51,12 @@ class JiraClient:
         self._fields_cache: TTLCache[list[dict[str, Any]]] = TTLCache(ttl=config.cache_ttl)
         self._uses_gateway: bool = False
         self._gateway_url: str | None = None
+        self._proxies: dict[str, str] | None = None
+        if self.config.proxy_url:
+            self._proxies = {
+                "http": self.config.proxy_url,
+                "https": self.config.proxy_url,
+            }
         self.jira = self._connect()
         # The following flags determine which Jira API endpoints to use
         self.use_issuetypes_endpoint = not self.jira._is_cloud and self.jira._version >= (8, 4, 0)
@@ -93,6 +99,8 @@ class JiraClient:
         options: dict[str, Any] = {"verify": self.config.ssl_verify}
         if self.config.client_cert is not None:
             options["client_cert"] = self.config.client_cert
+        if self._proxies is not None:
+            options["proxies"] = self._proxies
         return options
 
     def _create_jira_instance(self, server: str, token_override: str | None = None) -> JIRA:
@@ -180,6 +188,7 @@ class JiraClient:
                 timeout=self.config.timeout,
                 verify=self.config.ssl_verify,
                 cert=self.config.client_cert,
+                proxies=self._proxies,
             )
             response.raise_for_status()
             data = response.json()
