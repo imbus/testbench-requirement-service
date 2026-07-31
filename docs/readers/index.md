@@ -48,7 +48,7 @@ Connects to Jira Cloud or Jira Data Center via the REST API. Use this when:
 - You need live access to Jira without manual exports.
 - You want per-project JQL customization and field mapping.
 
-Supports multiple authentication methods (Basic, PAT, OAuth1) and SSL/mTLS.
+Supports multiple authentication methods (Basic, PAT, OAuth1, OAuth2 2LO/3LO) and SSL/mTLS.
 
 **Get started:** [Jira Reader](jira.md)
 

@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Jira reader: OAuth 2.0 2LO (service account) authentication via `auth_type = "oauth2 2LO (service account)"`, using the `client_credentials` grant. Access tokens are minted from `oauth2_client_id`/`oauth2_client_secret` alone and re-minted automatically — no user consent, no refresh token and no token cache on disk.
 - Jira reader: `proxy_url` setting to route all Jira API requests through a forward proxy (e.g. `http://proxy.example.com:8080`). The OAuth 2.0 token endpoint is not covered by it and honors the `HTTPS_PROXY` environment variable instead.
 - Documentation for the 2LO flow, the complete set of OAuth 2.0 settings, and the proxy setting in `docs/readers/jira.md` and `examples/jira_config.toml`.
+- Jira: OAuth 2.0 3LO support for Jira Data Center — automatic Data Center
+  detection, token requests against `{server_url}/rest/oauth2/1.0/token`
+  (form-encoded, PKCE authorization-code exchange in the setup wizard), and
+  API requests sent directly to the configured server URL instead of the
+  Atlassian gateway.
+- Jira: the short `auth_type` values `"oauth2 2LO"` and `"oauth2 3LO"` are
+  accepted as aliases for the descriptive long forms.
+- Documentation for OAuth 2.0 on Jira Data Center (automatic detection, the
+  wizard's authorization-code exchange, troubleshooting) and the short
+  `auth_type` aliases in `docs/readers/jira.md` and `examples/jira_config.toml`.
 
 ### Changed
 - Jira reader: the OAuth 2.0 `auth_type` value was split into `oauth2 2LO (service account)` and `oauth2 3LO (user account)`. The previous value `oauth2` is no longer accepted — existing configurations using it must be updated to `oauth2 3LO (user account)`.
@@ -20,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Jira reader: removed a reference to a non-existent `oauth2_access_token` config field that could raise `AttributeError` when connecting with OAuth 2.0.
 - Configuration wizard: `oauth2_client_secret` and other `*client_secret*` keys are now masked in the "view configuration" output instead of being printed in plain text.
 - Jira reader: the startup prompt for a missing OAuth 2.0 refresh token now triggers for the 3LO auth type (it compared against the obsolete `"oauth2"` value and therefore never fired).
+- Configuration wizard: the prompts for `oauth2_client_id`, `oauth2_client_secret` and `oauth2_refresh_token` were skipped when one of the descriptive auth-type labels (`oauth2 2LO (service account)` / `oauth2 3LO (user account)`) was selected, so the wizard finished with "Jira OAuth2 client credentials must be provided". The prompts now fire for both the short and the descriptive labels.
+- Configuration wizard: the OAuth 2.0 refresh-token wizard is now given the collected reader configuration, so the Jira Data Center authorization-code exchange can use the just-entered `server_url` and client credentials instead of always reporting that they are missing.
 
 ## [1.1.0] - 2026-07-27
 
