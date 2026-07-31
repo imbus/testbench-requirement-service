@@ -1,14 +1,17 @@
 """Configuration wizard helper functions for CLI."""
 
+import contextlib
 import os
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
 
 import click
 import questionary
 from dotenv import set_key
 from pydantic import BaseModel
 from questionary import Choice
+from requests.models import HTTPError
 
 from testbench_requirement_service.models.config import (
     DEFAULT_HOST,
@@ -16,7 +19,12 @@ from testbench_requirement_service.models.config import (
     RequirementServiceConfig,
 )
 from testbench_requirement_service.readers.jira.config import AUTH_OAUTH2_3LO
-from testbench_requirement_service.readers.jira.jira_oauth import seed_oauth2_refresh_token
+from testbench_requirement_service.readers.jira.jira_oauth import (
+    JiraAuthExpiredError,
+    data_center_token_url,
+    exchange_authorization_code_sync,
+    seed_oauth2_refresh_token,
+)
 from testbench_requirement_service.readers.utils import (
     get_reader_config_class,
     get_requirement_reader_from_reader_class_str,
@@ -187,6 +195,8 @@ def store_client_secret_in_env(
         return
 
     set_key(str(dotenv_path), JIRA_CLIENT_SECRET_ENV_VAR, secret)
+    with contextlib.suppress(OSError):
+        dotenv_path.chmod(0o600)
     os.environ[JIRA_CLIENT_SECRET_ENV_VAR] = secret
     client_config.pop("oauth2_client_secret", None)
 
@@ -233,12 +243,12 @@ def configure_reader(
     if reader_config is None:
         return None
 
-    if reader_type == "jira" and reader_config.get("auth_type") == AUTH_OAUTH2_3LO:
+    if reader_type == "jira" and reader_config.get("auth_type", "").startswith(AUTH_OAUTH2_3LO):
         refresh_token = reader_config.get("oauth2_refresh_token")
         if isinstance(refresh_token, str):
             refresh_token = refresh_token.strip() or None
         if not refresh_token:
-            refresh_token = run_jira_oauth_wizard()
+            refresh_token = run_jira_oauth_wizard(reader_config)
         if refresh_token:
             seed_oauth2_refresh_token(refresh_token)
         else:
@@ -694,9 +704,84 @@ def run_full_wizard(config_path: Path):  # noqa: C901, PLR0912, PLR0915
     click.echo()
 
 
-def run_jira_oauth_wizard() -> str | None:
+_OAUTH_CHOICE_REFRESH_TOKEN = "Enter a refresh token (Jira Cloud)"
+_OAUTH_CHOICE_AUTH_CODE = "Exchange an authorization code (Jira Data Center)"
+
+
+def run_jira_oauth_wizard(reader_config: dict | None = None) -> str | None:
     click.echo("Jira OAuth2 refresh token is not configured. ")
-    refresh_token = questionary.text("Please enter your OAuth2 refresh token: ").ask()
-    if isinstance(refresh_token, str) and refresh_token.strip():
-        return refresh_token.strip()
+    choice = questionary.select(
+        "How would you like to provide OAuth2 authorization?",
+        choices=[_OAUTH_CHOICE_REFRESH_TOKEN, _OAUTH_CHOICE_AUTH_CODE],
+    ).ask()
+
+    if choice == _OAUTH_CHOICE_REFRESH_TOKEN:
+        refresh_token = questionary.text("Please enter your OAuth2 refresh token: ").ask()
+        return refresh_token if isinstance(refresh_token, str) and refresh_token else None
+
+    if choice == _OAUTH_CHOICE_AUTH_CODE:
+        while True:
+            refresh_token = _run_jira_dc_code_exchange(reader_config or {})
+            if refresh_token:
+                return refresh_token
+            retry = questionary.confirm(
+                "Retry the authorization code exchange?", default=False
+            ).ask()
+            if not retry:
+                return None
+
     return None
+
+
+def _run_jira_dc_code_exchange(reader_config: dict) -> str | None:
+    """Prompt for code/verifier/redirect URI and exchange them at the DC endpoint."""
+    server_url = reader_config.get("server_url") or ""
+    client_id = reader_config.get("oauth2_client_id") or os.getenv("JIRA_OAUTH2_CLIENT_ID")
+    client_secret = reader_config.get("oauth2_client_secret") or os.getenv(
+        "JIRA_OAUTH2_CLIENT_SECRET"
+    )
+    if not server_url or not client_id or not client_secret:
+        click.echo(
+            "Cannot exchange the authorization code: server_url and OAuth2 client "
+            "credentials must be configured first."
+        )
+        return None
+
+    code = questionary.text("Enter the authorization code: ").ask()
+    code_verifier = questionary.text("Enter the PKCE code_verifier: ").ask()
+    redirect_uri = questionary.text(
+        "Enter the redirect URI used in the authorization request: "
+    ).ask()
+    if not all(isinstance(v, str) and v for v in (code, code_verifier, redirect_uri)):
+        return None
+
+    token_url = data_center_token_url(server_url)
+    try:
+        return exchange_authorization_code_sync(
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            code=code,
+            code_verifier=code_verifier,
+        )
+    except JiraAuthExpiredError:
+        click.echo(
+            "Token exchange failed (HTTP 400/401). Authorization codes are single-use "
+            "and short-lived — generate a new code and try again."
+        )
+        return None
+    except HTTPError as exc:
+        click.echo(
+            f"Token exchange failed: HTTP {exc.code} from {token_url}. "
+            "Check that an incoming OAuth 2.0 application link is configured in Jira "
+            "Data Center and that server_url is correct."
+        )
+        return None
+    except URLError as exc:
+        click.echo(
+            f"Token exchange failed: could not reach {token_url} ({exc.reason}). "
+            "Check that server_url is correct and the Jira Data Center instance is "
+            "reachable."
+        )
+        return None

@@ -7,13 +7,15 @@ from pydantic.fields import Field
 
 from testbench_requirement_service.readers.jira.jira_oauth import has_cached_refresh_token
 
-AUTH_OAUTH2_2LO = "oauth2 2LO (service account)"
-AUTH_OAUTH2_3LO = "oauth2 3LO (user account)"
+AUTH_OAUTH2_2LO = "oauth2 2LO"
+AUTH_OAUTH2_3LO = "oauth2 3LO"
+AUTH_OAUTH2_2LO_VALUES = (AUTH_OAUTH2_2LO, "oauth2 2LO (service account)")
+AUTH_OAUTH2_3LO_VALUES = (AUTH_OAUTH2_3LO, "oauth2 3LO (user account)")
 
 
 def is_oauth2(auth_type: str) -> bool:
     """Return whether *auth_type* is one of the OAuth 2.0 flows (2LO or 3LO)."""
-    return auth_type in {AUTH_OAUTH2_2LO, AUTH_OAUTH2_3LO}
+    return auth_type.startswith((AUTH_OAUTH2_2LO, AUTH_OAUTH2_3LO))
 
 
 class JiraProjectConfig(BaseModel):
@@ -50,13 +52,30 @@ class JiraRequirementReaderConfig(BaseModel):
         ..., description="Jira server URL (e.g., https://your-domain.atlassian.net)"
     )
     auth_type: Literal[
-        "basic", "token", "oauth1", "oauth2 2LO (service account)", "oauth2 3LO (user account)"
+        "basic",
+        "token",
+        "oauth1",
+        "oauth2 2LO",
+        "oauth2 2LO (service account)",
+        "oauth2 3LO",
+        "oauth2 3LO (user account)",
     ] = Field(
         "basic",
         description=(
             "Authentication type: basic (Cloud), token (Self-Hosted), oauth1 (OAuth 1.0a), "
             "oauth2 2LO (service account) or oauth2 3LO (user account)"
         ),
+        json_schema_extra={
+            # The wizard shows only the descriptive labels; the short forms
+            # ("oauth2 2LO"/"oauth2 3LO") remain valid when written in the TOML.
+            "wizard_choices": [
+                "basic",
+                "token",
+                "oauth1",
+                "oauth2 2LO (service account)",
+                "oauth2 3LO (user account)",
+            ],
+        },
     )
 
     username: str | None = Field(
@@ -100,7 +119,7 @@ class JiraRequirementReaderConfig(BaseModel):
         json_schema_extra={
             "sensitive": True,
             "env_var": "JIRA_OAUTH2_REFRESH_TOKEN",
-            "depends_on": {"auth_type": AUTH_OAUTH2_3LO},
+            "depends_on": {"auth_type": list(AUTH_OAUTH2_3LO_VALUES)},
             "required": False,
         },
     )
@@ -110,7 +129,7 @@ class JiraRequirementReaderConfig(BaseModel):
         json_schema_extra={
             "env_var": "JIRA_OAUTH2_CLIENT_ID",
             "depends_on": {
-                "auth_type": [AUTH_OAUTH2_2LO, AUTH_OAUTH2_3LO],
+                "auth_type": [*AUTH_OAUTH2_2LO_VALUES, *AUTH_OAUTH2_3LO_VALUES],
             },
             "required": True,
         },
@@ -121,7 +140,7 @@ class JiraRequirementReaderConfig(BaseModel):
         json_schema_extra={
             "sensitive": True,
             "env_var": "JIRA_OAUTH2_CLIENT_SECRET",
-            "depends_on": {"auth_type": [AUTH_OAUTH2_2LO, AUTH_OAUTH2_3LO]},
+            "depends_on": {"auth_type": [*AUTH_OAUTH2_2LO_VALUES, *AUTH_OAUTH2_3LO_VALUES]},
             "required": True,
         },
     )
@@ -132,7 +151,7 @@ class JiraRequirementReaderConfig(BaseModel):
         json_schema_extra={
             "env_var": "JIRA_OAUTH2_EXPIRES_AT",
             "depends_on": {
-                "auth_type": AUTH_OAUTH2_3LO,
+                "auth_type": list(AUTH_OAUTH2_3LO_VALUES),
             },
             "required": False,
             "skip_if_wizard": True,
@@ -433,8 +452,8 @@ class JiraRequirementReaderConfig(BaseModel):
             self._validate_token_auth()
         elif self.auth_type == "oauth1":
             self._validate_oauth1()
-        elif self.auth_type == AUTH_OAUTH2_2LO:
+        elif self.auth_type.startswith(AUTH_OAUTH2_2LO):
             self._validate_oauth2_2lo()
-        elif self.auth_type == AUTH_OAUTH2_3LO:
+        elif self.auth_type.startswith(AUTH_OAUTH2_3LO):
             self._validate_oauth2_3lo()
         return self

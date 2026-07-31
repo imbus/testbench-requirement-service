@@ -161,7 +161,7 @@ class AppConfig(Config):
         """Prompt for a Jira OAuth2 refresh token when starting the service."""
         if "JiraRequirementReader" not in self.READER_CLASS:
             return
-        if reader_config.get("auth_type") != AUTH_OAUTH2_3LO:
+        if not str(reader_config.get("auth_type") or "").startswith(AUTH_OAUTH2_3LO):
             return
         if (
             reader_config.get("oauth2_refresh_token")
@@ -170,7 +170,7 @@ class AppConfig(Config):
         ):
             return
 
-        refresh_token = run_jira_oauth_wizard()
+        refresh_token = run_jira_oauth_wizard(reader_config)
         if not refresh_token:
             return
 
