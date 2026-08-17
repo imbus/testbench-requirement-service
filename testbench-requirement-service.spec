@@ -76,9 +76,6 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # SQL reader
-        "sqlalchemy",
-        "pymysql",
         # Dev / test tooling
         "pytest",
         "mypy",
