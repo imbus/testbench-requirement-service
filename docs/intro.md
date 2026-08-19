@@ -51,6 +51,7 @@ The service runs a [Sanic](https://sanic.dev)-based HTTP server and delegates al
 
 - **New here?** Start with the [Installation](getting-started/installation.md) and [Quickstart](getting-started/quickstart.md) guides.
 - **Configuring the service?** See the [Configuration](configuration.md) page.
+- **Coming from a legacy wrapper?** The [Migration guide](migration.md) converts an existing Jira `.conf` or Excel `.properties` file into a `config.toml`.
 - **Choosing a reader?** Check the [Readers overview](readers/index.md) for a comparison, then dive into [JSONL](readers/jsonl.md), [Excel](readers/excel.md), or [Jira](readers/jira.md).
 - **Running as a Windows service?** See the [Windows service guide](windows-service-installation.md).
 - **CLI reference?** See the [CLI commands](cli-commands.md) page.

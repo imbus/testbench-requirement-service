@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: TestBench Integration
 ---
 # TestBench Integration
@@ -11,6 +11,10 @@ This page explains how to connect TestBench to the running TestBench Requirement
 ## Overview
 
 TestBench communicates with the Requirement Service through the **RMProxy** (Requirement Management Proxy) component. The connection is configured via two `.properties` files in the TestBench installation directory.
+
+:::tip[Replacing a legacy wrapper?]
+Convert its configuration instead of retyping it: `testbench-requirement-service migrate --from <file>` — see the [Migration guide](migration.md).
+:::
 
 ---
 

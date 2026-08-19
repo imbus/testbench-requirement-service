@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 title: CLI Commands
 ---
 
@@ -20,6 +20,7 @@ testbench-requirement-service [COMMAND] [OPTIONS]
 | [`init`](#init) | Interactive wizard to create a new configuration file from scratch. |
 | [`configure`](#configure) | Create or update an existing configuration interactively. |
 | [`set-credentials`](#set-credentials) | Set the service username and password. |
+| [`migrate`](#migrate) | Convert a legacy `.conf` / `.properties` configuration into a TOML configuration. |
 | [`start`](#start) | Start the requirement service. |
 
 ---
@@ -116,6 +117,67 @@ testbench-requirement-service set-credentials
 # Non-interactive
 testbench-requirement-service set-credentials --username admin --password mypassword
 ```
+
+---
+
+## `migrate`
+
+Convert a legacy `.conf` / `.properties` configuration into a TOML configuration file.
+
+The previous TestBench requirement wrappers were configured with a Jira `.conf` file or an
+Excel `.properties` file. `migrate` reads one of those, asks for the settings the legacy
+format never carried - how to authenticate against Jira, and the credentials that protect
+the service's own API - and writes a ready-to-use configuration file.
+
+The converted values are validated against the same reader models the service uses at
+startup, so anything the service would reject is reported during the migration instead of
+on the first start.
+
+```bash
+testbench-requirement-service migrate --from PATH [OPTIONS]
+```
+
+:::tip
+The [Migration guide](migration.md) walks through the whole procedure — which legacy keys
+are carried over, what you are asked for, and how to reconnect TestBench afterwards.
+:::
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--from PATH` | Legacy `.conf` or `.properties` file to convert (required) | - |
+| `--path PATH` | Path to the configuration file to write | `config.toml` |
+| `--type [excel\|jira]` | Legacy source type | detected from the file extension |
+
+The source type follows from the extension: `.conf` is a Jira wrapper configuration,
+`.properties` an Excel one. Pass `--type` when the file has been renamed and the extension
+no longer says which format it is.
+
+### Examples
+
+```bash
+# Convert a legacy Jira wrapper configuration
+testbench-requirement-service migrate --from jira.conf
+
+# Convert a legacy Excel wrapper configuration to a custom path
+testbench-requirement-service migrate --from genericexcel.properties --path /etc/requirement-service/config.toml
+
+# Convert a wrapper file whose extension no longer identifies the format
+testbench-requirement-service migrate --from wrapper.txt --type jira
+```
+
+:::info[Existing configurations]
+If the target file already exists you are asked to confirm, and it is renamed to
+`config.toml.backup` (timestamped when a backup is already present) before the new file is
+written. The conversion runs to completion first, so cancelling any prompt leaves your
+existing configuration exactly as it was.
+:::
+
+:::note
+Only the Jira and Excel readers have a legacy wrapper format to migrate from. Configure the
+JSONL and SQL readers with [`init`](#init) or [`configure`](#configure).
+:::
 
 ---
 

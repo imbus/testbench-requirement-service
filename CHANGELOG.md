@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2026-07-30
 
 ### Added
+- `migrate` command to convert a legacy `.conf` (Jira) or `.properties` (Excel)
+  wrapper configuration into a TOML configuration file. The converted values are
+  validated against the reader models, the authentication settings and service
+  credentials the legacy formats never carried are asked for interactively, and an
+  existing configuration file is backed up before being replaced.
+- Migration guide in `docs/migration.md` covering both legacy formats: which keys are
+  carried over, what is asked for interactively, and how to reconnect the RMProxy.
 - Jira reader: OAuth 2.0 2LO (service account) authentication via `auth_type = "oauth2 2LO (service account)"`, using the `client_credentials` grant. Access tokens are minted from `oauth2_client_id`/`oauth2_client_secret` alone and re-minted automatically — no user consent, no refresh token and no token cache on disk.
 - Jira reader: `proxy_url` setting to route all Jira API requests through a forward proxy (e.g. `http://proxy.example.com:8080`). The OAuth 2.0 token endpoint is not covered by it and honors the `HTTPS_PROXY` environment variable instead.
 - Documentation for the 2LO flow, the complete set of OAuth 2.0 settings, and the proxy setting in `docs/readers/jira.md` and `examples/jira_config.toml`.
