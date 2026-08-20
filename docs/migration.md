@@ -48,12 +48,15 @@ the JSONL and SQL readers — configure them with [`init`](cli-commands.md#init)
 ## What the command does
 
 1. Detects the legacy format from the file extension (`.conf` → Jira, `.properties` → Excel).
-2. Parses the file with the parser for that format.
+2. Parses the file with the parser for that format. A line it cannot read, or a key set twice
+   to two different values, aborts the migration and names the file and line number.
 3. Asks for the settings the legacy format never carried — the service credentials, and for
    Jira the authentication method.
 4. Validates the result against the same reader model the service loads at startup, filling in
    documented defaults for everything the legacy file does not mention.
-5. Writes the TOML file.
+5. Lists the legacy entries that have no equivalent in the new configuration, so a setting
+   that mattered can be applied by hand.
+6. Writes the TOML file.
 
 The conversion runs to completion **before anything is written**. Cancelling a prompt, or a
 value the service would reject, aborts the migration and leaves an existing configuration
@@ -77,6 +80,7 @@ baseline: fixVersions
 owner: assignee
 baseline_jql: project = "{project}" AND fixVersion = "{baseline}"
 current_baseline_jql: project = "{project}"
+render_description: true
 jira.username: jira-user@example.com
 ```
 
@@ -85,23 +89,34 @@ jira.username: jira-user@example.com
 | Legacy key             | TOML option            | Notes |
 |---|---|---|
 | `url`                  | `server_url`           | Also pre-fills the server URL prompt. |
+| `baseline`             | `baseline_field`       | Jira field the baselines/versions are read from. |
+| `owner`                | `owner_field`          | Jira field the requirement owner is read from. |
 | `baseline_jql`         | `baseline_jql`         | JQL template for the requirements of a baseline. |
 | `current_baseline_jql` | `current_baseline_jql` | JQL template for the current (unbaselined) requirements. |
+| `render_description`   | `rendered_fields`      | A set flag adds `"description"` to the fields delivered as rendered HTML. |
 
 `jira.username` (also `jira.user` / `jira.login`) is used as the **default for the username
 prompt**, not written directly — which credentials are needed depends on the authentication
 method you choose.
 
-Every other key in the `.conf` is ignored, and options the file says nothing about are written
-with the reader model's documented defaults, so the generated file is complete and
-self-explanatory.
+Every other key in the `.conf` is ignored — and named when the migration finishes, so you can
+see what was left behind. Options the file says nothing about are written with the reader
+model's documented defaults, so the generated file is complete and self-explanatory.
 
-:::warning[Check `baseline_field` and `owner_field` afterwards]
-The legacy `baseline` and `owner` keys are **not** carried over — the reader calls these
-settings `baseline_field` and `owner_field`, and the conversion does not rename them. The
-generated file therefore contains the model defaults `baseline_field = "fixVersions"` and
-`owner_field = "assignee"`. If your `.conf` named different Jira fields, set them by hand after
-migrating. See [Requirements & baselines settings](readers/jira.md#requirements--baselines-settings).
+:::note[`render_description` becomes a list entry]
+The legacy wrapper had a single flag for a single field. The reader generalizes it to
+`rendered_fields`, a list of the fields it delivers as rendered HTML, so
+`render_description: true` is converted to `rendered_fields = ["description"]`. `true`, `yes`,
+`on` and `1` all count as set; anything else — and a `.conf` that does not mention the flag —
+yields the default `rendered_fields = []`. Further fields can be added to the list by hand; see
+[Requirements & baselines settings](readers/jira.md#requirements--baselines-settings).
+:::
+
+:::note[`baseline` and `owner` are renamed]
+The reader calls these settings `baseline_field` and `owner_field`, so the conversion renames
+them. A `.conf` that says nothing about them yields the model defaults `baseline_field =
+"fixVersions"` and `owner_field = "assignee"`. See
+[Requirements & baselines settings](readers/jira.md#requirements--baselines-settings).
 :::
 
 ### What you are asked for
@@ -261,7 +276,8 @@ written.
 | Message | Cause | Fix |
 |---|---|---|
 | `Cannot tell the legacy format of '<file>' from its extension.` | The file is neither `.conf` nor `.properties`. | Pass `--type jira` or `--type excel`. |
-| `Failed to parse configuration file: ...` | A line does not follow the format — a `.conf` line without `:`, a `.properties` line without `=`. | Fix the line, or comment it out with `#`. |
+| `<file> line <n>: expected 'key: value', got '<line>'` | The line carries no separator. When it uses the other format's separator the message says so — usually a wrapper file migrated with the wrong `--type`. | Fix the line, comment it out with `#`, or pass the `--type` the message names. Nothing was written. |
+| `<file> line <n>: '<key>' is set twice, to '<a>' and '<b>'.` | The legacy file gives one key two different values, so there is no telling which one to migrate. | Remove one of the two entries and run `migrate` again. |
 | `Cannot convert the Excel .properties file: requirementsDataPath: ... not found` | The requirements directory does not exist on this machine, or a Windows path was written with single backslashes. | Migrate where the data is reachable; use forward slashes (`C:/requirements/`) or double backslashes. |
 | `Cannot convert the ... file: <field>: <message>` | A converted value is not valid for the reader model — e.g. a column index below 1, or a missing mandatory key. | Correct the named key in the legacy file and run `migrate` again. Nothing was written. |
 | `Jira authentication setup was cancelled` / `Service credentials setup was cancelled` | A prompt was aborted. | Re-run the command; the existing configuration was not touched. |
@@ -272,6 +288,25 @@ The service credentials are asked for **before** the legacy file is validated. I
 conversion then fails, the password you entered is simply discarded along with the rest of the
 attempt — nothing is written.
 :::
+
+### Entries that were not carried over
+
+A legacy file may configure things the new reader has no equivalent for. Those entries are
+listed once every prompt is answered, immediately before the file is written:
+
+```text
+════════════════════════════════════════════════════════════
+⚠️  2 legacy setting(s) were NOT carried over
+════════════════════════════════════════════════════════════
+  • password
+  • wrapper.class
+
+Nothing in the new configuration reads them. The legacy file is unchanged,
+so anything that still matters can be applied to the new file by hand.
+════════════════════════════════════════════════════════════
+```
+
+Apart from those keys the migration is complete — nothing else was dropped silently.
 
 ### Rolling back
 

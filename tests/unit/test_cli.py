@@ -12,6 +12,8 @@ from testbench_requirement_service.utils import conf_converter, config_wizard
 AUTH_CONFIG = {"auth_type": "basic", "username": "user", "password": "secret"}
 CREDENTIALS = ("hash", "salt")
 
+PREVIOUS_CONFIG = "# previous configuration" + chr(10)
+
 JIRA_CONF_TEXT = """# legacy Jira wrapper configuration
 url: http://jiraserver:8080/
 baseline: fixVersions
@@ -148,6 +150,45 @@ def test_migrate_converts_an_unknown_extension_when_the_type_is_given(tmp_path, 
 
     assert result.exit_code == 0, result.output
     assert conf_converter.JIRA_READER_CLASS in config_path.read_text(encoding="utf-8")
+
+
+def test_migrate_rejects_an_inconsistent_file_without_writing_anything(tmp_path, answered_prompts):
+    """An inconsistent legacy file must abort with an explanation, not migrate halfway."""
+    legacy_path = tmp_path / "jira.conf"
+    legacy_path.write_text(
+        """url: http://one:8080/
+url: http://two:8080/
+""",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(PREVIOUS_CONFIG, encoding="utf-8")
+
+    result = run_migrate(legacy_path, config_path)
+
+    assert result.exit_code != 0
+    assert "url" in result.output
+    assert "Traceback" not in result.output
+    assert config_path.read_text(encoding="utf-8") == PREVIOUS_CONFIG
+    assert not list(tmp_path.glob("config.toml.backup*"))
+
+
+def test_migrate_names_the_line_it_could_not_read(tmp_path, answered_prompts):
+    """A file the parser chokes on has to say where, so the user can fix that line."""
+    legacy_path = tmp_path / "jira.conf"
+    legacy_path.write_text(
+        """url: http://jiraserver:8080/
+no separator here
+""",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "config.toml"
+
+    result = run_migrate(legacy_path, config_path)
+
+    assert result.exit_code != 0
+    assert "jira.conf line 2" in result.output
+    assert not config_path.exists()
 
 
 def test_migrate_is_registered_on_the_cli():
