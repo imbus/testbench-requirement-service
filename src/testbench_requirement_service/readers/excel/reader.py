@@ -187,7 +187,7 @@ class ExcelRequirementReader(AbstractRequirementReader):
 
         for baseline_file in self._iter_other_baseline_files(project, baseline_path):
             extended_requirement = self._find_extended_requirement_in_file(
-                baseline_file, config, baseline, key
+                baseline_file, config, baseline, key, ignore_unreadable=True
             )
             if extended_requirement is not None:
                 return extended_requirement
@@ -205,7 +205,9 @@ class ExcelRequirementReader(AbstractRequirementReader):
         seen_versions: set[str] = set()
 
         for baseline_file in self._iter_baseline_files(project):
-            df = self._get_dataframe(baseline_file, config)
+            df = self._try_get_dataframe(baseline_file, config)
+            if df is None:
+                continue
             filtered_df = df[df["id"] == key.id]
             for row in filtered_df.to_dict(orient="records"):
                 requirement_version = build_requirementversionobject_from_row_data(row, config)
@@ -223,8 +225,15 @@ class ExcelRequirementReader(AbstractRequirementReader):
         config: ExcelRequirementReaderConfig,
         baseline: str,
         key: RequirementKey,
+        *,
+        ignore_unreadable: bool = False,
     ) -> ExtendedRequirementObject | None:
-        df = self._get_dataframe(baseline_file, config)
+        if ignore_unreadable:
+            df = self._try_get_dataframe(baseline_file, config)
+            if df is None:
+                return None
+        else:
+            df = self._get_dataframe(baseline_file, config)
         filtered_df = df[(df["id"] == key.id) & (df["version"] == key.version)]
         if filtered_df.empty:
             return None
@@ -280,6 +289,28 @@ class ExcelRequirementReader(AbstractRequirementReader):
         if name.endswith((".tmp", ".swp", ".bak", "~")):
             return True
         return name.startswith(".~lock.") and name.endswith("#")
+
+    def _try_get_dataframe(
+        self, file_path: Path, config: ExcelRequirementReaderConfig
+    ) -> pd.DataFrame | None:
+        """Read *file_path* into a DataFrame, returning ``None`` if it cannot be interpreted.
+
+        Used when scanning every baseline file of a project instead of one
+        explicitly requested baseline. A file that does not match the configured
+        column structure - an unrelated spreadsheet dropped into the project
+        folder, for example - is skipped with a warning so that a single foreign
+        file cannot fail the whole request.
+        """
+        try:
+            return self._get_dataframe(file_path, config)
+        except Exception as e:
+            logger.warning(
+                "Ignoring baseline file '%s': it could not be read or does not match the "
+                "configured column structure (%s).",
+                file_path,
+                e,
+            )
+            return None
 
     def _get_dataframe(self, file_path: Path, config: ExcelRequirementReaderConfig) -> pd.DataFrame:
         max_age_seconds, max_size_bytes = self._get_buffer_limits(config)
