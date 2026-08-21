@@ -16,6 +16,9 @@ testbench-requirement-service configure         # Update an existing config
 testbench-requirement-service set-credentials   # Update credentials only
 ```
 
+Migrating from a legacy wrapper? `testbench-requirement-service migrate` converts an existing
+Jira `.conf` or Excel `.properties` file into this format — see the [Migration guide](migration.md).
+
 See [CLI Commands](cli-commands.md) for all options.
 :::
 

@@ -238,6 +238,12 @@ useExcelDirectly = false
 
 ### Separate `.properties` file
 
+:::tip
+To convert the file into a regular `config.toml` instead of pointing at it, run
+`testbench-requirement-service migrate --from <file>.properties` — see the
+[Migration guide](../migration.md).
+:::
+
 ```properties
 # reader_config.properties
 

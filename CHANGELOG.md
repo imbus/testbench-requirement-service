@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-21
+
+### Added
+- `migrate` command to convert a legacy `.conf` (Jira) or `.properties` (Excel)
+  wrapper configuration into a TOML configuration file. The converted values are
+  validated against the reader models, the authentication settings and service
+  credentials the legacy formats never carried are asked for interactively, and an
+  existing configuration file is backed up before being replaced.
+- Migration guide in `docs/migration.md` covering both legacy formats: which keys are
+  carried over, what is asked for interactively, and how to reconnect the RMProxy.
+- `migrate`: parse errors now name the file and the line number of the offending
+  entry instead of failing with a generic message, and a file migrated as the wrong
+  format is recognised — a line using the other format's separator suggests the
+  matching `--type` rather than reporting a broken line.
+- `migrate`: legacy entries that could not be carried over are listed after the
+  conversion, including the composite Excel keys (`requirement.description.<n>`,
+  `udf.attr<n>.*`) that no single reader field corresponds to.
+- `migrate`: the legacy Jira `render_description` switch is converted into
+  `rendered_fields = ["description"]`.
+- Example configuration for the SQL reader in `examples/sql_config.toml`, documenting
+  `database_url`, the connection-pool settings, user-defined attributes and the
+  database schema the reader expects.
+
+### Changed
+- The standalone binary now bundles the SQL reader — `sqlalchemy` and `pymysql` are
+  no longer excluded from the PyInstaller build, so `SqlRequirementReader` works in
+  the packaged executable and not just in a pip install with the `[sql]` extra.
+- `migrate`: the Excel `requirementsDataPath` is written as an absolute path resolved
+  against the directory `migrate` was run in. A relative path carried over verbatim
+  would otherwise be resolved against the service's working directory, which differs
+  when the service runs as a Windows service.
+
+### Fixed
+- `migrate`: the legacy Jira `baseline` and `owner` keys were written under those
+  names instead of the reader's `baseline_field` / `owner_field`, so both values were
+  dropped during validation.
+
 ## [1.2.0] - 2026-07-30
 
 ### Added
@@ -70,6 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows service installation support
 - Initial documentation under `docs/`
 
+[1.3.0]: https://github.com/imbus/testbench-requirement-service/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/imbus/testbench-requirement-service/releases/tag/v1.0.0
 [1.1.0]: https://github.com/imbus/testbench-requirement-service/releases/tag/v1.0.0
 [1.0.0]: https://github.com/imbus/testbench-requirement-service/releases/tag/v1.0.0

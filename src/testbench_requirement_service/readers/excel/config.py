@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -15,6 +16,15 @@ from pydantic import (
 from pydantic.fields import FieldInfo
 
 INVALID_SEPARATOR_CHARS = {"\r", "\n", "\r\n", '"'}
+
+#: The legacy `.properties` keys that the `mode="before"` builders below read, as opposed to
+#: the scalar keys a field's own alias reads. Whoever wants to know which legacy keys this
+#: model understands - the `migrate` command, reporting the ones it could not carry over -
+#: cannot see these on the model, so they are named here instead.
+LEGACY_COMPOSITE_KEY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"requirement\.description\.\d+"),
+    re.compile(r"udf\.attr\d+\..+"),
+)
 
 
 def _require_positive_int(raw: str | int, field_name: str) -> int:
