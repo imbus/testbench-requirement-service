@@ -199,7 +199,10 @@ Note what the conversion does beyond copying:
 
 - Values arrive **typed** — column indices become integers, `useExcelDirectly` a boolean, and
   `udf.attr<n>.type` is normalized to upper case.
-- `requirementsDataPath` is resolved and written as an **absolute** path.
+- `requirementsDataPath` is resolved and written as an **absolute** path, relative to the
+  directory `migrate` runs in. A relative path in the legacy file would otherwise be resolved
+  against the service's working directory later, which is a different directory when it runs as
+  a Windows service.
 - Every option the file omits is written with its documented default (`bufferMaxAgeMinutes`,
   `requirement.folderPattern`, and so on), so the result is a full reference of what the reader
   will do.

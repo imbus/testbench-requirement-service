@@ -1,5 +1,6 @@
 """Tests for the legacy .conf to TOML converter."""
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -364,3 +365,30 @@ def test_the_unsupported_report_is_framed_so_it_stands_out(capsys):
     )
 
     assert "═" * 60 in capsys.readouterr().out
+
+
+def data_path_of(toml_text):
+    """The ``requirementsDataPath`` the generated TOML sets on the reader."""
+    return tomllib.loads(toml_text)["testbench-requirement-service"]["reader_config"][
+        "requirementsDataPath"
+    ]
+
+
+def test_generate_excel_base_toml_writes_a_relative_data_path_as_absolute(tmp_path, monkeypatch):
+    """A legacy wrapper's relative path resolves against whatever directory `migrate` ran in,
+    so carrying it over verbatim breaks the service as soon as it starts somewhere else -
+    which is the normal case for the Windows service."""
+    (tmp_path / "data").mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    toml = conf_converter.generate_excel_base_toml(excel_properties("data"), CREDENTIALS)
+
+    assert Path(data_path_of(toml)) == (tmp_path / "data").resolve()
+
+
+def test_generate_excel_base_toml_keeps_an_absolute_data_path_unchanged(tmp_path):
+    (tmp_path / "data").mkdir()
+
+    toml = conf_converter.generate_excel_base_toml(excel_properties(tmp_path / "data"), CREDENTIALS)
+
+    assert Path(data_path_of(toml)) == (tmp_path / "data").resolve()

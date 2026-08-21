@@ -521,6 +521,18 @@ def generate_jira_base_toml(
     return build_service_toml(JIRA_READER_CLASS, reader_config, credentials)
 
 
+def _absolute(path: str) -> str:
+    """Return *path* as an absolute path, resolved against the current directory.
+
+    A legacy wrapper may name its data directory relative to wherever it was started from.
+    Carried over verbatim, that relative path would later be resolved against the service's
+    working directory instead - a different directory whenever the service runs as a Windows
+    service. Resolving it here pins it to the directory ``migrate`` was run in, which is the
+    one the path was written for.
+    """
+    return str(Path(path).resolve())
+
+
 def generate_excel_base_toml(
     properties: dict[str, Any], credentials: tuple[str, str] | None = None
 ) -> str:
@@ -544,6 +556,7 @@ def generate_excel_base_toml(
     reader_config = build_reader_config(
         ExcelRequirementReaderConfig, properties, "the Excel .properties file"
     )
+    reader_config["requirementsDataPath"] = _absolute(reader_config["requirementsDataPath"])
     report_unsupported_keys(
         properties,
         recognized_legacy_keys(ExcelRequirementReaderConfig),
