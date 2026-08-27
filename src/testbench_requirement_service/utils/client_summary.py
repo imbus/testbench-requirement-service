@@ -1,7 +1,9 @@
 """Summarise the configured defect reader for the startup log."""
 
 from collections.abc import Callable
+import platform
 from pathlib import Path, PurePath
+import sys
 from typing import Any
 
 from pydantic import BaseModel
@@ -11,6 +13,8 @@ from testbench_requirement_service.log import logger
 from testbench_requirement_service.readers.excel.config import ExcelRequirementReaderConfig
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
 from testbench_requirement_service.readers.jsonl.config import JsonlRequirementReaderConfig
+
+INDENT = "  "
 
 
 def _jsonl_source(reader_config: JsonlRequirementReaderConfig) -> str:
@@ -42,28 +46,40 @@ def _reader_name_from_class_str(client_class: str) -> str:
     return name.rsplit(".", 1)[-1]
 
 
-def build_reader_summary(config: AppConfig) -> dict[str, str]:
-    """Build the reader/source/config summary for the given app config."""
-    reader_config = config.CLIENT_CONFIG
+def _reader_fields(config: AppConfig) -> dict[str, str]:
+    """Name the configured reader and, if it is a known one, where it reads from."""
+    client_config = config.READER_CONFIG
 
     for config_class, reader_name, build_source in _READERS:
-        if isinstance(reader_config, config_class):
-            summary = {
-                "reader": reader_name,
-                "source": build_source(reader_config),
-            }
-            break
-    else:
-        summary = {
-            "reader": _reader_name_from_class_str(config.READER_CLASS),
-        }
+        if isinstance(client_config, config_class):
+            return {"Reader": reader_name, "Source": build_source(client_config)}
 
+    return {"Reader": _reader_name_from_class_str(config.READER_CLASS)}
+
+
+def _config_fields(config: AppConfig) -> dict[str, str]:
+    """Name the file the reader is configured in."""
     if config.READER_CONFIG_PATH:
-        summary["config"] = Path(config.READER_CONFIG_PATH).name
-    else:
-        summary["config"] = f"{Path(config.CONFIG_PATH).name} [reader_config]"
+        return {"Config": Path(config.READER_CONFIG_PATH).name}
+    return {"Config": f"{Path(config.CONFIG_PATH).name} [reader_config]"}
 
-    return summary
+
+def _runtime_fields() -> dict[str, str]:
+    """Describe the interpreter and machine the service runs on."""
+    system = " ".join(part for part in (platform.system(), platform.release()) if part)
+    return {
+        "Python": f"{platform.python_version()} ({platform.python_implementation()})",
+        "Platform": f"{system or sys.platform} {platform.machine()}".strip(),
+    }
+
+
+def build_reader_summary(config: AppConfig) -> dict[str, str]:
+    """Build the reader/source/config/runtime summary for the given app config."""
+    return {
+        **_reader_fields(config),
+        **_config_fields(config),
+        **_runtime_fields(),
+    }
 
 
 def log_reader_summary(config: AppConfig) -> None:
@@ -74,5 +90,6 @@ def log_reader_summary(config: AppConfig) -> None:
         logger.debug("Could not build the reader summary", exc_info=True)
         return
 
+    width = max(len(label) for label in summary) + 1
     for label, value in summary.items():
-        logger.info("%s: %s", label, value)
+        logger.info("%s%s %s", INDENT, f"{label}:".ljust(width), value)
