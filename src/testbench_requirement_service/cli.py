@@ -11,6 +11,7 @@ from sanic.worker.loader import AppLoader
 from testbench_requirement_service import __title__, __version__
 from testbench_requirement_service.app import AppConfig, create_app
 from testbench_requirement_service.log import logger
+from testbench_requirement_service.utils.client_summary import log_reader_summary
 from testbench_requirement_service.utils.conf_converter import (
     LEGACY_SOURCE_TYPES,
     ConfConversionError,
@@ -218,6 +219,7 @@ def start(  # noqa: PLR0913
         raise click.ClickException(str(e)) from e
 
     logger.info("Starting %s v%s", app_name, __version__)
+    log_reader_summary(app_config)
 
     if not host:
         host = getattr(app.config, "HOST", None)
@@ -252,6 +254,7 @@ def start(  # noqa: PLR0913
         "debug": app_config.DEBUG,
         "access_log": True,
         "ssl": ssl_context,
+        "motd": False,
         **server_config.run_kwargs,
     }
 
