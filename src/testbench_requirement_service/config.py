@@ -46,6 +46,7 @@ class AppConfig(Config):
 
         # Sanic-specific settings
         self.FALLBACK_ERROR_FORMAT = "json"
+        self.DEPRECATION_FILTER = "ignore"
         self.OAS_UI_DEFAULT = "swagger"
         self.OAS_UI_REDOC = False
         self.OAS_CUSTOM_FILE = (Path(__file__).parent / "openapi.yaml").resolve().as_posix()

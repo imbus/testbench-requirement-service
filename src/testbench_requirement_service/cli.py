@@ -218,6 +218,7 @@ def start(  # noqa: PLR0913
         raise click.ClickException(str(e)) from e
 
     logger.info("Starting %s v%s", app_name, __version__)
+    log_reader_summary(app_config)
 
     if not host:
         host = getattr(app.config, "HOST", None)
@@ -252,6 +253,7 @@ def start(  # noqa: PLR0913
         "debug": app_config.DEBUG,
         "access_log": True,
         "ssl": ssl_context,
+        "motd": False,
         **server_config.run_kwargs,
     }
 
