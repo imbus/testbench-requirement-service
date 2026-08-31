@@ -1,4 +1,4 @@
-"""Summarise the configured defect reader for the startup log."""
+"""Summarise the configured requirement reader for the startup log."""
 
 from collections.abc import Callable
 import platform
@@ -18,13 +18,13 @@ INDENT = "  "
 
 
 def _jsonl_source(reader_config: JsonlRequirementReaderConfig) -> str:
-    return Path(reader_config.defects_path).as_posix()
+    return Path(reader_config.requirements_path).as_posix()
 
 
 def _excel_source(reader_config: ExcelRequirementReaderConfig) -> str:
-    source = Path(reader_config.excel_file_path).as_posix()
-    if reader_config.worksheet_name:
-        return f"{source} ({reader_config.worksheet_name})"
+    source = Path(reader_config.requirementsDataPath).as_posix()
+    if reader_config.worksheetName:
+        return f"{source} ({reader_config.worksheetName})"
     return source
 
 
