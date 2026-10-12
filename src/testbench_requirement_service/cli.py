@@ -11,7 +11,6 @@ from sanic.worker.loader import AppLoader
 from testbench_requirement_service import __title__, __version__
 from testbench_requirement_service.app import AppConfig, create_app
 from testbench_requirement_service.log import logger
-from testbench_requirement_service.utils.client_summary import log_reader_summary
 from testbench_requirement_service.utils.conf_converter import (
     LEGACY_SOURCE_TYPES,
     ConfConversionError,
