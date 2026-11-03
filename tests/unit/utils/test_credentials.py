@@ -69,6 +69,8 @@ def test_read_credential_from_file_strips_one_trailing_newline(
     )
     secret_file.write_bytes(b"two\n\n")
     assert credentials.read_credential_from_env("JIRA_PASSWORD")[0] == "two\n"
+    secret_file.write_bytes(b"two\r\n\r\n")
+    assert credentials.read_credential_from_env("JIRA_PASSWORD")[0] == "two\r\n"
 
 
 def test_read_credential_keeps_pem_content_as_is(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
