@@ -67,11 +67,14 @@ def read_credential_from_env(env_var: str) -> tuple[str | None, str | None]:
         return None, None
 
     try:
-        content = Path(file_path).read_text(encoding="utf-8")
+        content = Path(file_path).read_bytes().decode("utf-8")
     except OSError as e:
-        reason = e.strerror or str(e)
         raise CredentialSourceError(
-            f"{file_var} points to '{file_path}', which cannot be read: {reason}"
+            f"{file_var} points to '{file_path}', which cannot be read: {e.strerror or e}."
+        ) from e
+    except UnicodeDecodeError as e:
+        raise CredentialSourceError(
+            f"{file_var} points to '{file_path}', which cannot be read: not valid UTF-8."
         ) from e
 
     if env_var not in RAW_CREDENTIAL_ENV_VARS:
