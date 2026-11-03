@@ -227,3 +227,62 @@ def test_store_credentials_in_env_warns_about_interpolation_sequences(tmp_path: 
         "loaded correctly, use JIRA_PASSWORD_FILE instead."
     ) in out
     assert value not in out
+
+
+_FILE_SOURCED_EXISTING = {
+    "server_url": "https://jira.example.com",
+    "auth_type": "basic",
+    "username": "u",
+}
+
+
+def test_existing_config_defaults_survive_file_sourced_credential(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # The file does not exist: it must never be read.
+    monkeypatch.setenv("JIRA_PASSWORD_FILE", str(tmp_path / "missing"))
+
+    result = config_wizard.load_existing_reader_config(
+        JiraRequirementReaderConfig, dict(_FILE_SOURCED_EXISTING)
+    )
+
+    assert result["username"] == "u"
+    assert result["server_url"] == "https://jira.example.com"
+    assert "password" not in result
+
+
+def test_existing_config_keeps_raw_credential_value():
+    existing = {
+        "server_url": "https://jira.example.com",
+        "auth_type": "token",
+        "token": "old-pat",
+    }
+
+    result = config_wizard.load_existing_reader_config(JiraRequirementReaderConfig, existing)
+
+    assert result["token"] == "old-pat"
+
+
+def test_configure_reader_prefills_prompts_when_credential_comes_from_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(config_wizard, "DEFAULT_DOTENV_PATH", tmp_path / ".env")
+    monkeypatch.setenv("JIRA_PASSWORD_FILE", str(tmp_path / "missing"))
+    captured = {}
+
+    def fake_prompt(config_class, **kwargs):
+        captured.update(kwargs)
+        return dict(_FILE_SOURCED_EXISTING)
+
+    with (
+        patch.object(config_wizard, "check_reader_dependencies"),
+        patch.object(
+            config_wizard, "get_reader_config_class", return_value=JiraRequirementReaderConfig
+        ),
+        patch.object(config_wizard, "get_reader_config", return_value=dict(_FILE_SOURCED_EXISTING)),
+        patch.object(config_wizard, "prompt_model_fields", side_effect=fake_prompt),
+    ):
+        config_wizard.configure_reader("jira", JIRA_READER_CLASS, service_config=object())
+
+    assert captured["existing_config"]["username"] == "u"
+    assert "password" not in captured["existing_config"]
