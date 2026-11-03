@@ -23,6 +23,10 @@ from testbench_requirement_service.utils.config import (
     resolve_config_file_path,
 )
 from testbench_requirement_service.utils.config_wizard import run_jira_oauth_wizard
+from testbench_requirement_service.utils.credentials import (
+    CredentialSourceError,
+    resolve_credentials,
+)
 
 
 class AppConfig(Config):
@@ -146,6 +150,11 @@ class AppConfig(Config):
                 reader_config = load_reader_config_from_file(self.READER_CONFIG_PATH)
             else:
                 reader_config = self._reader_config_inline
+            reader_config = resolve_credentials(
+                reader_config_class,
+                reader_config,
+                config_label=str(self.READER_CONFIG_PATH if separate_file else self.CONFIG_PATH),
+            )
             self._prompt_for_missing_jira_oauth2_refresh_token(reader_config)
             return reader_config_class.model_validate(reader_config)
         except ValidationError as e:
@@ -154,6 +163,10 @@ class AppConfig(Config):
             else:
                 config_prefix = f"{CONFIG_PREFIX}.reader_config"
                 print_config_errors(e, config_path=self.CONFIG_PATH, config_prefix=config_prefix)
+            sys.exit(1)
+        except CredentialSourceError as e:
+            print(f"Configuration Error: {e}")
+            print()
             sys.exit(1)
         except Exception as e:
             raise ValueError(f"Failed to validate reader configuration: {e}") from e
