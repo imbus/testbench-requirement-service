@@ -194,17 +194,20 @@ def store_credentials_in_env(
     Mutates ``config`` in place. Returns the names of the environment variables written
     (empty if there was nothing to store, in which case nothing is created or printed).
     """
+    to_store = {
+        field: (env_var, config[field])
+        for field, env_var in credential_fields(config_class).items()
+        if isinstance(config.get(field), str) and config[field]
+    }
     stored: list[str] = []
-    for field, env_var in credential_fields(config_class).items():
-        value = config.get(field)
-        if not isinstance(value, str) or not value:
-            continue
+    if to_store:
         ensure_private_file(dotenv_path)
-        set_key(str(dotenv_path), env_var, value)
+        for field, (env_var, value) in to_store.items():
+            set_key(str(dotenv_path), env_var, value)
+            os.environ[env_var] = value
+            config.pop(field)
+            stored.append(env_var)
         ensure_private_file(dotenv_path)  # python-dotenv rewrites the file
-        os.environ[env_var] = value
-        config.pop(field)
-        stored.append(env_var)
 
     if stored:
         for env_var in stored:
