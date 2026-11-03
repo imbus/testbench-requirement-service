@@ -31,7 +31,7 @@ def test_prompt_jira_auth_config_prefills_server_url_from_conf():
     with (
         patch.object(conf_converter, "check_reader_dependencies"),
         patch.object(conf_converter, "prompt_model_fields", return_value={}) as prompt,
-        patch.object(conf_converter, "store_client_secret_in_env"),
+        patch.object(conf_converter, "store_credentials_in_env"),
     ):
         conf_converter.prompt_jira_auth_config(CONF_DATA)
 
