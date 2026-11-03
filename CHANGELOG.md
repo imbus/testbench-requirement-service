@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The service refuses to start when a `_FILE` cannot be read or is empty, or when both
   `<VARIABLE>` and `<VARIABLE>_FILE` are set. The message names the variable (and the
   file path), never the value.
+- The wizard no longer pre-fills an existing credential into the masked prompt: press
+  Enter to keep it, or type a new value to replace it.
+- Re-running the wizard with a credential supplied through `<VARIABLE>_FILE` keeps the
+  other existing settings as prompt defaults.
 
 ### Security
 - `.env` and the OAuth2 token cache (`tmp/oauth2_tokens.toml`) are created readable and
