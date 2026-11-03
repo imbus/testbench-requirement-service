@@ -54,8 +54,9 @@ def print_wizard_banner():
 @click.pass_context
 def cli(ctx):
     ctx.max_content_width = 120
-    # Search from the working directory, where the wizard writes .env (not the package dir).
-    load_dotenv(find_dotenv(usecwd=True))
+    # Search from the working directory first, where the wizard writes .env; fall back to the
+    # installation directory for services started elsewhere (e.g. NSSM without an app dir).
+    load_dotenv(find_dotenv(usecwd=True) or find_dotenv())
 
 
 @click.command()

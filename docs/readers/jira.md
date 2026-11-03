@@ -76,7 +76,7 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
 
 ### Credentials
 
-Credentials are read from environment variables, from a `.env` file in the working directory, or from a secret file named by a `<VARIABLE>_FILE` variable. The configuration wizard never writes them to `config.toml`, and a value set in the environment (or in a `_FILE`) overrides a value found in `config.toml`.
+Credentials are read from environment variables, from a `.env` file in the working directory (or a parent directory; if none is found there, the installation directory is searched as before), or from a secret file named by a `<VARIABLE>_FILE` variable. The configuration wizard never writes them to `config.toml`, and a value set in the environment (or in a `_FILE`) overrides a value found in `config.toml`.
 
 | Variable | `_FILE` variant | Used for |
 |----------|-----------------|----------|
