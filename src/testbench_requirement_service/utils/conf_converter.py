@@ -25,7 +25,7 @@ from testbench_requirement_service.utils.config_wizard import (
     merge_with_defaults,
     run_jira_oauth_wizard,
     setup_authentication,
-    store_client_secret_in_env,
+    store_credentials_in_env,
 )
 from testbench_requirement_service.utils.dependencies import check_reader_dependencies
 from testbench_requirement_service.utils.wizard import (
@@ -223,7 +223,7 @@ def finalize_jira_oauth2(auth_config: dict[str, Any]) -> None:
         if isinstance(refresh_token, str) and refresh_token:
             seed_oauth2_refresh_token(refresh_token)
 
-    store_client_secret_in_env(auth_config)
+    store_credentials_in_env(auth_config, JiraRequirementReaderConfig)
 
 
 class _LegacyLineFormat(NamedTuple):
