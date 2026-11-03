@@ -10,6 +10,8 @@ from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 from questionary import Choice
 
+from testbench_requirement_service.utils.credentials import FILE_SUFFIX, is_credential_field
+
 _MISSING = object()
 
 # Constants for json_schema_extra keys
@@ -276,6 +278,10 @@ def get_env_value(field_info: FieldInfo) -> tuple[str | None, Any]:
     env_var = schema_extra.get(SCHEMA_KEYS["ENV_VAR"])
     if env_var:
         env_value = os.getenv(env_var) or None
+        if env_value is None and is_credential_field(field_info):
+            file_value = os.getenv(env_var + FILE_SUFFIX) or None
+            if file_value is not None:
+                return env_var + FILE_SUFFIX, file_value
         return env_var, env_value
     return None, None
 
