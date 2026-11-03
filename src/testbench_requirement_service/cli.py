@@ -10,7 +10,7 @@ from sanic.worker.loader import AppLoader
 
 from testbench_requirement_service import __title__, __version__
 from testbench_requirement_service.app import AppConfig, create_app
-from testbench_requirement_service.log import logger
+from testbench_requirement_service.log import logger, setup_logging
 from testbench_requirement_service.models.config import DEFAULT_HOST, DEFAULT_PORT
 from testbench_requirement_service.utils.client_summary import log_reader_summary
 from testbench_requirement_service.utils.conf_converter import (
@@ -18,6 +18,7 @@ from testbench_requirement_service.utils.conf_converter import (
     ConfConversionError,
     convert_legacy_config,
 )
+from testbench_requirement_service.utils.config import load_config, resolve_config_file_path
 from testbench_requirement_service.utils.config_wizard import (
     backup_config_file,
     configure_credentials_only,
@@ -213,6 +214,8 @@ def start(  # noqa: PLR0913, PLR0917
 ):
     """Start the TestBench Requirement Service."""
     app_name = __title__
+    # Configure logging first: AppConfig logs credential warnings while it is built.
+    setup_logging(load_config(resolve_config_file_path(config_path)).logging, debug=dev)
     app_config = AppConfig(
         config_path=config_path,
         reader_class=reader_class,
