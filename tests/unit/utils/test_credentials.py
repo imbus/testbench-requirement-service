@@ -73,10 +73,7 @@ def test_read_credential_from_file_strips_one_trailing_newline(
 
 def test_read_credential_keeps_pem_content_as_is(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     pem = tmp_path / "key.pem"
-    pem.write_bytes(b"-----BEGIN RSA PRIVATE KEY-----
-abc
------END RSA PRIVATE KEY-----
-")
+    pem.write_bytes(b"-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----\n")
     monkeypatch.setenv("JIRA_OAUTH1_KEY_CERT_FILE", str(pem))
     value, _ = credentials.read_credential_from_env("JIRA_OAUTH1_KEY_CERT")
     assert value.endswith("-----END RSA PRIVATE KEY-----\n")
