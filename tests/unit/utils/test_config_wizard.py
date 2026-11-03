@@ -286,3 +286,5 @@ def test_configure_reader_prefills_prompts_when_credential_comes_from_file(
 
     assert captured["existing_config"]["username"] == "u"
     assert "password" not in captured["existing_config"]
+    # Only present after model validation and dump, not in the raw existing dict.
+    assert captured["existing_config"]["verify_ssl"] is True
