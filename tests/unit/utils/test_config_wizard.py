@@ -11,6 +11,7 @@ from dotenv import get_key
 
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
 from testbench_requirement_service.utils import config_wizard
+from testbench_requirement_service.utils.credentials import credential_fields
 
 JIRA_READER_CLASS = "testbench_requirement_service.readers.JiraRequirementReader"
 CREDENTIAL_ENV_VARS = [
@@ -192,3 +193,24 @@ def test_merge_with_defaults_succeeds_with_file_sourced_credential(
     )
     assert result["server_url"] == "https://jira.example.com"
     assert "password" not in result
+
+
+def test_merge_with_defaults_never_dumps_credential_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    pem = tmp_path / "key.pem"
+    pem.write_text("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n")
+    monkeypatch.setenv("JIRA_OAUTH1_CONSUMER_KEY", "consumer")
+    monkeypatch.setenv("JIRA_OAUTH1_ACCESS_TOKEN", "at")
+    monkeypatch.setenv("JIRA_OAUTH1_ACCESS_TOKEN_SECRET", "ats")
+    result = config_wizard.merge_with_defaults(
+        {
+            "server_url": "https://jira.example.com",
+            "auth_type": "oauth1",
+            "oauth1_key_cert_path": str(pem),
+        },
+        JiraRequirementReaderConfig,
+    )
+    assert result["oauth1_key_cert_path"] == str(pem)
+    assert "oauth1_key_cert" not in result
+    assert not set(credential_fields(JiraRequirementReaderConfig)) & set(result)
