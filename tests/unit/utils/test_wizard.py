@@ -7,7 +7,12 @@ import pytest
 from pydantic import BaseModel, Field
 
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
-from testbench_requirement_service.utils.wizard import dependency_matches, prompt_literal_field
+from testbench_requirement_service.utils.wizard import (
+    dependency_matches,
+    get_env_sourced_field_names,
+    get_env_value,
+    prompt_literal_field,
+)
 
 _SELECT = "testbench_requirement_service.utils.wizard.questionary.select"
 
@@ -102,3 +107,50 @@ def test_prompt_literal_field_without_wizard_choices_lists_all_literals():
         prompt_literal_field(field_type, "Mode", "b", field_info)
     assert select.call_args.kwargs["choices"] == ["a", "b", "c"]
     assert select.call_args.kwargs["default"] == "b"
+
+
+@pytest.fixture
+def _no_jira_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("JIRA_PASSWORD", "JIRA_PASSWORD_FILE", "JIRA_USERNAME", "JIRA_USERNAME_FILE"):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.mark.usefixtures("_no_jira_env")
+def test_get_env_value_reports_file_variable_for_credential_field(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("JIRA_PASSWORD_FILE", "/run/secrets/does-not-need-to-exist")
+    field_info = JiraRequirementReaderConfig.model_fields["password"]
+    assert get_env_value(field_info) == (
+        "JIRA_PASSWORD_FILE",
+        "/run/secrets/does-not-need-to-exist",
+    )
+
+
+@pytest.mark.usefixtures("_no_jira_env")
+def test_get_env_value_plain_variable_wins_over_file_variable(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("JIRA_PASSWORD", "plain")
+    monkeypatch.setenv("JIRA_PASSWORD_FILE", "/run/secrets/pw")
+    assert get_env_value(JiraRequirementReaderConfig.model_fields["password"]) == (
+        "JIRA_PASSWORD",
+        "plain",
+    )
+
+
+@pytest.mark.usefixtures("_no_jira_env")
+def test_get_env_value_ignores_file_variable_for_non_credential_field(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("JIRA_USERNAME_FILE", "/run/secrets/user")
+    assert get_env_value(JiraRequirementReaderConfig.model_fields["username"]) == (
+        "JIRA_USERNAME",
+        None,
+    )
+
+
+@pytest.mark.usefixtures("_no_jira_env")
+def test_env_sourced_field_names_include_file_sourced_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("JIRA_PASSWORD_FILE", "/run/secrets/pw")
+    assert "password" in get_env_sourced_field_names(JiraRequirementReaderConfig)
