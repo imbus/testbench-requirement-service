@@ -101,7 +101,9 @@ JIRA_PASSWORD_FILE=/run/secrets/jira_password
 - `start` refuses to start if the file cannot be read, is not valid UTF-8 or is empty.
 - `start` refuses to start if both `<VARIABLE>` and `<VARIABLE>_FILE` are set — set only one of them.
 
-In both cases the error message names the variable (and the file path), never the value.
+Error messages name the variable (and, for file errors, the path), never the value.
+
+Values in `.env` are interpolated, so a secret containing `${` may not load as written; the wizard warns about such a value — put it in a `<VARIABLE>_FILE` instead, whose content is used literally.
 
 #### Credentials still in config.toml
 
@@ -109,9 +111,11 @@ Existing configuration files with credentials keep working. At start the service
 
 Re-run `testbench-requirement-service configure` to move the credentials into `.env`: the wizard writes them to `./.env` in the working directory, removes them from `config.toml` and prints `✓ Moved '<field>' out of the configuration file into .env (<VARIABLE>)`. If `<VARIABLE>` or `<VARIABLE>_FILE` is already set when the wizard runs, it skips the prompt, writes nothing and does not read the file.
 
+This also applies to a credential the wizard stored in `.env` earlier: its prompt is skipped on the next run, so rotate it by editing `.env`. If you later add `<VARIABLE>_FILE` while `.env` still holds `<VARIABLE>`, `start` refuses to start because both are set — remove the line from `.env`.
+
 #### File permissions
 
-On Linux and macOS the service creates `.env` and `tmp/oauth2_tokens.toml` with mode `600` (readable and writable by the owner only) and sets existing files to `600`. If changing the mode fails, a warning is logged.
+On Linux and macOS the wizard creates `.env` and the service creates `tmp/oauth2_tokens.toml` with mode `600` (readable and writable by the owner only) and sets existing files to `600`. If changing the mode fails, a warning is logged.
 
 On Windows the service does not change any permissions. Restrict both files to the service account yourself, e.g. in Explorer (**Properties → Security**) or with `icacls`.
 
@@ -135,8 +139,8 @@ Pick the authentication flow that matches your Jira deployment. Credentials are 
 | `basic` | Jira Cloud and Data Center with username + password/API token | `username` + `password` (`JIRA_USERNAME` + `JIRA_PASSWORD`) |
 | `token` | Jira Server/Data Center with Personal Access Tokens | `token` (`JIRA_BEARER_TOKEN`) |
 | `oauth1` | Enterprise instances requiring OAuth 1.0a | `oauth1_access_token`, `oauth1_access_token_secret`, `oauth1_consumer_key`, `oauth1_key_cert_path` (or matching env vars; credentials see [Credentials](#credentials)) |
-| `oauth2 2LO (service account)` | Jira Cloud (or Data Center instances that support the `client_credentials` grant), unattended service-to-service access without a user account | `oauth2_client_id` + `oauth2_client_secret` (or `JIRA_OAUTH2_CLIENT_ID` + `JIRA_OAUTH2_CLIENT_SECRET`) |
-| `oauth2 3LO (user account)` | Jira Cloud or Jira Data Center, delegated access on behalf of a user | `oauth2_client_id` + `oauth2_client_secret`, plus a refresh token seeded via the setup wizard |
+| `oauth2 2LO (service account)` | Jira Cloud (or Data Center instances that support the `client_credentials` grant), unattended service-to-service access without a user account | `oauth2_client_id` + `oauth2_client_secret` (`JIRA_OAUTH2_CLIENT_ID` + `JIRA_OAUTH2_CLIENT_SECRET`; see [Credentials](#credentials)) |
+| `oauth2 3LO (user account)` | Jira Cloud or Jira Data Center, delegated access on behalf of a user | `oauth2_client_id` + `oauth2_client_secret` (`JIRA_OAUTH2_CLIENT_ID` + `JIRA_OAUTH2_CLIENT_SECRET`; see [Credentials](#credentials)), plus a refresh token seeded via the setup wizard |
 
 Whether the OAuth 2.0 flows talk to Jira Cloud or Jira Data Center is detected automatically at startup — see [OAuth 2.0 auth (Jira Data Center)](#oauth-20-auth-jira-data-center).
 
@@ -563,7 +567,7 @@ Do not put `JIRA_OAUTH2_REFRESH_TOKEN` in a `.env` file for normal operation —
 
 ### Smoke test
 
-1. Set your Jira credentials (via environment variables or config):
+1. Set your Jira credentials (via environment variables, `.env` or `_FILE`):
    ```bash
    export JIRA_USERNAME=my-user@example.com
    export JIRA_PASSWORD=my-api-token

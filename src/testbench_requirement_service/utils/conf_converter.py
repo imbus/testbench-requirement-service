@@ -209,7 +209,7 @@ def finalize_jira_oauth2(auth_config: dict[str, Any]) -> None:
 
     For the 3LO flow the refresh token is seeded into the token cache (obtaining one
     through the OAuth wizard when neither the prompt nor the cache provided it), and
-    the OAuth2 client secret is moved into ``.env`` instead of the generated TOML.
+    every Jira credential is moved into ``.env`` instead of the generated TOML.
     Mutates *auth_config* in place.
     """
     if str(auth_config.get(AUTH_TYPE_FIELD) or "").startswith(AUTH_OAUTH2_3LO):
