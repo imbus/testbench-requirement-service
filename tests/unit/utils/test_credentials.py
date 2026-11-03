@@ -116,6 +116,21 @@ def test_unreadable_file_is_refused_naming_the_variable(
         credentials.read_credential_from_env("JIRA_PASSWORD")
     message = str(excinfo.value)
     assert message.startswith(f"JIRA_PASSWORD_FILE points to '{target}', which cannot be read: ")
+    assert message.endswith(".")
+
+
+def test_non_utf8_file_is_refused_without_leaking_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    target = tmp_path / "pw"
+    target.write_bytes(b"\xff\xfe")
+    monkeypatch.setenv("JIRA_PASSWORD_FILE", str(target))
+    with pytest.raises(credentials.CredentialSourceError) as excinfo:
+        credentials.read_credential_from_env("JIRA_PASSWORD")
+    assert str(excinfo.value).startswith(
+        f"JIRA_PASSWORD_FILE points to '{target}', which cannot be read: "
+    )
+    assert "\xff" not in str(excinfo.value)
 
 
 @pytest.mark.parametrize("content", [b"", b"\n", b"\r\n"])
