@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accepts a `<VARIABLE>_FILE` variant naming a file that holds the value.
 
 ### Changed
+- `.env` is now looked up from the working directory first (then the installation
+  directory as before).
 - The configuration wizard and `migrate` store every Jira credential in `.env` instead of
   `config.toml`, and move credentials found in an existing `config.toml` into `.env`.
 - A credential set in the environment or a `_FILE` now overrides the value in
