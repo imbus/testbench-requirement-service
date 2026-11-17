@@ -81,7 +81,7 @@ def init(config_path: Path):
 @click.option("--credentials-only", is_flag=True, help="Configure service credentials only")
 @click.option("--reader-only", is_flag=True, help="Configure reader settings only")
 @click.option("--view", is_flag=True, help="View current configuration")
-def configure(  # noqa: PLR0911, PLR0913, C901
+def configure(  # noqa: PLR0911, PLR0913, PLR0917, C901
     config_path: Path,
     full: bool,
     service_only: bool,
@@ -184,7 +184,7 @@ def configure(  # noqa: PLR0911, PLR0913, C901
     metavar="PATH",
     help="Path to CA certificate file for client verification (optional)",
 )
-def start(  # noqa: PLR0913
+def start(  # noqa: PLR0913, PLR0917
     config_path: Path | None = None,
     reader_class: str | None = None,
     reader_config: Path | None = None,

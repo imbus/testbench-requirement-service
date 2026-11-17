@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from dateutil import parser as dateutil_parser
 from dateutil.parser import ParserError
@@ -223,8 +223,8 @@ def _to_python_strftime(date_format: str) -> str:
 def _normalize_to_utc(dt: datetime) -> datetime:
     """Return *dt* as a timezone-aware UTC datetime."""
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def parse_date_string(date_string: str, date_format: str) -> datetime:

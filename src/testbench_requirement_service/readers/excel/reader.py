@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -77,7 +77,7 @@ class ExcelRequirementReader(AbstractRequirementReader):
             stat_result = file.stat()
             baseline = BaselineObject(
                 name=file.stem,
-                date=datetime.fromtimestamp(stat_result.st_mtime, timezone.utc),
+                date=datetime.fromtimestamp(stat_result.st_mtime, UTC),
                 type="UNLOCKED",
             )
             baselines.append(baseline)
@@ -103,7 +103,7 @@ class ExcelRequirementReader(AbstractRequirementReader):
         stat_result = baseline_path.stat()
         return BaselineObjectNode(
             name=baseline,
-            date=datetime.fromtimestamp(stat_result.st_mtime, timezone.utc),
+            date=datetime.fromtimestamp(stat_result.st_mtime, UTC),
             type="CURRENT",
             children=requirement_tree,
         )

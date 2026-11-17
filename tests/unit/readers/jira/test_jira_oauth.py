@@ -9,7 +9,6 @@ never leak state into each other.
 
 from __future__ import annotations
 
-import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,12 +20,9 @@ import pytest
 if TYPE_CHECKING:
     from typing import Self
 
-from testbench_requirement_service.readers.jira import jira_oauth
+import tomllib
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
+from testbench_requirement_service.readers.jira import jira_oauth
 
 
 @pytest.fixture

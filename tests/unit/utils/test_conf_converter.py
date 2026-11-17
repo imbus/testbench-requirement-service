@@ -1,10 +1,10 @@
 """Tests for the legacy .conf to TOML converter."""
 
+import tomllib
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import tomllib
 
 from testbench_requirement_service.utils import conf_converter
 

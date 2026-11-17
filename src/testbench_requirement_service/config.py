@@ -28,7 +28,7 @@ from testbench_requirement_service.utils.config_wizard import run_jira_oauth_wiz
 class AppConfig(Config):
     """Sanic configuration with uppercase attributes (Sanic requirement)."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         config_path: Path | None = None,
         reader_class: str | None = None,
