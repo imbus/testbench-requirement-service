@@ -47,12 +47,9 @@ class AppConfig(Config):
         # Sanic-specific settings
         self.FALLBACK_ERROR_FORMAT = "json"
         self.DEPRECATION_FILTER = "ignore"
-        self.OAS_UI_DEFAULT = "swagger"
-        self.OAS_UI_REDOC = False
-        self.OAS_CUSTOM_FILE = (Path(__file__).parent / "openapi.yaml").resolve().as_posix()
-        self.OAS_PATH_TO_SWAGGER_HTML = (
-            (Path(__file__).parent / "static/swagger-ui/index.html").resolve().as_posix()
-        )
+        # Never auto-load sanic-ext: upgraded installations may still have it, and its
+        # OpenAPI routes clash with the service's own /docs routes.
+        self.AUTO_EXTEND = False
 
         # Load and validate config from file
         self.CONFIG_PATH = resolve_config_file_path(config_path)
