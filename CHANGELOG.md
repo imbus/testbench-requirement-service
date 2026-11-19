@@ -12,8 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`JIRA_PASSWORD`, `JIRA_BEARER_TOKEN`, `JIRA_OAUTH2_CLIENT_SECRET`,
   `JIRA_OAUTH1_ACCESS_TOKEN`, `JIRA_OAUTH1_ACCESS_TOKEN_SECRET`, `JIRA_OAUTH1_KEY_CERT`)
   accepts a `<VARIABLE>_FILE` variant naming a file that holds the value.
+- Support for Python 3.14 and 3.15. `pip install` succeeds on Windows without the
+  Microsoft C++ Build Tools, including all extras.
 
 ### Changed
+- Python 3.10 is no longer supported; the `excel` extra now requires pandas 3.
+- The service serves `/docs`, `/docs/openapi.json` and `/docs/swagger-config` itself and
+  no longer depends on `sanic-ext`, which pulled in PyYAML. PyYAML has no Python 3.15
+  wheels and its source build fails without a C compiler.
+- The `dev` extra installs `pre-commit` only on Python < 3.15 for the same reason;
+  on 3.15 install it separately (for example with `pipx install pre-commit`).
 - `.env` is now looked up from the working directory first (then the installation
   directory as before).
 - The configuration wizard and `migrate` store every Jira credential in `.env` instead of
