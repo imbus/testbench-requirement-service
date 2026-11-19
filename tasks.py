@@ -69,7 +69,7 @@ def build_binary(c: Context, no_clean: bool = False) -> None:
 
 
 @task
-def download_deps(  # noqa: PLR0913
+def download_deps(  # noqa: PLR0913, PLR0917
     c: Context,
     extras: str = "excel,jira,sql,dev",
     platform: str = "win_amd64",

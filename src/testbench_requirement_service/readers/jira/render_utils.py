@@ -269,7 +269,7 @@ def process_image_tags(
         img.attrs.pop("src", None)
 
 
-def handle_attachment_image(  # noqa: PLR0913
+def handle_attachment_image(  # noqa: PLR0913, PLR0917
     img,
     src: str,
     issue: Issue,
@@ -313,7 +313,7 @@ def apply_attachment_image(
     img["src"] = build_absolute_jira_url(fallback_url, jira_server_url)
 
 
-def handle_remote_image(  # noqa: PLR0913
+def handle_remote_image(  # noqa: PLR0913, PLR0917
     img,
     src: str,
     image_cache: dict[str, str | None],

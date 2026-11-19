@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sanic.exceptions import NotFound
@@ -45,7 +45,7 @@ class JsonlRequirementReader(AbstractRequirementReader):
         baselines = [
             BaselineObject(
                 name=f.stem,
-                date=datetime.fromtimestamp(f.stat().st_mtime, timezone.utc),
+                date=datetime.fromtimestamp(f.stat().st_mtime, UTC),
                 type="UNLOCKED",
             )
             for f in self._get_project_path(project).iterdir()
@@ -81,7 +81,7 @@ class JsonlRequirementReader(AbstractRequirementReader):
         stat_result = baseline_path.stat()
         return BaselineObjectNode(
             name=baseline,
-            date=datetime.fromtimestamp(stat_result.st_mtime, timezone.utc),
+            date=datetime.fromtimestamp(stat_result.st_mtime, UTC),
             type="CURRENT",
             children=list(requirement_tree.values()),
         )
