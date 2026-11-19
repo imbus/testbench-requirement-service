@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Jira credentials can be read from secret files: every credential environment variable
+  (`JIRA_PASSWORD`, `JIRA_BEARER_TOKEN`, `JIRA_OAUTH2_CLIENT_SECRET`,
+  `JIRA_OAUTH1_ACCESS_TOKEN`, `JIRA_OAUTH1_ACCESS_TOKEN_SECRET`, `JIRA_OAUTH1_KEY_CERT`)
+  accepts a `<VARIABLE>_FILE` variant naming a file that holds the value.
+- Support for Python 3.14 and 3.15. `pip install` succeeds on Windows without the
+  Microsoft C++ Build Tools, including all extras.
+
+### Changed
+- Python 3.10 is no longer supported; the `excel` extra now requires pandas 3.
+- The service serves `/docs`, `/docs/openapi.json` and `/docs/swagger-config` itself and
+  no longer depends on `sanic-ext`, which pulled in PyYAML. PyYAML has no Python 3.15
+  wheels and its source build fails without a C compiler.
+- The `dev` extra installs `pre-commit` only on Python < 3.15 for the same reason;
+  on 3.15 install it separately (for example with `pipx install pre-commit`).
+- `.env` is now looked up from the working directory first (then the installation
+  directory as before).
+- The configuration wizard and `migrate` store every Jira credential in `.env` instead of
+  `config.toml`, and move credentials found in an existing `config.toml` into `.env`.
+- A credential set in the environment or a `_FILE` now overrides the value in
+  `config.toml`; a credential found in `config.toml` logs a warning at start.
+- The service refuses to start when a `_FILE` cannot be read or is empty, or when both
+  `<VARIABLE>` and `<VARIABLE>_FILE` are set. The message names the variable (and the
+  file path), never the value.
+- The wizard no longer pre-fills an existing credential into the masked prompt: press
+  Enter to keep it, or type a new value to replace it.
+- Re-running the wizard with a credential supplied through `<VARIABLE>_FILE` keeps the
+  other existing settings as prompt defaults.
+
+### Security
+- `.env` and the OAuth2 token cache (`tmp/oauth2_tokens.toml`) are created readable and
+  writable by the owner only on Linux and macOS.
+
 ## [1.3.0] - 2026-08-21
 
 ### Added

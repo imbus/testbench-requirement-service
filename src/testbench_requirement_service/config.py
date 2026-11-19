@@ -47,9 +47,6 @@ class AppConfig(Config):
         # Sanic-specific settings
         self.FALLBACK_ERROR_FORMAT = "json"
         self.DEPRECATION_FILTER = "ignore"
-        # Never auto-load sanic-ext: upgraded installations may still have it, and its
-        # OpenAPI routes clash with the service's own /docs routes.
-        self.AUTO_EXTEND = False
 
         # Load and validate config from file
         self.CONFIG_PATH = resolve_config_file_path(config_path)
