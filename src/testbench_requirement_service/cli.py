@@ -11,6 +11,7 @@ from sanic.worker.loader import AppLoader
 from testbench_requirement_service import __title__, __version__
 from testbench_requirement_service.app import AppConfig, create_app
 from testbench_requirement_service.log import logger
+from testbench_requirement_service.models.config import DEFAULT_HOST, DEFAULT_PORT
 from testbench_requirement_service.utils.client_summary import log_reader_summary
 from testbench_requirement_service.utils.conf_converter import (
     LEGACY_SOURCE_TYPES,
@@ -26,6 +27,8 @@ from testbench_requirement_service.utils.config_wizard import (
     show_main_menu,
     view_current_config,
 )
+
+WILDCARD_HOSTS = {"0.0.0.0", "::", "[::]"}
 
 
 def print_service_banner():
@@ -130,6 +133,18 @@ def configure(  # noqa: PLR0911, PLR0913, C901
             return
 
     run_full_wizard(config_path)
+
+
+def build_server_url(host: str | None, port: int | None, use_ssl: bool) -> str:
+    """Build the URL the service is reachable at from its bind address."""
+    scheme = "https" if use_ssl else "http"
+    host = host or DEFAULT_HOST
+    if host in WILDCARD_HOSTS:
+        # A wildcard bind address is not a destination; the service answers on localhost.
+        host = "localhost"
+    elif ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"{scheme}://{host}:{port or DEFAULT_PORT}"
 
 
 @click.command()
@@ -257,6 +272,12 @@ def start(  # noqa: PLR0913
         "motd": False,
         **server_config.run_kwargs,
     }
+
+    server_url = build_server_url(
+        common_kwargs["host"], common_kwargs["port"], bool(common_kwargs["ssl"])
+    )
+    logger.info("Server URL: %s", server_url)
+    logger.info("API docs:   %s/docs", server_url)
 
     try:
         if use_single_process:
