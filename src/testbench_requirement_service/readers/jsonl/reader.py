@@ -57,7 +57,7 @@ class JsonlRequirementReader(AbstractRequirementReader):
         baseline_path = self._get_baseline_path(project, baseline)
         requirement_nodes: dict[str, RequirementObjectNode] = {}
         requirement_tree: dict[str, RequirementObjectNode] = {}
-        with baseline_path.open("r") as f:
+        with baseline_path.open("r", encoding="utf-8") as f:
             for line in f:
                 file_node = FileRequirementObjectNode(**json.loads(line))
                 requirement_node = build_requirementobject_from_file_object(file_node)
@@ -90,7 +90,7 @@ class JsonlRequirementReader(AbstractRequirementReader):
         filepath = self.config.requirements_path / "UserDefinedAttributes.json"
         if not filepath.exists():
             return []
-        with filepath.open("r") as f:
+        with filepath.open("r", encoding="utf-8") as f:
             udf_definitions = json.load(f)
             if not isinstance(udf_definitions, list):
                 raise ValueError("UserDefinedAttributes.json must contain a list of definitions.")
@@ -124,7 +124,7 @@ class JsonlRequirementReader(AbstractRequirementReader):
         for key in requirement_keys:
             keys[key.id][key.version] = None
         file_nodes: list[UserDefinedAttributeResponse] = []
-        with baseline_path.open("r") as f:
+        with baseline_path.open("r", encoding="utf-8") as f:
             for line in f:
                 file_node = FileRequirementObjectNode(**json.loads(line))
                 if (
@@ -150,7 +150,7 @@ class JsonlRequirementReader(AbstractRequirementReader):
         self, project: str, baseline: str, key: RequirementKey
     ) -> ExtendedRequirementObject:
         baseline_path = self._get_baseline_path(project, baseline)
-        with baseline_path.open("r") as f:
+        with baseline_path.open("r", encoding="utf-8") as f:
             for line in f:
                 file_node = FileRequirementObjectNode(**json.loads(line))
                 if file_node.key.id == key.id and file_node.key.version.name == key.version:
@@ -162,7 +162,7 @@ class JsonlRequirementReader(AbstractRequirementReader):
     ) -> list[RequirementVersionObject]:
         baseline_path = self._get_baseline_path(project, baseline)
         versions = []
-        with baseline_path.open("r") as f:
+        with baseline_path.open("r", encoding="utf-8") as f:
             for line in f:
                 file_node = FileRequirementObjectNode(**json.loads(line))
                 if file_node.key.id == key.id:
