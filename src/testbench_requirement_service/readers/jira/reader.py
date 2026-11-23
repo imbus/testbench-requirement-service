@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from jira.resources import Field, Issue, Project, PropertyHolder
 from sanic import NotFound
@@ -72,7 +72,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def get_baselines(self, project: str) -> list[BaselineObject]:
         baselines = sorted(self._get_baselines_for_project(project))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return [
             BaselineObject(
                 name="Current Baseline",
@@ -107,7 +107,7 @@ class JiraRequirementReader(AbstractRequirementReader):
 
         return BaselineObjectNode(
             name=baseline,
-            date=datetime.now(timezone.utc),
+            date=datetime.now(UTC),
             type="CURRENT",
             children=sorted(
                 requirement_tree.values(),

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -187,28 +187,28 @@ class TestNormalizeToUtc:
     def test_naive_datetime_gets_utc_tzinfo(self) -> None:
         naive = datetime(2024, 3, 15, 10, 30, 0)  # noqa: DTZ001
         result = _normalize_to_utc(naive)
-        assert result.tzinfo == timezone.utc
-        assert result == datetime(2024, 3, 15, 10, 30, 0, tzinfo=timezone.utc)
+        assert result.tzinfo == UTC
+        assert result == datetime(2024, 3, 15, 10, 30, 0, tzinfo=UTC)
 
     def test_utc_aware_datetime_returned_unchanged(self) -> None:
-        utc = datetime(2024, 3, 15, 10, 30, 0, tzinfo=timezone.utc)
+        utc = datetime(2024, 3, 15, 10, 30, 0, tzinfo=UTC)
         result = _normalize_to_utc(utc)
         assert result == utc
-        assert result.tzinfo == timezone.utc
+        assert result.tzinfo == UTC
 
     def test_positive_offset_converted_to_utc(self) -> None:
         # 12:00 +02:00 → 10:00 UTC (instant preserved, representation changed)
         plus2 = timezone(timedelta(hours=2))
         dt = datetime(2024, 3, 15, 12, 0, 0, tzinfo=plus2)
         result = _normalize_to_utc(dt)
-        assert result == datetime(2024, 3, 15, 10, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 10, 0, 0, tzinfo=UTC)
 
     def test_negative_offset_converted_to_utc(self) -> None:
         # 08:00 -05:00 → 13:00 UTC
         minus5 = timezone(timedelta(hours=-5))
         dt = datetime(2024, 3, 15, 8, 0, 0, tzinfo=minus5)
         result = _normalize_to_utc(dt)
-        assert result == datetime(2024, 3, 15, 13, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 13, 0, 0, tzinfo=UTC)
 
     def test_instant_is_preserved_during_conversion(self) -> None:
         plus2 = timezone(timedelta(hours=2))
@@ -223,45 +223,45 @@ class TestParseDateString:
 
     def test_java_format_datetime_naive(self) -> None:
         result = parse_date_string("2024-03-15 10:30:00", "yyyy-MM-dd HH:mm:ss")
-        assert result == datetime(2024, 3, 15, 10, 30, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 10, 30, 0, tzinfo=UTC)
 
     def test_java_format_date_only(self) -> None:
         result = parse_date_string("2024-03-15", "yyyy-MM-dd")
-        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=UTC)
 
     def test_java_format_with_dots(self) -> None:
         result = parse_date_string("15.03.2024", "dd.MM.yyyy")
-        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=UTC)
 
     def test_java_format_2digit_year(self) -> None:
         result = parse_date_string("15.03.24", "dd.MM.yy")
-        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=UTC)
 
     # --- Python format, naive strings → UTC ---
 
     def test_python_format_datetime_naive(self) -> None:
         result = parse_date_string("2024-03-15 10:30:00", "%Y-%m-%d %H:%M:%S")
-        assert result == datetime(2024, 3, 15, 10, 30, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 10, 30, 0, tzinfo=UTC)
 
     def test_python_format_date_only(self) -> None:
         result = parse_date_string("2024-03-15", "%Y-%m-%d")
-        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=UTC)
 
     # --- Offset-aware strings → UTC (key correctness check) ---
 
     def test_java_format_positive_offset_converted_to_utc(self) -> None:
         # 12:00 +0200 → 10:00 UTC  (NOT 12:00 UTC — that would be the old bug)
         result = parse_date_string("2024-03-15 12:00:00+0200", "yyyy-MM-dd HH:mm:ssZ")
-        assert result == datetime(2024, 3, 15, 10, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 10, 0, 0, tzinfo=UTC)
 
     def test_python_format_negative_offset_converted_to_utc(self) -> None:
         # 08:00 -0500 → 13:00 UTC
         result = parse_date_string("2024-03-15 08:00:00-0500", "%Y-%m-%d %H:%M:%S%z")
-        assert result == datetime(2024, 3, 15, 13, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 13, 0, 0, tzinfo=UTC)
 
     def test_offset_aware_instant_is_preserved(self) -> None:
         # Both sides of the assertion represent the same moment.
-        expected_utc = datetime(2024, 3, 15, 10, 0, 0, tzinfo=timezone.utc)
+        expected_utc = datetime(2024, 3, 15, 10, 0, 0, tzinfo=UTC)
         result = parse_date_string("2024-03-15 12:00:00+0200", "yyyy-MM-dd HH:mm:ssZ")
         assert result == expected_utc
 
@@ -270,7 +270,7 @@ class TestParseDateString:
     def test_dateutil_fallback_emits_warning_log(self, caplog: pytest.LogCaptureFixture) -> None:  # type: ignore[name-defined]
         with caplog.at_level(logging.WARNING):
             result = parse_date_string("March 15, 2024", "yyyy-MM-dd")
-        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2024, 3, 15, 0, 0, 0, tzinfo=UTC)
         assert "dateutil" in caplog.text
         assert caplog.records[-1].levelname == "WARNING"
 

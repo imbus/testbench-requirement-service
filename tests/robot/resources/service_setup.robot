@@ -1,11 +1,11 @@
 *** Settings ***
-Library     Process
-Library     Collections
-Library     OperatingSystem
+Library    Process
+Library    Collections
+Library    OperatingSystem
 
 
 *** Variables ***
-${service_process}      None
+${service_process}    None
 
 
 *** Keywords ***

@@ -1,5 +1,5 @@
 import copy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -19,7 +19,7 @@ from testbench_requirement_service.models.requirement import (
 from testbench_requirement_service.readers.jira.config import JiraRequirementReaderConfig
 from testbench_requirement_service.readers.jira.render_utils import build_rendered_field_html
 
-UNSET_DATETIME = datetime.min.replace(tzinfo=timezone.utc)
+UNSET_DATETIME = datetime.min.replace(tzinfo=UTC)
 
 
 def escape_jql_value(value: str) -> str:
@@ -52,16 +52,16 @@ def parse_jira_datetime(dt: str | float | datetime | None) -> datetime:
         return UNSET_DATETIME
 
     if isinstance(dt, datetime):
-        return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
     if isinstance(dt, (int, float)):
-        return datetime.fromtimestamp(dt / 1000, tz=timezone.utc)
+        return datetime.fromtimestamp(dt / 1000, tz=UTC)
 
     dt_str = str(dt).strip()
 
     # Numeric string (epoch ms)
     try:
-        return datetime.fromtimestamp(float(dt_str) / 1000, tz=timezone.utc)
+        return datetime.fromtimestamp(float(dt_str) / 1000, tz=UTC)
     except (ValueError, TypeError):
         pass
 
@@ -75,7 +75,7 @@ def parse_jira_datetime(dt: str | float | datetime | None) -> datetime:
             logger.debug(f"Could not parse Jira datetime: {dt!r}; falling back to epoch")
             return UNSET_DATETIME
 
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 def build_userdefinedattribute_object(

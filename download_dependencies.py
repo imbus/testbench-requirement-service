@@ -19,21 +19,9 @@ import argparse
 import re
 import subprocess
 import sys
+import tomllib
 import zipfile
 from pathlib import Path
-
-# tomllib is stdlib from 3.11; use tomli backport on 3.10
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    try:
-        import tomli as tomllib  # type: ignore[import-not-found,no-redef]
-    except ImportError as exc:
-        print(
-            "Missing 'tomli' package. Install via: python -m pip install tomli",
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from exc
 
 try:
     from packaging.requirements import Requirement

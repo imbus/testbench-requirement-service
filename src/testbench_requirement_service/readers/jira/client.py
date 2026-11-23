@@ -459,7 +459,7 @@ class JiraClient:
                 logger.warning(f"Error fetching issue {issue_id}: HTTP {e.status_code}")
             return None
 
-    def fetch_issues(  # noqa: PLR0913
+    def fetch_issues(  # noqa: PLR0913, PLR0917
         self,
         issue_keys: list[str],
         base_jql: str | None = None,
