@@ -310,23 +310,31 @@ def test_read_credential_from_file_drops_utf8_bom(tmp_path: Path, monkeypatch: p
     [
         (
             {"auth_type": "basic", "username": "u"},
-            "Jira password must be provided for basic auth "
-            "(set JIRA_PASSWORD or JIRA_PASSWORD_FILE)",
+            (
+                "Jira password must be provided for basic auth "
+                "(set JIRA_PASSWORD or JIRA_PASSWORD_FILE)"
+            ),
         ),
         (
             {"auth_type": "token"},
-            "Jira Personal Access Token must be provided for token auth "
-            "(set JIRA_BEARER_TOKEN or JIRA_BEARER_TOKEN_FILE)",
+            (
+                "Jira Personal Access Token must be provided for token auth "
+                "(set JIRA_BEARER_TOKEN or JIRA_BEARER_TOKEN_FILE)"
+            ),
         ),
         (
             {"auth_type": "oauth1"},
-            "Jira Access Token must be provided for OAuth1 "
-            "(set JIRA_OAUTH1_ACCESS_TOKEN or JIRA_OAUTH1_ACCESS_TOKEN_FILE)",
+            (
+                "Jira Access Token must be provided for OAuth1 "
+                "(set JIRA_OAUTH1_ACCESS_TOKEN or JIRA_OAUTH1_ACCESS_TOKEN_FILE)"
+            ),
         ),
         (
             {"auth_type": "oauth1", "oauth1_access_token": "at"},
-            "Jira Access Token Secret must be provided for OAuth1 "
-            "(set JIRA_OAUTH1_ACCESS_TOKEN_SECRET or JIRA_OAUTH1_ACCESS_TOKEN_SECRET_FILE)",
+            (
+                "Jira Access Token Secret must be provided for OAuth1 "
+                "(set JIRA_OAUTH1_ACCESS_TOKEN_SECRET or JIRA_OAUTH1_ACCESS_TOKEN_SECRET_FILE)"
+            ),
         ),
         (
             {
@@ -335,15 +343,19 @@ def test_read_credential_from_file_drops_utf8_bom(tmp_path: Path, monkeypatch: p
                 "oauth1_access_token_secret": "ats",
                 "oauth1_consumer_key": "ck",
             },
-            "Jira Private Key must be provided for OAuth1 "
-            "(via oauth1_key_cert_path / JIRA_OAUTH1_KEY_CERT_PATH, "
-            "or set JIRA_OAUTH1_KEY_CERT or JIRA_OAUTH1_KEY_CERT_FILE)",
+            (
+                "Jira Private Key must be provided for OAuth1 "
+                "(via oauth1_key_cert_path / JIRA_OAUTH1_KEY_CERT_PATH, "
+                "or set JIRA_OAUTH1_KEY_CERT or JIRA_OAUTH1_KEY_CERT_FILE)"
+            ),
         ),
         (
             {"auth_type": "oauth2 2LO", "oauth2_client_id": "id"},
-            "Jira OAuth2 client credentials must be provided "
-            "(client ID via oauth2_client_id or JIRA_OAUTH2_CLIENT_ID; "
-            "client secret: set JIRA_OAUTH2_CLIENT_SECRET or JIRA_OAUTH2_CLIENT_SECRET_FILE)",
+            (
+                "Jira OAuth2 client credentials must be provided "
+                "(client ID via oauth2_client_id or JIRA_OAUTH2_CLIENT_ID; "
+                "client secret: set JIRA_OAUTH2_CLIENT_SECRET or JIRA_OAUTH2_CLIENT_SECRET_FILE)"
+            ),
         ),
     ],
 )
