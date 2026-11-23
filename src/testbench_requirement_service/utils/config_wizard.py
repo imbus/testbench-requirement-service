@@ -774,7 +774,7 @@ def run_jira_oauth_wizard(reader_config: dict | None = None) -> str | None:
     ).ask()
 
     if choice == _OAUTH_CHOICE_REFRESH_TOKEN:
-        refresh_token = questionary.text("Please enter your OAuth2 refresh token: ").ask()
+        refresh_token = questionary.password("Please enter your OAuth2 refresh token: ").ask()
         return refresh_token if isinstance(refresh_token, str) and refresh_token else None
 
     if choice == _OAUTH_CHOICE_AUTH_CODE:
