@@ -4,6 +4,7 @@ from typing import Any
 from urllib import error as urllib_error
 
 import requests
+import urllib3
 from jira import JIRA, JIRAError
 from jira.resources import (
     Board,
@@ -60,10 +61,21 @@ class JiraClient:
                 "http": self.config.proxy_url,
                 "https": self.config.proxy_url,
             }
+        if self.config.ssl_verify is False:
+            # Warn once here instead of letting urllib3 warn on every single request.
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            logger.warning(
+                "SSL certificate verification is disabled for '%s' (verify_ssl = false). "
+                "Only use this for development/testing.",
+                self.config.server_url,
+            )
         self.jira = self._connect()
         # The following flags determine which Jira API endpoints to use
         self.use_issuetypes_endpoint = not self.jira._is_cloud and self.jira._version >= (8, 4, 0)
         self.use_manual_pagination = not self.jira._is_cloud
+        # On Server/DC there is no bulk changelog endpoint, so the changelog is embedded
+        # in the JQL search response instead of fetching it per issue.
+        self.embed_changelog_in_search = not self.jira._is_cloud
         # Parent link fields for Server/DC compatibility (lazy-loaded)
         self._epic_link_field_id: str | None = None
         self._parent_link_field_id: str | None = None
@@ -807,23 +819,36 @@ class JiraClient:
         Raises on any error; callers are responsible for exception handling.
         """
         logger.debug("Fetching changelog for '%s' via expand", issue_id_or_key)
-        issue = self.fetch_issue(issue_id_or_key, expand="changelog")
+        issue = self.fetch_issue(issue_id_or_key, fields="key", expand="changelog")
         if issue is None:
             return []
+        histories = self._get_embedded_changelog_histories(issue) or []
+        logger.debug("Fetched %d changelog entries for '%s'", len(histories), issue_id_or_key)
+        return histories
+
+    def _get_embedded_changelog_histories(self, issue: Issue) -> list[Any] | None:
+        """Return the changelog histories embedded via ``expand=changelog``, if present."""
         changelog = getattr(issue, "changelog", None)
         if changelog is None:
-            return []
-        raw_histories = getattr(changelog, "histories", [])
+            return None
+        raw_histories = getattr(changelog, "histories", None)
+        if raw_histories is None:
+            return None
         total = getattr(changelog, "total", None)
         if total is not None and len(raw_histories) < total:
             logger.warning(
                 "Changelog for %s is truncated (%d of %d entries). Some history may be incomplete.",
-                issue_id_or_key,
+                issue.key,
                 len(raw_histories),
                 total,
             )
-        logger.debug("Fetched %d changelog entries for '%s'", len(raw_histories), issue_id_or_key)
         return list(raw_histories)
+
+    def with_changelog_expand(self, expand: str | None) -> str | None:
+        """Add ``changelog`` to *expand* when the changelog should be embedded in searches."""
+        if not self.embed_changelog_in_search:
+            return expand
+        return f"{expand},changelog" if expand else "changelog"
 
     def fetch_issue_changelog_histories(self, issue_id_or_key: str) -> list[Any]:
         """
@@ -976,6 +1001,17 @@ class JiraClient:
                     logger.debug("Bulk fetch returned empty, falling back to per-issue fetch.")
             except Exception as e:
                 logger.debug("Bulk fetch failed: %s. Falling back to per-issue fetch.", e)
+
+        # On Server/DC, use the changelog embedded via expand=changelog when available.
+        if not self.jira._is_cloud:
+            missing = []
+            for issue in issues:
+                histories = self._get_embedded_changelog_histories(issue)
+                if histories is None:
+                    missing.append(issue)
+                else:
+                    issue_changelogs[issue.key] = histories
+            issues = missing
 
         # Per-issue fetch using issue key (works on all Jira instance types)
         for issue in issues:

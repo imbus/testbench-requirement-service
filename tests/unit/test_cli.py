@@ -194,3 +194,18 @@ no separator here
 def test_migrate_is_registered_on_the_cli():
     """A command that is not registered is unreachable, which is the bug being fixed."""
     assert "migrate" in cli_module.cli.commands
+
+
+@pytest.mark.parametrize(
+    ("host", "port", "use_ssl", "expected"),
+    [
+        ("127.0.0.1", 8020, False, "http://127.0.0.1:8020"),
+        ("example.org", 8443, True, "https://example.org:8443"),
+        ("0.0.0.0", 8020, False, "http://localhost:8020"),
+        ("::", 8020, False, "http://localhost:8020"),
+        ("::1", 8020, False, "http://[::1]:8020"),
+        (None, None, False, "http://127.0.0.1:8020"),
+    ],
+)
+def test_build_server_url(host, port, use_ssl, expected):
+    assert cli_module.build_server_url(host, port, use_ssl) == expected

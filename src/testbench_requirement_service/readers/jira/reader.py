@@ -91,7 +91,9 @@ class JiraRequirementReader(AbstractRequirementReader):
 
     def get_requirements_root_node(self, project: str, baseline: str) -> BaselineObjectNode:
         jql_query = self._build_issues_jql(project, baseline)
-        issues = self.jira_client.fetch_issues_by_jql(jql_query)
+        issues = self.jira_client.fetch_issues_by_jql(
+            jql_query, expand=self.jira_client.with_changelog_expand(None)
+        )
         if not issues:
             logger.debug(f"No issues found for project '{project}' and baseline '{baseline}'")
 
@@ -254,7 +256,7 @@ class JiraRequirementReader(AbstractRequirementReader):
             issue_keys,
             base_jql,
             fields=",".join(["key", "attachment", *field_ids]),
-            expand="renderedFields",
+            expand=self.jira_client.with_changelog_expand("renderedFields"),
         )
 
         issue_changelogs = self.jira_client.fetch_changelog_histories(issues)

@@ -179,8 +179,12 @@ def load_properties_config(config_path: Path) -> dict[str, Any]:
         return {}
 
     try:
-        with config_path.open("r") as config_file:
-            return javaproperties.load(config_file)  # type: ignore[no-any-return]
+        raw = config_path.read_bytes()
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+        return javaproperties.loads(text)
     except (OSError, UnicodeDecodeError) as e:
         click.echo(f"⚠️  Error loading {config_path}: {e}")
         return {}
@@ -292,14 +296,14 @@ def save_properties_config(config_dict: dict, config_path: Path):
 
     if javaproperties:
         try:
-            with config_path.open("w") as config_file:
+            with config_path.open("w", encoding="utf-8") as config_file:
                 javaproperties.dump(str_config, config_file, timestamp=False)  # type: ignore[no-any-return]
         except (OSError, UnicodeEncodeError) as e:
             click.echo(f"❌ Error saving properties config to {config_path}: {e}")
     else:
         click.echo("⚠️  javaproperties not installed, creating as text file")
         try:
-            with config_path.open("w") as f:
+            with config_path.open("w", encoding="utf-8") as f:
                 for key, value in str_config.items():
                     f.write(f"{key}={value}\n")
         except OSError as e:
