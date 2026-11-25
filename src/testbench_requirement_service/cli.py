@@ -20,11 +20,13 @@ from testbench_requirement_service.utils.conf_converter import (
 )
 from testbench_requirement_service.utils.config import load_config, resolve_config_file_path
 from testbench_requirement_service.utils.config_wizard import (
+    CREDENTIAL_STORAGES,
     backup_config_file,
     configure_credentials_only,
     configure_reader_only,
     configure_service_only,
     run_full_wizard,
+    set_reader_credential,
     show_main_menu,
     view_current_config,
 )
@@ -311,6 +313,31 @@ def set_credentials(config_path, username, password):
 
 
 @click.command()
+@click.argument("variable", required=False)
+@click.option(
+    "--path",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    metavar="PATH",
+    default="config.toml",
+    help="Path to the app config file",
+)
+@click.option(
+    "--storage",
+    type=click.Choice(CREDENTIAL_STORAGES),
+    help="How to store the value in .env: plain text, or encrypted with Windows DPAPI for "
+    "the current user or for this machine  [default: asks on Windows, plain elsewhere]",
+)
+def set_reader_credential_command(variable: str | None, config_path: Path, storage: str | None):
+    """Set or replace a reader credential (e.g. JIRA_PASSWORD) in .env.
+
+    VARIABLE is the credential's environment variable; it is asked for if omitted.
+    The value is always prompted for, never passed on the command line.
+    """
+    set_reader_credential(config_path, variable, storage)
+
+
+@click.command()
 @click.option(
     "--from",
     "legacy_path",
@@ -361,6 +388,7 @@ def migrate(legacy_path: Path, config_path: Path, source_type: str | None):
 cli.add_command(init)
 cli.add_command(configure)
 cli.add_command(set_credentials)
+cli.add_command(set_reader_credential_command, name="set-reader-credential")
 cli.add_command(migrate)
 cli.add_command(start)
 

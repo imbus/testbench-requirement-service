@@ -27,6 +27,7 @@ def _clean_jira_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in [*CREDENTIAL_ENV_VARS, "JIRA_OAUTH2_REFRESH_TOKEN", "JIRA_USERNAME"]:
         monkeypatch.delenv(var, raising=False)
         monkeypatch.delenv(f"{var}_FILE", raising=False)
+        monkeypatch.delenv(f"{var}_DPAPI", raising=False)
 
 
 def test_credential_fields_lists_sensitive_non_excluded_jira_fields():
