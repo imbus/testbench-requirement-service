@@ -20,6 +20,7 @@ testbench-requirement-service [COMMAND] [OPTIONS]
 | [`init`](#init) | Interactive wizard to create a new configuration file from scratch. |
 | [`configure`](#configure) | Create or update an existing configuration interactively. |
 | [`set-credentials`](#set-credentials) | Set the service username and password. |
+| [`set-reader-credential`](#set-reader-credential) | Set or replace a reader credential (e.g. the Jira password) in `.env`. |
 | [`migrate`](#migrate) | Convert a legacy `.conf` / `.properties` configuration into a TOML configuration. |
 | [`start`](#start) | Start the requirement service. |
 
@@ -117,6 +118,37 @@ testbench-requirement-service set-credentials
 # Non-interactive
 testbench-requirement-service set-credentials --username admin --password mypassword
 ```
+
+---
+
+## `set-reader-credential`
+
+Set or replace one credential of the configured reader (for example the Jira password) in `./.env`. This is the way to rotate a credential, in particular one that is stored encrypted and cannot be edited by hand. The new value is always asked for with a masked prompt and a confirmation; it is never passed on the command line.
+
+```bash
+testbench-requirement-service set-reader-credential [OPTIONS] [VARIABLE]
+```
+
+`VARIABLE` is the credential's environment variable, e.g. `JIRA_PASSWORD`. If it is omitted, the command lists the credentials of the configured reader to choose from.
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--path PATH` | Path to the app configuration file (default: `config.toml`) |
+| `--storage [plain\|dpapi-user\|dpapi-machine]` | How to store the value: plain text, or encrypted with Windows DPAPI for the current user or for this machine. Default: asks on Windows, plain text elsewhere. |
+
+### Examples
+
+```bash
+# Choose the credential and the storage interactively
+testbench-requirement-service set-reader-credential
+
+# Replace the Jira password, encrypted for the current Windows user
+testbench-requirement-service set-reader-credential JIRA_PASSWORD --storage dpapi-user
+```
+
+The other variants of the variable (`<VARIABLE>`, `<VARIABLE>_FILE`, `<VARIABLE>_DPAPI`) are removed from `.env`, because the service refuses to start when more than one is set. Restart the service to use the new value. See [Encrypted credentials on Windows](readers/jira.md#encrypted-credentials-on-windows-_dpapi).
 
 ---
 

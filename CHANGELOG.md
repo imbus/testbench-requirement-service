@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`JIRA_PASSWORD`, `JIRA_BEARER_TOKEN`, `JIRA_OAUTH2_CLIENT_SECRET`,
   `JIRA_OAUTH1_ACCESS_TOKEN`, `JIRA_OAUTH1_ACCESS_TOKEN_SECRET`, `JIRA_OAUTH1_KEY_CERT`)
   accepts a `<VARIABLE>_FILE` variant naming a file that holds the value.
+- Jira credentials can be stored encrypted on Windows: every credential environment
+  variable accepts a `<VARIABLE>_DPAPI` variant holding the value encrypted with the
+  Windows Data Protection API (DPAPI). On Windows the configuration wizard and `migrate`
+  ask whether to store credentials encrypted for the current user, encrypted for the
+  machine, or as plain text.
+- `set-reader-credential` CLI command to set or replace a reader credential in `.env`
+  (plain text or DPAPI-encrypted), e.g. to rotate the Jira password.
 - Support for Python 3.14 and 3.15. `pip install` succeeds on Windows without the
   Microsoft C++ Build Tools, including all extras.
 
@@ -28,9 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config.toml`, and move credentials found in an existing `config.toml` into `.env`.
 - A credential set in the environment or a `_FILE` now overrides the value in
   `config.toml`; a credential found in `config.toml` logs a warning at start.
-- The service refuses to start when a `_FILE` cannot be read or is empty, or when both
-  `<VARIABLE>` and `<VARIABLE>_FILE` are set. The message names the variable (and the
-  file path), never the value.
+- The service refuses to start when a `_FILE` cannot be read or is empty, when a `_DPAPI`
+  value cannot be decrypted, or when more than one of `<VARIABLE>`, `<VARIABLE>_FILE` and
+  `<VARIABLE>_DPAPI` is set. The message names the variable (and the file path), never
+  the value.
 - The wizard no longer pre-fills an existing credential into the masked prompt: press
   Enter to keep it, or type a new value to replace it.
 - Re-running the wizard with a credential supplied through `<VARIABLE>_FILE` keeps the

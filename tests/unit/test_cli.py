@@ -1,5 +1,6 @@
 """Tests for the CLI commands that are not covered by the wizard tests."""
 
+import os
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -209,3 +210,65 @@ def test_migrate_is_registered_on_the_cli():
 )
 def test_build_server_url(host, port, use_ssl, expected):
     assert cli_module.build_server_url(host, port, use_ssl) == expected
+
+
+def test_cli_loads_dotenv_from_the_working_directory(tmp_path, monkeypatch):
+    """The wizard writes ./.env, so the CLI must read ./.env, not one next to the package."""
+    # setenv first so monkeypatch records the original state and restores it on teardown
+    monkeypatch.setenv("PROBE_DOTENV_VAR", "")
+    monkeypatch.delenv("PROBE_DOTENV_VAR")
+    (tmp_path / ".env").write_text("PROBE_DOTENV_VAR=found\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    # The group callback runs before the subcommand's eager --help exits.
+    result = CliRunner().invoke(cli_module.cli, ["init", "--help"])
+
+    assert result.exit_code == 0
+    assert os.environ["PROBE_DOTENV_VAR"] == "found"
+
+
+def test_cli_falls_back_to_package_dotenv_lookup_when_cwd_has_none(tmp_path, monkeypatch):
+    """A service started from another directory still finds the .env of its installation."""
+    monkeypatch.setenv("PROBE_DOTENV_VAR", "")
+    monkeypatch.delenv("PROBE_DOTENV_VAR")
+    install_dotenv = tmp_path / "install" / ".env"
+    install_dotenv.parent.mkdir()
+    install_dotenv.write_text("PROBE_DOTENV_VAR=fallback\n", encoding="utf-8")
+    empty_cwd = tmp_path / "cwd"
+    empty_cwd.mkdir()
+    monkeypatch.chdir(empty_cwd)
+    monkeypatch.setattr(
+        cli_module,
+        "find_dotenv",
+        lambda *_args, usecwd=False, **_kwargs: "" if usecwd else str(install_dotenv),
+    )
+
+    result = CliRunner().invoke(cli_module.cli, ["init", "--help"])
+
+    assert result.exit_code == 0
+    assert os.environ["PROBE_DOTENV_VAR"] == "fallback"
+
+
+def test_start_configures_logging_before_building_app_config(tmp_path):
+    """Credential warnings logged while AppConfig is built must use the configured handlers."""
+    calls = []
+    logging_config = object()
+
+    def build_app_config(**_kwargs):
+        calls.append("app_config")
+        raise SystemExit(1)  # stop before the server is started
+
+    with (
+        patch.object(cli_module, "resolve_config_file_path", return_value=tmp_path / "c.toml"),
+        patch.object(
+            cli_module, "load_config", return_value=SimpleNamespace(logging=logging_config)
+        ),
+        patch.object(
+            cli_module, "setup_logging", side_effect=lambda *_a, **_kw: calls.append("logging")
+        ) as setup_logging,
+        patch.object(cli_module, "AppConfig", side_effect=build_app_config),
+    ):
+        CliRunner().invoke(cli_module.start, ["--dev"])
+
+    assert calls == ["logging", "app_config"]
+    setup_logging.assert_called_once_with(logging_config, debug=True)

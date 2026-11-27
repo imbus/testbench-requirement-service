@@ -245,6 +245,8 @@ written.
 
 ## After migrating
 
+Jira credentials entered during `migrate` are written to `.env` in the working directory (mode `600` on Linux/macOS), not to the generated TOML file. See [Credentials](readers/jira.md#credentials).
+
 1. **Review the generated file.** It contains every option, including the defaults that were
    filled in, so it is worth reading once against the [Configuration](configuration.md)
    reference:

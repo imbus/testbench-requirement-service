@@ -25,7 +25,7 @@ from testbench_requirement_service.utils.config_wizard import (
     merge_with_defaults,
     run_jira_oauth_wizard,
     setup_authentication,
-    store_client_secret_in_env,
+    store_credentials_in_env,
 )
 from testbench_requirement_service.utils.dependencies import check_reader_dependencies
 from testbench_requirement_service.utils.wizard import (
@@ -209,7 +209,7 @@ def finalize_jira_oauth2(auth_config: dict[str, Any]) -> None:
 
     For the 3LO flow the refresh token is seeded into the token cache (obtaining one
     through the OAuth wizard when neither the prompt nor the cache provided it), and
-    the OAuth2 client secret is moved into ``.env`` instead of the generated TOML.
+    every Jira credential is moved into ``.env`` instead of the generated TOML.
     Mutates *auth_config* in place.
     """
     if str(auth_config.get(AUTH_TYPE_FIELD) or "").startswith(AUTH_OAUTH2_3LO):
@@ -223,7 +223,7 @@ def finalize_jira_oauth2(auth_config: dict[str, Any]) -> None:
         if isinstance(refresh_token, str) and refresh_token:
             seed_oauth2_refresh_token(refresh_token)
 
-    store_client_secret_in_env(auth_config)
+    store_credentials_in_env(auth_config, JiraRequirementReaderConfig)
 
 
 class _LegacyLineFormat(NamedTuple):

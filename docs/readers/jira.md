@@ -32,7 +32,7 @@ pip install testbench-requirement-service[jira]
 
 1. Ensure the Jira account has the [required permissions](#jira-user-permissions).
 2. Configure the Jira server URL and authentication type.
-3. Provide credentials via `config.toml`, a `.env` file, or environment variables.
+3. Provide credentials via environment variables, a `.env` file or a `<VARIABLE>_FILE` secret file (see [Credentials](#credentials)).
 4. Start the service.
 
 ### Jira user permissions
@@ -53,10 +53,10 @@ reader_class = "JiraRequirementReader"
 server_url = "https://example.atlassian.net/"
 auth_type = "basic"
 username = "my-user@example.com"  # (or set JIRA_USERNAME as environment variable)
-password = "my-api-token"         # (or set JIRA_PASSWORD as environment variable)
+# password: set JIRA_PASSWORD or JIRA_PASSWORD_FILE (never in this file)
 ```
 
-Set credentials via environment variables, e.g. run in the terminal:
+Set the credentials via environment variables, e.g. run in the terminal:
 
 ```bash
 export JIRA_USERNAME=my-user@example.com
@@ -74,6 +74,88 @@ JIRA_PASSWORD=my-api-token
 
 The configuration can be added directly to `config.toml` under `[testbench-requirement-service.reader_config]` (recommended) or in a separate `.toml` file without a section prefix.
 
+### Credentials
+
+Credentials are read from environment variables, from a `.env` file in the working directory (or a parent directory; if none is found there, the installation directory is searched as before), or from a secret file named by a `<VARIABLE>_FILE` variable. On Windows a credential can also be stored encrypted in a `<VARIABLE>_DPAPI` variable (see [Encrypted credentials on Windows](#encrypted-credentials-on-windows-_dpapi)). The configuration wizard never writes them to `config.toml`, and a value set in the environment (or in a `_FILE` or `_DPAPI` variable) overrides a value found in `config.toml`.
+
+| Variable | `_FILE` variant | Used for |
+|----------|-----------------|----------|
+| `JIRA_PASSWORD` | `JIRA_PASSWORD_FILE` | API token or password (basic auth) |
+| `JIRA_BEARER_TOKEN` | `JIRA_BEARER_TOKEN_FILE` | Personal Access Token (token auth) |
+| `JIRA_OAUTH2_CLIENT_SECRET` | `JIRA_OAUTH2_CLIENT_SECRET_FILE` | OAuth 2.0 client secret (2LO and 3LO) |
+| `JIRA_OAUTH1_ACCESS_TOKEN` | `JIRA_OAUTH1_ACCESS_TOKEN_FILE` | OAuth1 access token |
+| `JIRA_OAUTH1_ACCESS_TOKEN_SECRET` | `JIRA_OAUTH1_ACCESS_TOKEN_SECRET_FILE` | OAuth1 access token secret |
+| `JIRA_OAUTH1_KEY_CERT` | `JIRA_OAUTH1_KEY_CERT_FILE` | OAuth1 private key (PEM content; prefer `JIRA_OAUTH1_KEY_CERT_PATH`) |
+
+Each variable also has a `_DPAPI` variant (`JIRA_PASSWORD_DPAPI`, …) for a value encrypted on Windows.
+
+An empty variable counts as unset.
+
+#### Secret files (`_FILE`)
+
+Set `<VARIABLE>_FILE` to the path of a file whose content is the value. This fits Docker and Kubernetes secrets, which are mounted as files:
+
+```bash
+JIRA_PASSWORD_FILE=/run/secrets/jira_password
+```
+
+- The file must be UTF-8. Exactly one trailing newline (`\n` or `\r\n`) is removed, so a file written with `echo` works as is. `JIRA_OAUTH1_KEY_CERT_FILE` is the exception: the PEM content is used unchanged.
+- `start` refuses to start if the file cannot be read, is not valid UTF-8 or is empty.
+- `start` refuses to start if more than one of `<VARIABLE>`, `<VARIABLE>_FILE` and `<VARIABLE>_DPAPI` is set — set only one of them.
+
+Error messages name the variable (and, for file errors, the path), never the value.
+
+Values in `.env` are interpolated, so a secret containing `${` may not load as written; the wizard warns about such a value — put it in a `<VARIABLE>_FILE` instead, whose content is used literally. An encrypted `<VARIABLE>_DPAPI` value is not affected.
+
+#### Encrypted credentials on Windows (`_DPAPI`)
+
+On Windows a credential can be stored encrypted with the Windows Data Protection API (DPAPI). `<VARIABLE>_DPAPI` then holds the encrypted value as base64 text, and `.env` no longer contains the secret itself:
+
+```bash
+JIRA_PASSWORD_DPAPI=AQAAANCMnd8BFdERjHoAwE...
+```
+
+There is no key or passphrase to manage: Windows derives the key from the account. When the wizard (or `migrate`) has credentials to store on Windows, it asks how to store them:
+
+| Choice | Who can decrypt | Use it when |
+|--------|-----------------|-------------|
+| Encrypted for this Windows user | Only the account that ran the wizard, on this machine | The service runs under the same account |
+| Encrypted for this machine | Every account on this machine | The service runs under another account, e.g. as a Windows service under `LocalSystem` |
+| Plain text | Anyone who can read `.env` | You do not want encryption |
+
+- **The service must run under an account that can decrypt.** A value encrypted for a user cannot be read by a service running under another account: `start` then refuses to start and reports that `<VARIABLE>_DPAPI` cannot be decrypted by this Windows account. Encrypt for the machine instead, or run `set-reader-credential` as the service account.
+- **The value is tied to the account and machine.** A copied `.env` or a backup is useless elsewhere. After moving to another machine, or after an administrator reset the account's password, set the credential again. A normal password change needs nothing.
+- **It does not protect against the account itself.** Every process running under an account that may decrypt can read the credential.
+- **Rotation:** an encrypted value cannot be edited by hand. Run [`set-reader-credential`](../cli-commands.md#set-reader-credential):
+
+  ```bash
+  testbench-requirement-service set-reader-credential JIRA_PASSWORD
+  ```
+
+- **Other platforms:** `start` refuses to start on Linux and macOS if a `_DPAPI` variable is set; use `<VARIABLE>` or `<VARIABLE>_FILE` there.
+
+No extra entropy is used, so a value can also be created without the service, e.g. in PowerShell (use `LocalMachine` instead of `CurrentUser` for the machine scope):
+
+```powershell
+Add-Type -AssemblyName System.Security
+$bytes = [Text.Encoding]::UTF8.GetBytes('the-secret')
+[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($bytes, $null, 'CurrentUser'))
+```
+
+#### Credentials still in config.toml
+
+Existing configuration files with credentials keep working. At start the service logs a warning that names the field and recommends `.env` (`<VARIABLE>`) or `<VARIABLE>_FILE`. If the environment or a `_FILE` provides the same credential, it takes precedence and the warning says the value in the configuration file is ignored.
+
+Re-run `testbench-requirement-service configure` to move the credentials into `.env`: the wizard writes them to `./.env` in the working directory, removes them from `config.toml` and prints `✓ Moved '<field>' out of the configuration file into .env (<VARIABLE>)`. If `<VARIABLE>`, `<VARIABLE>_FILE` or `<VARIABLE>_DPAPI` is already set when the wizard runs, it skips the prompt, writes nothing and neither reads the file nor decrypts the value.
+
+This also applies to a credential the wizard stored in `.env` earlier: its prompt is skipped on the next run, so rotate it with `testbench-requirement-service set-reader-credential <VARIABLE>` (or, for a plain-text value, by editing `.env`). If you later add `<VARIABLE>_FILE` while `.env` still holds `<VARIABLE>`, `start` refuses to start because both are set — remove the line from `.env`.
+
+#### File permissions
+
+On Linux and macOS the wizard creates `.env` and the service creates `tmp/oauth2_tokens.toml` with mode `600` (readable and writable by the owner only) and sets existing files to `600`. If changing the mode fails, a warning is logged.
+
+On Windows the service does not change any permissions. Restrict both files to the service account yourself, e.g. in Explorer (**Properties → Security**) or with `icacls`.
+
 ### Connection settings
 
 | Setting | Type | Description | Required | Default |
@@ -87,15 +169,15 @@ The configuration can be added directly to `config.toml` under `[testbench-requi
 
 ### Authentication methods
 
-Pick the authentication flow that matches your Jira deployment. Credentials can be set in the config file or via environment variables.
+Pick the authentication flow that matches your Jira deployment. Credentials are provided via environment variables, `.env` or `<VARIABLE>_FILE` — see [Credentials](#credentials).
 
 | `auth_type` | When to use | Required values |
 |-------------|-------------|-----------------|
-| `basic` | Jira Cloud and Data Center with username + password/API token | `username` + `password` (or `JIRA_USERNAME` + `JIRA_PASSWORD`) |
-| `token` | Jira Server/Data Center with Personal Access Tokens | `token` (or `JIRA_BEARER_TOKEN`) |
-| `oauth1` | Enterprise instances requiring OAuth 1.0a | `oauth1_access_token`, `oauth1_access_token_secret`, `oauth1_consumer_key`, `oauth1_key_cert_path` (or matching env vars) |
-| `oauth2 2LO (service account)` | Jira Cloud (or Data Center instances that support the `client_credentials` grant), unattended service-to-service access without a user account | `oauth2_client_id` + `oauth2_client_secret` (or `JIRA_OAUTH2_CLIENT_ID` + `JIRA_OAUTH2_CLIENT_SECRET`) |
-| `oauth2 3LO (user account)` | Jira Cloud or Jira Data Center, delegated access on behalf of a user | `oauth2_client_id` + `oauth2_client_secret`, plus a refresh token seeded via the setup wizard |
+| `basic` | Jira Cloud and Data Center with username + password/API token | `username` + `password` (`JIRA_USERNAME` + `JIRA_PASSWORD`) |
+| `token` | Jira Server/Data Center with Personal Access Tokens | `token` (`JIRA_BEARER_TOKEN`) |
+| `oauth1` | Enterprise instances requiring OAuth 1.0a | `oauth1_access_token`, `oauth1_access_token_secret`, `oauth1_consumer_key`, `oauth1_key_cert_path` (or matching env vars; credentials see [Credentials](#credentials)) |
+| `oauth2 2LO (service account)` | Jira Cloud (or Data Center instances that support the `client_credentials` grant), unattended service-to-service access without a user account | `oauth2_client_id` + `oauth2_client_secret` (`JIRA_OAUTH2_CLIENT_ID` + `JIRA_OAUTH2_CLIENT_SECRET`; see [Credentials](#credentials)) |
+| `oauth2 3LO (user account)` | Jira Cloud or Jira Data Center, delegated access on behalf of a user | `oauth2_client_id` + `oauth2_client_secret` (`JIRA_OAUTH2_CLIENT_ID` + `JIRA_OAUTH2_CLIENT_SECRET`; see [Credentials](#credentials)), plus a refresh token seeded via the setup wizard |
 
 Whether the OAuth 2.0 flows talk to Jira Cloud or Jira Data Center is detected automatically at startup — see [OAuth 2.0 auth (Jira Data Center)](#oauth-20-auth-jira-data-center).
 
@@ -232,7 +314,7 @@ Recommended for Jira Cloud. Uses your Atlassian account email and an API token.
 [testbench-requirement-service.reader_config]
 auth_type  = "basic"
 username   = "your-email@company.com"
-password  = "your-api-token"
+# password: set JIRA_PASSWORD or JIRA_PASSWORD_FILE (never in this file)
 ```
 
 Generate an API token at `https://id.atlassian.com/manage-profile/security/api-tokens`.
@@ -245,7 +327,7 @@ Uses a Personal Access Token (PAT) generated in your Jira Data Center profile.
 # config.toml
 [testbench-requirement-service.reader_config]
 auth_type = "token"
-token     = "your-personal-access-token"
+# token: set JIRA_BEARER_TOKEN or JIRA_BEARER_TOKEN_FILE (never in this file)
 ```
 
 :::note
@@ -261,7 +343,7 @@ Uses an OAuth 2.0 access token obtained via the Atlassian 3-Legged OAuth (3LO) f
 [testbench-requirement-service.reader_config]
 auth_type            = "oauth2 3LO (user account)"
 oauth2_client_id     = "your-client-id"
-oauth2_client_secret = "your-client-secret"
+# oauth2_client_secret: set JIRA_OAUTH2_CLIENT_SECRET or JIRA_OAUTH2_CLIENT_SECRET_FILE (never in this file)
 ```
 
 #### How to obtain an OAuth 2.0 access token
@@ -326,11 +408,10 @@ that token in `tmp/oauth2_tokens.toml`, not in `config.toml`. The service uses t
 to request short-lived access tokens at runtime and updates the cache automatically when they
 expire.
 
-Persist only the OAuth client credentials in your configuration (or provide them via environment
-variables):
+Provide the OAuth client credentials as follows:
 
 - `oauth2_client_id` (or `JIRA_OAUTH2_CLIENT_ID`) = your client ID
-- `oauth2_client_secret` (or `JIRA_OAUTH2_CLIENT_SECRET`) = your client secret
+- `JIRA_OAUTH2_CLIENT_SECRET` (or `JIRA_OAUTH2_CLIENT_SECRET_FILE`) = your client secret
 
 :::note
 Do not store OAuth2 access tokens or refresh tokens in `config.toml` or `.env` files. If the refresh
@@ -347,7 +428,7 @@ Uses the Atlassian 2-Legged OAuth (2LO) flow, i.e. the OAuth 2.0 `client_credent
 [testbench-requirement-service.reader_config]
 auth_type            = "oauth2 2LO (service account)"
 oauth2_client_id     = "your-client-id"
-oauth2_client_secret = "your-client-secret"
+# oauth2_client_secret: set JIRA_OAUTH2_CLIENT_SECRET or JIRA_OAUTH2_CLIENT_SECRET_FILE (never in this file)
 ```
 
 Or via environment variables:
@@ -433,9 +514,8 @@ reader_class = "JiraRequirementReader"
 server_url = "https://example.atlassian.net/"
 auth_type = "basic"
 
-# Credentials (alternative to env vars)
-# username = "my-user@example.com"
-# password = "my-api-token-or-password"
+# username: set here or via JIRA_USERNAME
+# password: set JIRA_PASSWORD or JIRA_PASSWORD_FILE (never in this file)
 
 # Connection tuning
 # timeout     = 30
@@ -489,6 +569,7 @@ requirement_group_types = ["Initiative"]
 # Basic authentication (Jira Cloud)
 JIRA_USERNAME=my-user@example.com
 JIRA_PASSWORD=my-api-token
+# JIRA_PASSWORD_FILE=/run/secrets/jira_password
 
 # Token authentication (Jira Server/Data Center)
 # JIRA_BEARER_TOKEN=my-personal-access-token
@@ -502,6 +583,7 @@ JIRA_PASSWORD=my-api-token
 # OAuth2 authentication (2LO and 3LO)
 # JIRA_OAUTH2_CLIENT_ID=my-client-id
 # JIRA_OAUTH2_CLIENT_SECRET=my-client-secret
+# JIRA_OAUTH2_CLIENT_SECRET_FILE=/run/secrets/jira_oauth2_client_secret
 
 # Mutual TLS (optional)
 # JIRA_CLIENT_CERT_PATH=/path/to/client.crt
@@ -512,6 +594,8 @@ JIRA_PASSWORD=my-api-token
 # HTTPS_PROXY=http://proxy.example.com:8080
 ```
 
+The wizard writes this file with mode `600` on Linux/macOS. On Windows, restrict access to it manually — see [File permissions](#file-permissions).
+
 :::warning
 Do not put `JIRA_OAUTH2_REFRESH_TOKEN` in a `.env` file for normal operation — the refresh token rotates on every use and belongs in the runtime cache (`tmp/oauth2_tokens.toml`) that the setup wizard seeds. Only use the environment variable for one-off seeding in automated deployments.
 :::
@@ -520,7 +604,7 @@ Do not put `JIRA_OAUTH2_REFRESH_TOKEN` in a `.env` file for normal operation —
 
 ### Smoke test
 
-1. Set your Jira credentials (via environment variables or config):
+1. Set your Jira credentials (via environment variables, `.env` or `_FILE`):
    ```bash
    export JIRA_USERNAME=my-user@example.com
    export JIRA_PASSWORD=my-api-token

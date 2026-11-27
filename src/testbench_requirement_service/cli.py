@@ -4,13 +4,13 @@ from pathlib import Path
 from ssl import SSLContext
 
 import click
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
 from testbench_requirement_service import __title__, __version__
 from testbench_requirement_service.app import AppConfig, create_app
-from testbench_requirement_service.log import logger
+from testbench_requirement_service.log import logger, setup_logging
 from testbench_requirement_service.models.config import DEFAULT_HOST, DEFAULT_PORT
 from testbench_requirement_service.utils.client_summary import log_reader_summary
 from testbench_requirement_service.utils.conf_converter import (
@@ -18,12 +18,15 @@ from testbench_requirement_service.utils.conf_converter import (
     ConfConversionError,
     convert_legacy_config,
 )
+from testbench_requirement_service.utils.config import load_config, resolve_config_file_path
 from testbench_requirement_service.utils.config_wizard import (
+    CREDENTIAL_STORAGES,
     backup_config_file,
     configure_credentials_only,
     configure_reader_only,
     configure_service_only,
     run_full_wizard,
+    set_reader_credential,
     show_main_menu,
     view_current_config,
 )
@@ -53,7 +56,9 @@ def print_wizard_banner():
 @click.pass_context
 def cli(ctx):
     ctx.max_content_width = 120
-    load_dotenv()
+    # Search from the working directory first, where the wizard writes .env; fall back to the
+    # installation directory for services started elsewhere (e.g. NSSM without an app dir).
+    load_dotenv(find_dotenv(usecwd=True) or find_dotenv())
 
 
 @click.command()
@@ -212,6 +217,8 @@ def start(  # noqa: PLR0913, PLR0917
 ):
     """Start the TestBench Requirement Service."""
     app_name = __title__
+    # Configure logging first: AppConfig logs credential warnings while it is built.
+    setup_logging(load_config(resolve_config_file_path(config_path)).logging, debug=dev)
     app_config = AppConfig(
         config_path=config_path,
         reader_class=reader_class,
@@ -306,6 +313,31 @@ def set_credentials(config_path, username, password):
 
 
 @click.command()
+@click.argument("variable", required=False)
+@click.option(
+    "--path",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    metavar="PATH",
+    default="config.toml",
+    help="Path to the app config file",
+)
+@click.option(
+    "--storage",
+    type=click.Choice(CREDENTIAL_STORAGES),
+    help="How to store the value in .env: plain text, or encrypted with Windows DPAPI for "
+    "the current user or for this machine  [default: asks on Windows, plain elsewhere]",
+)
+def set_reader_credential_command(variable: str | None, config_path: Path, storage: str | None):
+    """Set or replace a reader credential (e.g. JIRA_PASSWORD) in .env.
+
+    VARIABLE is the credential's environment variable; it is asked for if omitted.
+    The value is always prompted for, never passed on the command line.
+    """
+    set_reader_credential(config_path, variable, storage)
+
+
+@click.command()
 @click.option(
     "--from",
     "legacy_path",
@@ -356,6 +388,7 @@ def migrate(legacy_path: Path, config_path: Path, source_type: str | None):
 cli.add_command(init)
 cli.add_command(configure)
 cli.add_command(set_credentials)
+cli.add_command(set_reader_credential_command, name="set-reader-credential")
 cli.add_command(migrate)
 cli.add_command(start)
 
